@@ -129,19 +129,24 @@ public class SMGT {
     private void loadTaskBasicInfo(String filename) throws IOException {
         BufferedReader reader = new BufferedReader(new FileReader(filename));
         String line;
-        boolean firstLine = true;
         
         while ((line = reader.readLine()) != null) {
-            if (firstLine) {
-                firstLine = false;
-                continue; // Skip header
+            // Skip comments and empty lines
+            if (line.startsWith("#") || line.trim().isEmpty()) {
+                continue;
             }
             
-            String[] parts = line.trim().split(",");
-            if (parts.length >= 3) {
+            // Split by whitespace (spaces or tabs)
+            String[] parts = line.trim().split("\\s+");
+            if (parts.length >= 2) {
                 int taskId = Integer.parseInt(parts[0].replace("t", ""));
                 double size = Double.parseDouble(parts[1]);
-                double rank = Double.parseDouble(parts[2]);
+                double rank = 0.0; // Default rank if not provided
+                
+                // If rank is provided as third column
+                if (parts.length >= 3) {
+                    rank = Double.parseDouble(parts[2]);
+                }
                 
                 task t = new task(taskId);
                 t.setSize(size);

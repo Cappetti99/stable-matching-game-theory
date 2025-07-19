@@ -144,6 +144,10 @@ public class Main {
         System.out.println("\n10. Testing SMGT Algorithm:");
         testSMGTAlgorithm(taskFile, dagFile, processingCapacityFile);
         
+        // Test 11: LOTD Algorithm  
+        System.out.println("\n11. Testing LOTD Algorithm:");
+        testLOTDAlgorithm();
+        
         System.out.println("\n=== TEST COMPLETED ===");
     }
 
@@ -797,6 +801,78 @@ public class Main {
             e.printStackTrace();
         } catch (Exception e) {
             System.err.println("   Unexpected error in SMGT algorithm: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Test the LOTD (List of Task Duplication) algorithm
+     */
+    public static void testLOTDAlgorithm() {
+        System.out.println("\n=== LOTD Algorithm Test ===");
+        
+        try {
+            // File paths
+            String taskFile = "task.csv";
+            String dagFile = "dag.csv";
+            String vmFile = "vm.csv";
+            
+            System.out.println("\n1. Loading data for LOTD algorithm...");
+            
+            // Create and configure SMGT instance
+            SMGT smgt = new SMGT();
+            smgt.loadTasksFromCSV(dagFile, taskFile);
+            smgt.loadVMsFromCSV(vmFile);
+            
+            System.out.println("   Data loaded successfully");
+            System.out.println("   Tasks: " + smgt.getTasks().size());
+            System.out.println("   VMs: " + smgt.getVMs().size());
+            
+            // Create and execute LOTD algorithm
+            System.out.println("\n2. Creating LOTD instance...");
+            LOTD lotd = new LOTD(smgt);
+            
+            System.out.println("\n3. Executing LOTD algorithm...");
+            Map<Integer, List<Integer>> finalSchedule = lotd.executeLOTD();
+            
+            // Display results
+            System.out.println("\n4. LOTD Algorithm Results:");
+            System.out.println("   Final Task Assignments:");
+            for (Map.Entry<Integer, List<Integer>> entry : finalSchedule.entrySet()) {
+                System.out.println("     VM" + entry.getKey() + ": " + entry.getValue());
+            }
+            
+            System.out.println("\n   Task Start Times (AST):");
+            Map<Integer, Double> taskAST = lotd.getTaskAST();
+            for (Map.Entry<Integer, Double> entry : taskAST.entrySet()) {
+                System.out.println("     Task" + entry.getKey() + ": " + String.format("%.4f", entry.getValue()));
+            }
+            
+            System.out.println("\n   Task Finish Times (AFT):");
+            Map<Integer, Double> taskAFT = lotd.getTaskAFT();
+            for (Map.Entry<Integer, Double> entry : taskAFT.entrySet()) {
+                System.out.println("     Task" + entry.getKey() + ": " + String.format("%.4f", entry.getValue()));
+            }
+            
+            System.out.println("\n   Replicated Tasks:");
+            Map<Integer, Set<Integer>> replicatedTasks = lotd.getReplicatedTasks();
+            for (Map.Entry<Integer, Set<Integer>> entry : replicatedTasks.entrySet()) {
+                if (!entry.getValue().isEmpty()) {
+                    System.out.println("     VM" + entry.getKey() + ": " + entry.getValue());
+                }
+            }
+            
+            // Calculate makespan
+            double makespan = taskAFT.values().stream().mapToDouble(Double::doubleValue).max().orElse(0.0);
+            System.out.println("\n   LOTD Makespan: " + String.format("%.4f", makespan));
+            
+            System.out.println("\n   LOTD algorithm testing completed successfully!");
+            
+        } catch (IOException e) {
+            System.err.println("   Error running LOTD algorithm: " + e.getMessage());
+            e.printStackTrace();
+        } catch (Exception e) {
+            System.err.println("   Unexpected error in LOTD algorithm: " + e.getMessage());
             e.printStackTrace();
         }
     }
