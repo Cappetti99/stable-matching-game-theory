@@ -7,11 +7,11 @@ public class Main {
     public static void main(String[] args) throws IOException {
         System.out.println("=== DCP Algorithm Test ===");
         
-        // Correct file paths (files are in the root directory, not resources)
-        String taskFile = "task.csv";
-        String dagFile = "dag.csv";
-        String vmFile = "vm.csv";
-        String processingCapacityFile = "processing_capacity.csv";
+        // Correct file paths (files are in the data directory)
+        String taskFile = "../data/task.csv";
+        String dagFile = "../data/dag.csv";
+        String vmFile = "../data/vm.csv";
+        String processingCapacityFile = "../data/processing_capacity.csv";
 
         // Test 1: Load and validate data
         System.out.println("\n1. Loading data from CSV files...");
@@ -813,9 +813,9 @@ public class Main {
         
         try {
             // File paths
-            String taskFile = "task.csv";
-            String dagFile = "dag.csv";
-            String vmFile = "vm.csv";
+            String taskFile = "../data/task.csv";
+            String dagFile = "../data/dag.csv";
+            String vmFile = "../data/vm.csv";
             
             System.out.println("\n1. Loading data for LOTD algorithm...");
             

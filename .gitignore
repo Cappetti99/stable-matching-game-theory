@@ -1,0 +1,150 @@
+# ================================
+# .gitignore per progetto CCR Analysis
+# Stable Matching Game Theory
+# ================================
+
+# File compilati Java
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+
+# File di output/risultati generati
+algorithms/ccr_analysis_results.json
+algorithms/*.json
+algorithms/results_*.json
+
+# Directory di output generate dinamicamente
+visualizations/
+data/
+output/
+results/
+
+# File temporanei e di log
+*.tmp
+*.temp
+*.log
+*.out
+*.err
+
+# File di sistema macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# File di sistema Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# File di sistema Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# Cache e file temporanei Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Environment Python
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE e editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.metadata
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# File di backup
+*.bak
+*.backup
+*.old
+*.orig
+
+# File di configurazione locale
+config.local
+settings.local
+.env.local
+
+# Output matplotlib (immagini generate)
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.svg
+!docs/*.pdf
+!docs/*.png
+
+# File CSV generati dinamicamente
+*.csv
+!examples/*.csv
+
+# Statistiche e report generati
+analysis_summary.txt
+*.stats
+*.report
+
+# File di test temporanei
+test_*.java
+test_*.py
+temp_test*
+
+# Node modules (se dovessimo aggiungere JS)
+node_modules/
+
+# Archivi
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# File nascosti generici (tranne .gitignore)
+.*
+!.gitignore
+!.gitattributes
+
+# Directory di output specifiche del progetto
+cybershake_*
+epigenomics_*
+ligo_*
+montage_*
