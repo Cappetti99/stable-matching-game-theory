@@ -1,0 +1,65 @@
+{
+  "workflow_type": "montage",
+  "analysis_date": "Fri Dec 05 15:19:53 CET 2025",
+  "parameters": {
+    "target_tasks": 50,
+    "target_vms": 5,
+    "ccr_range": [0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0]
+  },
+  "results": [
+    {
+      "ccr": 0.4,
+      "slr": 2.0543353231639885,
+      "makespan": 15.20422132404181,
+      "critical_path_length": 7
+    },
+    {
+      "ccr": 0.6,
+      "slr": 2.0577088759694675,
+      "makespan": 15.22918912891986,
+      "critical_path_length": 7
+    },
+    {
+      "ccr": 0.8,
+      "slr": 2.061082428774946,
+      "makespan": 15.254156933797908,
+      "critical_path_length": 7
+    },
+    {
+      "ccr": 1.0,
+      "slr": 2.064455981580425,
+      "makespan": 15.279124738675957,
+      "critical_path_length": 7
+    },
+    {
+      "ccr": 1.2,
+      "slr": 2.0678295343859037,
+      "makespan": 15.304092543554006,
+      "critical_path_length": 7
+    },
+    {
+      "ccr": 1.4,
+      "slr": 2.0712030871913827,
+      "makespan": 15.329060348432055,
+      "critical_path_length": 7
+    },
+    {
+      "ccr": 1.6,
+      "slr": 2.0745766399968613,
+      "makespan": 15.354028153310104,
+      "critical_path_length": 7
+    },
+    {
+      "ccr": 1.8,
+      "slr": 2.0779501928023403,
+      "makespan": 15.378995958188153,
+      "critical_path_length": 7
+    },
+    {
+      "ccr": 2.0,
+      "slr": 2.0813237456078193,
+      "makespan": 15.403963763066201,
+      "critical_path_length": 7
+    }
+  ]
+}

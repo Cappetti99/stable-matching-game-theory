@@ -1,0 +1,65 @@
+{
+  "workflow_type": "cybershake",
+  "analysis_date": "Fri Dec 05 15:20:59 CET 2025",
+  "parameters": {
+    "target_tasks": 50,
+    "target_vms": 5,
+    "ccr_range": [0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0]
+  },
+  "results": [
+    {
+      "ccr": 0.4,
+      "slr": 2.1215382269478136,
+      "makespan": 11.767907352601155,
+      "critical_path_length": 6
+    },
+    {
+      "ccr": 0.6,
+      "slr": 2.1256273762435884,
+      "makespan": 11.790589352601156,
+      "critical_path_length": 6
+    },
+    {
+      "ccr": 0.8,
+      "slr": 2.129716525539363,
+      "makespan": 11.813271352601156,
+      "critical_path_length": 6
+    },
+    {
+      "ccr": 1.0,
+      "slr": 2.1338056748351377,
+      "makespan": 11.835953352601155,
+      "critical_path_length": 6
+    },
+    {
+      "ccr": 1.2,
+      "slr": 2.137894824130912,
+      "makespan": 11.858635352601155,
+      "critical_path_length": 6
+    },
+    {
+      "ccr": 1.4,
+      "slr": 2.1419839734266866,
+      "makespan": 11.881317352601155,
+      "critical_path_length": 6
+    },
+    {
+      "ccr": 1.6,
+      "slr": 2.1460731227224614,
+      "makespan": 11.903999352601156,
+      "critical_path_length": 6
+    },
+    {
+      "ccr": 1.8,
+      "slr": 2.1501622720182363,
+      "makespan": 11.926681352601156,
+      "critical_path_length": 6
+    },
+    {
+      "ccr": 2.0,
+      "slr": 2.1542514213140107,
+      "makespan": 11.949363352601155,
+      "critical_path_length": 6
+    }
+  ]
+}

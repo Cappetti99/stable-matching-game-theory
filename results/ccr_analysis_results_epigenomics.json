@@ -1,0 +1,65 @@
+{
+  "workflow_type": "epigenomics",
+  "analysis_date": "Fri Dec 05 15:21:29 CET 2025",
+  "parameters": {
+    "target_tasks": 50,
+    "target_vms": 5,
+    "ccr_range": [0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0]
+  },
+  "results": [
+    {
+      "ccr": 0.4,
+      "slr": 1.8477803344828225,
+      "makespan": 18.03510597302505,
+      "critical_path_length": 10
+    },
+    {
+      "ccr": 0.6,
+      "slr": 1.8501709428072621,
+      "makespan": 18.058439306358384,
+      "critical_path_length": 10
+    },
+    {
+      "ccr": 0.8,
+      "slr": 1.852561551131702,
+      "makespan": 18.081772639691717,
+      "critical_path_length": 10
+    },
+    {
+      "ccr": 1.0,
+      "slr": 1.8549521594561416,
+      "makespan": 18.10510597302505,
+      "critical_path_length": 10
+    },
+    {
+      "ccr": 1.2,
+      "slr": 1.8573427677805814,
+      "makespan": 18.128439306358384,
+      "critical_path_length": 10
+    },
+    {
+      "ccr": 1.4,
+      "slr": 1.859733376105021,
+      "makespan": 18.151772639691718,
+      "critical_path_length": 10
+    },
+    {
+      "ccr": 1.6,
+      "slr": 1.8621239844294608,
+      "makespan": 18.17510597302505,
+      "critical_path_length": 10
+    },
+    {
+      "ccr": 1.8,
+      "slr": 1.8645145927539004,
+      "makespan": 18.198439306358384,
+      "critical_path_length": 10
+    },
+    {
+      "ccr": 2.0,
+      "slr": 1.8669052010783402,
+      "makespan": 18.221772639691718,
+      "critical_path_length": 10
+    }
+  ]
+}

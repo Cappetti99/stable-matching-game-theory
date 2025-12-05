@@ -18,9 +18,10 @@ algorithms/results_*.json
 
 # Directory di output generate dinamicamente
 visualizations/
-data/
 output/
-results/
+
+# Risultati - tracciati in Git
+# results/ - NON ignorata, contiene risultati analisi CCR
 
 # File temporanei e di log
 *.tmp
