@@ -251,44 +251,39 @@ public class MainCCRAnalysis {
     
     private static Map<Integer, VM> loadVMs(String filename) throws IOException {
         Map<Integer, VM> vmMapping = new HashMap<>();
-        List<String> lines = new ArrayList<>();
         
         try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
             String line;
-            while ((line = br.readLine()) != null) {
-                lines.add(line.trim());
-            }
-        }
-        
-        if (lines.isEmpty()) return vmMapping;
-        
-        String[] vmNames = lines.get(0).substring(1).trim().split("\\s+");
-        int numVMs = vmNames.length;
-        
-        for (int i = 0; i < numVMs; i++) {
-            vmMapping.put(i, new VM(i));
-        }
-        
-        for (int i = 1; i < lines.size(); i++) {
-            String line = lines.get(i);
-            if (line.isEmpty()) continue;
+            boolean isFirstLine = true;
             
-            String[] parts = line.split("\\s+");
-            if (parts.length >= numVMs + 1) {
-                int vmIndex = i - 1;
-                if (vmIndex < numVMs) {
-                    VM vm = vmMapping.get(vmIndex);
-                    if (vm != null) {
-                        for (int j = 1; j < parts.length && j <= numVMs; j++) {
-                            try {
-                                double bandwidth = Double.parseDouble(parts[j]);
-                                vm.setBandwidthToVM(j - 1, bandwidth);
-                            } catch (NumberFormatException e) {
-                                // Skip invalid entries
-                            }
-                        }
-                    }
+            while ((line = br.readLine()) != null) {
+                // Skip comments
+                if (line.startsWith("#")) continue;
+                if (line.isBlank()) continue;
+                
+                // Parse with comma or spaces
+                String[] parts = line.contains(",") ? line.trim().split(",") : line.trim().split("\\s+");
+                
+                if (isFirstLine) {
+                    // First line is header: VM,vm0,vm1,vm2,vm3,vm4
+                    isFirstLine = false;
+                    continue;
                 }
+                
+                // Data rows: vm0,1000,26.3,20.4,22.0,20.0
+                String vmName = parts[0].trim();
+                int vmId = Integer.parseInt(vmName.substring(2)); // vm0 -> 0, vm1 -> 1
+                
+                // Create VM
+                VM vm = new VM(vmId);
+                
+                // Add bandwidth to other VMs
+                for (int i = 1; i < parts.length; i++) {
+                    double bandwidth = Double.parseDouble(parts[i].trim());
+                    vm.setBandwidthToVM(i - 1, bandwidth);
+                }
+                
+                vmMapping.put(vmId, vm);
             }
         }
         
@@ -307,7 +302,8 @@ public class MainCCRAnalysis {
                     String vmName = parts[0];
                     double capacity = Double.parseDouble(parts[1]);
                     
-                    int vmId = Integer.parseInt(vmName.substring(2)) - 1;
+                    // vm0 -> 0, vm1 -> 1, etc.
+                    int vmId = Integer.parseInt(vmName.substring(2));
                     VM vm = vmMapping.get(vmId);
                     if (vm != null) {
                         vm.addCapability("processingCapacity", capacity);

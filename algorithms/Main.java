@@ -189,42 +189,43 @@ public class Main {
     // Carica le VM e la matrice di larghezza di banda
     private static Map<Integer, VM> loadVMs(String filePath) throws IOException {
         Map<Integer, VM> vms = new HashMap<>();
-        Map<String, Integer> vmNameToId = new HashMap<>();
+        List<String> vmNames = new ArrayList<>();
         
         try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
             String line;
             boolean isFirstLine = true;
-            int row = 0;
             
             while ((line = br.readLine()) != null) {
-                if (line.startsWith("#")) {
-                    if (isFirstLine) {
-                        // Parse header to get VM names
-                        String[] headers = line.trim().split("\\s+");
-                        for (int i = 1; i < headers.length; i++) {
-                            vmNameToId.put(headers[i], i - 1);
-                        }
-                        isFirstLine = false;
-                    }
-                    continue;
-                }
+                // Skip comments
+                if (line.startsWith("#")) continue;
                 if (line.isBlank()) continue;
                 
-                String[] parts = line.trim().split("\\s+");
-                String vmName = parts[0];
-                int vmId = vmNameToId.getOrDefault(vmName, row);
+                // Parse con virgola o spazi
+                String[] parts = line.contains(",") ? line.trim().split(",") : line.trim().split("\\s+");
+                
+                if (isFirstLine) {
+                    // Prima riga è l'header: VM,vm0,vm1,vm2,vm3,vm4
+                    for (int i = 1; i < parts.length; i++) {
+                        vmNames.add(parts[i].trim());
+                    }
+                    isFirstLine = false;
+                    continue;
+                }
+                
+                // Righe dati: vm0,1000,26.3,20.4,22.0,20.0
+                String vmName = parts[0].trim();
+                int vmId = Integer.parseInt(vmName.substring(2)); // vm0 -> 0, vm1 -> 1
                 
                 // Crea VM
                 VM vm = new VM(vmId);
                 
                 // Aggiungi larghezza di banda verso altre VM
                 for (int i = 1; i < parts.length; i++) {
-                    double bandwidth = Double.parseDouble(parts[i]);
+                    double bandwidth = Double.parseDouble(parts[i].trim());
                     vm.setBandwidthToVM(i - 1, bandwidth);
                 }
                 
                 vms.put(vmId, vm);
-                row++;
             }
         }
         return vms;
@@ -238,15 +239,17 @@ public class Main {
                 if (line.startsWith("#") || line.isBlank()) continue;
                 String[] parts = line.trim().split("\\s+");
                 
-                // Estrae l'ID della VM dal nome (vm1 -> 0, vm2 -> 1, ecc.)
+                // Estrae l'ID della VM dal nome (vm0 -> 0, vm1 -> 1, ecc.)
                 String vmName = parts[0];
-                int vmId = Integer.parseInt(vmName.substring(2)) - 1; // vm1 -> 0, vm2 -> 1
+                int vmId = Integer.parseInt(vmName.substring(2)); // vm0 -> 0, vm1 -> 1
                 double processingCapacity = Double.parseDouble(parts[1]);
                 
                 // Aggiunge la capacità di elaborazione alla VM corrispondente
                 VM vm = vmMapping.get(vmId);
                 if (vm != null) {
                     vm.addCapability("processingCapacity", processingCapacity);
+                } else {
+                    System.out.println("   WARNING: VM " + vmId + " not found in vmMapping");
                 }
             }
         }
@@ -815,14 +818,14 @@ public class Main {
             // File paths
             String taskFile = "../data/task.csv";
             String dagFile = "../data/dag.csv";
-            String vmFile = "../data/vm.csv";
+            String processingCapacityFile = "../data/processing_capacity.csv";
             
             System.out.println("\n1. Loading data for LOTD algorithm...");
             
             // Create and configure SMGT instance
             SMGT smgt = new SMGT();
             smgt.loadTasksFromCSV(dagFile, taskFile);
-            smgt.loadVMsFromCSV(vmFile);
+            smgt.loadVMsFromCSV(processingCapacityFile);
             
             System.out.println("   Data loaded successfully");
             System.out.println("   Tasks: " + smgt.getTasks().size());
@@ -854,9 +857,9 @@ public class Main {
                 System.out.println("     Task" + entry.getKey() + ": " + String.format("%.4f", entry.getValue()));
             }
             
-            System.out.println("\n   Replicated Tasks:");
-            Map<Integer, Set<Integer>> replicatedTasks = lotd.getReplicatedTasks();
-            for (Map.Entry<Integer, Set<Integer>> entry : replicatedTasks.entrySet()) {
+            System.out.println("\n   Duplicated Tasks:");
+            Map<Integer, Set<Integer>> duplicatedTasks = lotd.getDuplicatedTasks();
+            for (Map.Entry<Integer, Set<Integer>> entry : duplicatedTasks.entrySet()) {
                 if (!entry.getValue().isEmpty()) {
                     System.out.println("     VM" + entry.getKey() + ": " + entry.getValue());
                 }

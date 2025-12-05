@@ -89,20 +89,22 @@ public class SMGT {
     public void loadVMsFromCSV(String filename) throws IOException {
         BufferedReader reader = new BufferedReader(new FileReader(filename));
         String line;
-        boolean firstLine = true;
         
         while ((line = reader.readLine()) != null) {
-            if (firstLine) {
-                firstLine = false;
-                continue; // Skip header
+            // Skip comments and empty lines
+            if (line.startsWith("#") || line.trim().isEmpty()) {
+                continue;
             }
             
             String[] parts = line.trim().split("\\s+");
             if (parts.length >= 2) {
+                // Parse vm0 -> 0, vm1 -> 1, etc.
+                int vmId = Integer.parseInt(parts[0].substring(2));
                 double capacity = Double.parseDouble(parts[1]);
                 
-                VM vm = new VM(vms.size()); // Use index as ID
+                VM vm = new VM(vmId);
                 vm.addCapability("processing", capacity);
+                vm.addCapability("processingCapacity", capacity);
                 vms.add(vm);
             }
         }
@@ -658,6 +660,204 @@ public class SMGT {
     
     /**
      * Runs the complete SMGT algorithm following the correct pseudocode
+     * This version excludes Critical Path tasks (as per line 4 of pseudocode)
+     * 
+     * @param criticalPath Set of task IDs that belong to the Critical Path (to be excluded)
+     * @param cpAssignments Pre-existing assignments of CP tasks from DCP (VM ID -> list of task IDs)
+     * @return Map of VM index to list of assigned task IDs (non-CP tasks only)
+     */
+    public Map<Integer, List<Integer>> runSMGTWithCP(Set<Integer> criticalPath, 
+                                                      Map<Integer, Integer> cpTaskToVM) {
+        Map<Integer, List<Integer>> vmWaitingLists = new HashMap<>();
+        
+        // Initialize VM waiting lists
+        for (int vmIndex = 0; vmIndex < vms.size(); vmIndex++) {
+            vmWaitingLists.put(vmIndex, new ArrayList<>());
+        }
+        
+        // Pre-populate with CP task assignments from DCP
+        if (cpTaskToVM != null) {
+            for (Map.Entry<Integer, Integer> entry : cpTaskToVM.entrySet()) {
+                int taskId = entry.getKey();
+                int vmId = entry.getValue();
+                if (vmWaitingLists.containsKey(vmId)) {
+                    vmWaitingLists.get(vmId).add(taskId);
+                }
+            }
+        }
+        
+        System.out.println("\n=== RUNNING SMGT ALGORITHM WITH CRITICAL PATH EXCLUSION ===");
+        System.out.println("Critical Path tasks (excluded from matching): " + criticalPath);
+        
+        // Get all levels and sort them
+        List<Integer> levels = new ArrayList<>(levelTasks.keySet());
+        levels.sort(Integer::compareTo);
+        
+        // Process each level, excluding CP tasks
+        for (Integer level : levels) {
+            assignTasksInLevelWithCP(level, vmWaitingLists, criticalPath);
+        }
+        
+        // Print final assignments
+        System.out.println("\n=== FINAL TASK ASSIGNMENTS (SMGT + CP) ===");
+        for (Map.Entry<Integer, List<Integer>> entry : vmWaitingLists.entrySet()) {
+            System.out.println("VM" + entry.getKey() + ": " + 
+                entry.getValue().stream()
+                    .map(task -> "t" + task)
+                    .reduce((a, b) -> a + ", " + b)
+                    .orElse("(no tasks)"));
+        }
+        
+        return vmWaitingLists;
+    }
+    
+    /**
+     * SMGT Algorithm for a level, excluding Critical Path tasks
+     * Implements line 4: Tₗ ← {task nel livello l} \ CP
+     * 
+     * @param level The level to process
+     * @param vmWaitingLists Map to store VM waiting lists
+     * @param criticalPath Set of task IDs in the Critical Path to exclude
+     */
+    public void assignTasksInLevelWithCP(int level, Map<Integer, List<Integer>> vmWaitingLists, 
+                                          Set<Integer> criticalPath) {
+        // Line 4: Tₗ ← {task nel livello l} \ CP
+        // Get tasks in this level EXCLUDING Critical Path tasks
+        List<Integer> tasksInLevel = new ArrayList<>();
+        for (Integer taskId : levelTasks.getOrDefault(level, new ArrayList<>())) {
+            if (!criticalPath.contains(taskId)) {
+                tasksInLevel.add(taskId);
+            }
+        }
+        
+        if (tasksInLevel.isEmpty()) {
+            System.out.println("\n=== LEVEL " + level + ": No non-CP tasks to assign ===");
+            return;
+        }
+        
+        System.out.println("\n=== ASSIGNING NON-CP TASKS IN LEVEL " + level + " ===");
+        System.out.println("Tasks in level (excluding CP): " + tasksInLevel.stream()
+            .map(t -> "t" + t).reduce((a, b) -> a + ", " + b).orElse("none"));
+        
+        // Initialize VM waiting lists if needed
+        for (int vmIndex = 0; vmIndex < vms.size(); vmIndex++) {
+            vmWaitingLists.putIfAbsent(vmIndex, new ArrayList<>());
+        }
+        
+        // Generate preference matrices
+        Map<Integer, List<Integer>> vmPreferences = generateAllVMPreferences();
+        Map<Integer, List<Integer>> taskPreferences = generateAllTaskPreferences();
+        
+        // Lines 30-61: Stable matching process
+        Set<Integer> unassigned = new HashSet<>(tasksInLevel);
+        
+        while (!unassigned.isEmpty()) {
+            Integer currentTask = unassigned.iterator().next();
+            unassigned.remove(currentTask);
+            
+            List<Integer> taskPrefList = new ArrayList<>(taskPreferences.getOrDefault(currentTask, new ArrayList<>()));
+            boolean taskAssigned = false;
+            
+            // Try each VM in order of task's preference
+            while (!taskPrefList.isEmpty() && !taskAssigned) {
+                Integer vmIndex = taskPrefList.get(0);
+                taskPrefList.remove(0);
+                
+                int thresholdValue = threshold(vmIndex, level);
+                List<Integer> vmWaitingList = vmWaitingLists.get(vmIndex);
+                
+                // Count only non-CP tasks for threshold comparison
+                long nonCPCount = vmWaitingList.stream()
+                    .filter(t -> !criticalPath.contains(t))
+                    .count();
+                
+                if (nonCPCount < thresholdValue) {
+                    // VM has capacity (line 35-40)
+                    vmWaitingList.add(currentTask);
+                    taskAssigned = true;
+                    System.out.println("  Task t" + currentTask + " assigned to VM" + vmIndex);
+                } else {
+                    // VM at threshold - try replacement (lines 42-59)
+                    // Find worst non-CP task in waiting list
+                    Integer worstTask = findWorstNonCPTask(vmIndex, vmWaitingList, 
+                                                           vmPreferences, criticalPath);
+                    
+                    if (worstTask != null) {
+                        int currentPos = getTaskPositionInVMPreference(currentTask, vmIndex, vmPreferences);
+                        int worstPos = getTaskPositionInVMPreference(worstTask, vmIndex, vmPreferences);
+                        
+                        if (currentPos < worstPos) {
+                            // Current task is preferred - replace worst task
+                            vmWaitingList.remove(worstTask);
+                            vmWaitingList.add(currentTask);
+                            unassigned.add(worstTask); // Rejected task goes back to unassigned
+                            taskAssigned = true;
+                            System.out.println("  Task t" + currentTask + " replaced t" + worstTask + " on VM" + vmIndex);
+                        }
+                    }
+                }
+            }
+            
+            if (!taskAssigned) {
+                // Force assignment to VM with most capacity
+                int bestVM = findVMWithMostCapacity(vmWaitingLists, level, criticalPath);
+                if (bestVM >= 0) {
+                    vmWaitingLists.get(bestVM).add(currentTask);
+                    System.out.println("  Task t" + currentTask + " force-assigned to VM" + bestVM);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Find the worst (least preferred) non-CP task in a VM's waiting list
+     */
+    private Integer findWorstNonCPTask(int vmIndex, List<Integer> vmWaitingList,
+                                        Map<Integer, List<Integer>> vmPreferences,
+                                        Set<Integer> criticalPath) {
+        Integer worstTask = null;
+        int worstPosition = -1;
+        
+        for (Integer taskId : vmWaitingList) {
+            if (criticalPath.contains(taskId)) {
+                continue; // Skip CP tasks
+            }
+            int position = getTaskPositionInVMPreference(taskId, vmIndex, vmPreferences);
+            if (position > worstPosition) {
+                worstPosition = position;
+                worstTask = taskId;
+            }
+        }
+        return worstTask;
+    }
+    
+    /**
+     * Find VM with most remaining capacity
+     */
+    private int findVMWithMostCapacity(Map<Integer, List<Integer>> vmWaitingLists, 
+                                        int level, Set<Integer> criticalPath) {
+        int bestVM = -1;
+        int maxCapacity = -1;
+        
+        for (int vmIndex = 0; vmIndex < vms.size(); vmIndex++) {
+            int thresholdValue = threshold(vmIndex, level);
+            List<Integer> waitingList = vmWaitingLists.get(vmIndex);
+            long nonCPCount = waitingList.stream()
+                .filter(t -> !criticalPath.contains(t))
+                .count();
+            int remaining = thresholdValue - (int)nonCPCount;
+            
+            if (remaining > maxCapacity) {
+                maxCapacity = remaining;
+                bestVM = vmIndex;
+            }
+        }
+        return bestVM;
+    }
+    
+    /**
+     * Runs the complete SMGT algorithm following the correct pseudocode
+     * Original version without CP exclusion (kept for backward compatibility)
      */
     public Map<Integer, List<Integer>> runSMGTAlgorithmCorrect() {
         Map<Integer, List<Integer>> vmWaitingLists = new HashMap<>();

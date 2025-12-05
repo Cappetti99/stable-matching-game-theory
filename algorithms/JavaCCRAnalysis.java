@@ -7,6 +7,12 @@ import java.util.*;
  */
 public class JavaCCRAnalysis {
     
+    // Istanze statiche per riutilizzo dell'algoritmo SM-CPTD
+    private static SMCPTD smcptdInstance = null;
+    private static Map<Integer, VM> vmMapping = null;
+    private static Map<String, Double> baseCommunicationCosts = null;
+    private static String currentWorkflowType = null;
+    
     private static final double[] CCR_RANGE = {0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0};
     private static final int TARGET_TASKS = 50;
     private static final int TARGET_VMS = 5;
@@ -47,13 +53,8 @@ public class JavaCCRAnalysis {
                 System.out.printf("\n   🔄 CCR = %.1f%n", ccr);
                 
                 try {
-                    // Carica dati dal CSV appena generato
-                    SMGT smgt = new SMGT();
-                    smgt.loadTasksFromCSV("../data/dag.csv", "../data/task.csv");
-                    smgt.loadVMsFromCSV("../data/processing_capacity.csv");
-                    
-                    // Esegui algoritmo DCP
-                    CCRResult result = executeWithCCR(smgt, ccr, workflowType);
+                    // Esegui algoritmo SM-CPTD completo (DCP → SMGT → LOTD)
+                    CCRResult result = executeWithSMCPTD(ccr, workflowType);
                     results.add(result);
                     
                     System.out.printf("      SLR: %.3f, Makespan: %.3f%n", result.slr, result.makespan);
@@ -70,7 +71,7 @@ public class JavaCCRAnalysis {
             generateSummary(results, workflowType);
             
             System.out.println("\n🎉 Analisi completata!");
-            System.out.println("   📊 Risultati salvati: ccr_analysis_results.json");
+            System.out.println("   📊 Risultati salvati: ccr_analysis_results_" + workflowType + ".json");
             System.out.println("   📈 Grafico: " + workflowType + "_ccr_analysis.png");
             
         } catch (Exception e) {
@@ -91,6 +92,47 @@ public class JavaCCRAnalysis {
         }
     }
     
+    /**
+     * Esegue l'algoritmo SM-CPTD completo (DCP → SMGT → LOTD)
+     */
+    private static CCRResult executeWithSMCPTD(double ccr, String workflowType) throws IOException {
+        // Inizializza l'algoritmo solo la prima volta o se cambia il workflow
+        if (smcptdInstance == null || !workflowType.equals(currentWorkflowType)) {
+            smcptdInstance = new SMCPTD();
+            currentWorkflowType = workflowType;
+            
+            // Carica dati dal CSV
+            smcptdInstance.loadData("../data/dag.csv", "../data/task.csv", "../data/processing_capacity.csv");
+            
+            // Crea mapping VM
+            vmMapping = new HashMap<>();
+            for (int i = 0; i < smcptdInstance.getSMGT().getVMs().size(); i++) {
+                vmMapping.put(i, smcptdInstance.getSMGT().getVMs().get(i));
+            }
+            
+            // Genera communication costs base (CCR = 1.0)
+            baseCommunicationCosts = generateCommunicationCosts(
+                smcptdInstance.getSMGT().getTasks(), vmMapping, 1.0);
+            
+            // Esegui algoritmo SM-CPTD completo una sola volta
+            smcptdInstance.executeSMCPTD(baseCommunicationCosts, vmMapping);
+        }
+        
+        // Ricalcola metriche per il CCR specifico
+        smcptdInstance.calculateMetricsForCCR(ccr, baseCommunicationCosts, vmMapping);
+        
+        // Ottieni risultati
+        double makespan = smcptdInstance.getMakespan();
+        double slr = smcptdInstance.getSLR();
+        int criticalPathLength = smcptdInstance.getCriticalPath().size();
+        
+        return new CCRResult(ccr, slr, makespan, criticalPathLength, workflowType);
+    }
+    
+    /**
+     * Metodo legacy per compatibilità (ora sostituito da SM-CPTD)
+     */
+    @Deprecated
     private static CCRResult executeWithCCR(SMGT smgt, double ccr, String workflowType) throws IOException {
         // Crea mapping VM da SMGT
         Map<Integer, VM> vmMapping = new HashMap<>();
@@ -117,8 +159,17 @@ public class JavaCCRAnalysis {
         // Calcola SLR
         Map<String, task> taskMap = new HashMap<>();
         for (task t : smgt.getTasks()) {
-            taskMap.put(String.valueOf(t.getID()), t);
+            taskMap.put("t" + t.getID(), t);  // Formato "t1", "t2", etc.
+            taskMap.put(String.valueOf(t.getID()), t);  // Formato "1", "2", etc.
         }
+        
+        // Debug: verifica critical path
+        if (criticalPath.isEmpty()) {
+            System.err.println("      ⚠️  Critical path vuoto, usando fallback SLR");
+            double fallbackSLR = makespan / calculateMinExecutionTimeSum(smgt.getTasks(), vmMapping, "processingCapacity");
+            return new CCRResult(ccr, fallbackSLR, makespan, 1, workflowType);
+        }
+        
         double slr = Metrics.SLR(makespan, criticalPath, taskMap, vmMapping, "processingCapacity");
         
         return new CCRResult(ccr, slr, makespan, criticalPath.size(), workflowType);
@@ -208,7 +259,7 @@ public class JavaCCRAnalysis {
     
     private static void saveResults(List<CCRResult> results, String workflowType) throws IOException {
         // Salva in formato JSON compatibile con gli script Python esistenti
-        try (PrintWriter writer = new PrintWriter(new FileWriter("ccr_analysis_results.json"))) {
+        try (PrintWriter writer = new PrintWriter(new FileWriter("ccr_analysis_results_" + workflowType + ".json"))) {
             writer.println("{");
             writer.println("  \"workflow_type\": \"" + workflowType + "\",");
             writer.println("  \"analysis_date\": \"" + new Date() + "\",");
@@ -259,6 +310,23 @@ public class JavaCCRAnalysis {
         System.out.printf("Correlazione CCR↔SLR: %.3f%n", correlation);
         
         System.out.println("\n🎉 Analisi " + workflowType + " completata!");
+    }
+    
+    private static double calculateMinExecutionTimeSum(List<task> tasks, Map<Integer, VM> vms, String capabilityName) {
+        double sum = 0.0;
+        for (task t : tasks) {
+            double minET = Double.POSITIVE_INFINITY;
+            for (VM vm : vms.values()) {
+                double capability = vm.getCapability(capabilityName);
+                if (capability <= 0) capability = 15.0; // Default
+                double et = t.getSize() / capability;
+                minET = Math.min(minET, et);
+            }
+            if (minET != Double.POSITIVE_INFINITY) {
+                sum += minET;
+            }
+        }
+        return sum > 0 ? sum : 1.0; // Evita divisione per zero
     }
     
     private static double calculateCorrelation(List<CCRResult> results) {

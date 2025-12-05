@@ -6,14 +6,16 @@ public class LOTD {
     private List<task> tasks;
     private Map<Integer, Double> taskAST; // Actual Start Time for each task
     private Map<Integer, Double> taskAFT; // Actual Finish Time for each task
-    private Map<Integer, Set<Integer>> replicatedTasks; // VM ID -> Set of replicated task IDs
-    private Map<Integer, List<Integer>> vmWaitingLists; // VM ID -> List of task IDs in waiting list
+    private Map<Integer, Set<Integer>> duplicatedTasks; // VM ID -> Set of duplicated task IDs
+    private Map<Integer, List<Integer>> vmSchedule; // VM ID -> List of task IDs (ordered by execution)
+    private Map<Integer, Integer> taskToVM; // Task ID -> VM ID (original assignment)
     
     public LOTD() {
         this.taskAST = new HashMap<>();
         this.taskAFT = new HashMap<>();
-        this.replicatedTasks = new HashMap<>();
-        this.vmWaitingLists = new HashMap<>();
+        this.duplicatedTasks = new HashMap<>();
+        this.vmSchedule = new HashMap<>();
+        this.taskToVM = new HashMap<>();
     }
     
     public LOTD(SMGT smgt) {
@@ -22,140 +24,408 @@ public class LOTD {
         this.vms = smgt.getVMs();
         this.tasks = smgt.getTasks();
         
-        // Initialize replicated tasks sets for each VM
+        // Initialize duplicated tasks sets for each VM
         for (VM vm : vms) {
-            replicatedTasks.put(vm.getID(), new HashSet<>());
+            duplicatedTasks.put(vm.getID(), new HashSet<>());
         }
     }
     
     /**
-     * Executes the LOTD (List of Task Duplication) algorithm
-     * @return Updated task assignments after duplication
+     * Sets the pre-schedule from SMGT results
      */
-    public Map<Integer, List<Integer>> executeLOTD() {
-        // Step 1: Call DCP and SMGT to generate pre-schedule S
-        System.out.println("=== EXECUTING LOTD ALGORITHM ===");
-        System.out.println("Step 1: Generating pre-schedule using DCP and SMGT...");
+    public void setPreSchedule(Map<Integer, List<Integer>> smgtAssignments) {
+        this.vmSchedule = new HashMap<>();
+        this.taskToVM = new HashMap<>();
         
-        // Generate initial schedule using SMGT
-        vmWaitingLists = smgt.runSMGTAlgorithmCorrect();
-        
-        // Initialize task timing information from the initial schedule
-        initializeTaskTiming();
-        
-        System.out.println("Initial pre-schedule generated successfully.");
-        
-        // Step 2: LOTD main algorithm
-        System.out.println("\nStep 2: Executing LOTD duplication algorithm...");
-        
-        // For k=0, 1, ..., m-1 (for each VM)
-        for (int k = 0; k < vms.size(); k++) {
-            System.out.println("\n--- Processing VM " + k + " ---");
+        for (Map.Entry<Integer, List<Integer>> entry : smgtAssignments.entrySet()) {
+            int vmId = entry.getKey();
+            List<Integer> taskList = new ArrayList<>(entry.getValue());
+            vmSchedule.put(vmId, taskList);
             
-            // Get the first task in the waiting list of VM k
-            List<Integer> waitingList = vmWaitingLists.get(k);
-            if (waitingList == null || waitingList.isEmpty()) {
-                System.out.println("VM " + k + " has no tasks in waiting list, skipping...");
+            for (Integer taskId : taskList) {
+                taskToVM.put(taskId, vmId);
+            }
+        }
+    }
+    
+    /**
+     * Executes the LOTD algorithm following the pseudocode:
+     * - Only considers tasks in level 0 (entry tasks) for duplication
+     * - Finds VM candidates where successors are assigned
+     * - Checks idle slots and Rule 2 (no AFT increase)
+     * 
+     * @param preSchedule The pre-schedule from DCP+SMGT (VM ID -> list of task IDs)
+     * @return Updated schedule after duplication optimization
+     */
+    public Map<Integer, List<Integer>> executeLOTDCorrect(Map<Integer, List<Integer>> preSchedule) {
+        System.out.println("\n=== EXECUTING LOTD ALGORITHM (CORRECTED VERSION) ===");
+        
+        // Initialize from pre-schedule
+        setPreSchedule(preSchedule);
+        
+        // Initialize task timing
+        initializeTaskTimingCorrect();
+        
+        // Line 2: T₀ ← {task nel livello 0} - Get only level 0 tasks (entry tasks)
+        List<Integer> T0 = getLevel0Tasks();
+        System.out.println("Level 0 tasks (entry tasks): " + T0);
+        
+        if (T0.isEmpty()) {
+            System.out.println("No level 0 tasks found, skipping LOTD");
+            return vmSchedule;
+        }
+        
+        // Lines 4-51: Process each entry task for potential duplication
+        for (Integer taskId : T0) {
+            task ti = smgt.getTaskById(taskId);
+            if (ti == null) continue;
+            
+            // Line 5: Get original VM assignment
+            Integer vmOrig = taskToVM.get(taskId);
+            if (vmOrig == null) {
+                System.out.println("Task t" + taskId + " has no VM assignment, skipping");
                 continue;
             }
             
-            int taskId = waitingList.get(0); // t <- the first task in the waiting list of VM k
-            task t = smgt.getTaskById(taskId);
+            System.out.println("\n--- Processing entry task t" + taskId + " (assigned to VM" + vmOrig + ") ---");
             
-            System.out.println("Processing task " + taskId + " (first in VM " + k + " waiting list)");
+            // Line 8: Find VM candidates where successors are assigned
+            Set<Integer> vmCandidates = new HashSet<>();
+            for (Integer succId : ti.getSucc()) {
+                Integer succVM = taskToVM.get(succId);
+                if (succVM != null) {
+                    vmCandidates.add(succVM);
+                }
+            }
+            System.out.println("VM candidates (where successors are): " + vmCandidates);
             
-            // Check if t.AST != 0 (i.e., task has predecessors and meaningful start time)
-            double currentAST = taskAST.getOrDefault(taskId, 0.0);
-            if (currentAST > 0.0 && !t.getPre().isEmpty()) {
-                System.out.println("Task " + taskId + " has AST = " + currentAST + ", checking for beneficial duplication...");
+            // Lines 10-50: Try duplication on each candidate VM
+            for (Integer vmK : vmCandidates) {
+                // Line 11: Skip if same VM
+                if (vmK.equals(vmOrig)) {
+                    continue;
+                }
                 
-                double minST = Double.POSITIVE_INFINITY; // minST <- inf
-                int minPredecessor = -1; // minPredecessor <- index of task with minST
+                System.out.println("  Checking duplication to VM" + vmK);
                 
-                // For each predecessor p of t do
-                for (int predecessorId : t.getPre()) {
-                    System.out.println("  Checking predecessor " + predecessorId);
-                    
-                    // Calculate the start time of t if we duplicate this predecessor to VM k
-                    double st = calculateStartTimeAfterDuplication(taskId, predecessorId, k);
-                    System.out.println("    Start time if predecessor " + predecessorId + " is duplicated to VM" + k + ": " + st);
-                    
-                    // if st < minST then
-                    if (st < minST) {
-                        minPredecessor = predecessorId;
-                        minST = st;
-                        System.out.println("    New minimum start time: " + minST + " with predecessor " + minPredecessor);
+                // Line 15: Find idle slots on VMk
+                List<IdleSlot> idleSlots = findIdleSlots(vmK);
+                
+                // Calculate ET of task on this VM
+                double etOnVMk = calculateET(ti, vmK);
+                System.out.println("    ET(t" + taskId + ", VM" + vmK + ") = " + etOnVMk);
+                
+                // Lines 17-48: Check each idle slot
+                for (IdleSlot slot : idleSlots) {
+                    // Line 18: Check if slot is large enough
+                    if (slot.duration >= etOnVMk) {
+                        System.out.println("    Found suitable slot: [" + slot.start + ", " + slot.end + "] (duration=" + slot.duration + ")");
+                        
+                        // Lines 20-26: Check Rule 2 - verify AFT doesn't increase
+                        Map<Integer, Double> oldAFT = new HashMap<>(taskAFT);
+                        
+                        // Line 23: Simulate insertion
+                        boolean canInsert = simulateInsertion(taskId, vmK, slot);
+                        
+                        if (canInsert) {
+                            // Line 26: Check if AFT_new <= AFT_old for all tasks
+                            boolean rule2Satisfied = checkRule2(oldAFT);
+                            
+                            if (rule2Satisfied) {
+                                // Lines 28-40: Duplication is beneficial
+                                System.out.println("    ✓ Rule 2 satisfied - duplicating task");
+                                
+                                // Create duplicate and assign
+                                performDuplication(taskId, vmK, slot);
+                                
+                                // Lines 33-40: Update successors to use duplicate if beneficial
+                                updateSuccessorsForDuplicate(taskId, vmK);
+                                
+                                // Line 42: Break from slot loop for this VM
+                                break;
+                            } else {
+                                // Lines 43-45: Rollback
+                                System.out.println("    ✗ Rule 2 not satisfied - rolling back");
+                                rollbackInsertion(taskId, vmK, oldAFT);
+                            }
+                        }
                     }
                 }
-                
-                // if minST < t.AST then
-                if (minST < currentAST && minPredecessor != -1) {
-                    System.out.println("  Duplication beneficial: minST (" + minST + ") < current AST (" + currentAST + ")");
-                    System.out.println("  Duplicating and assigning task " + minPredecessor + " to VM " + k);
-                    
-                    // Duplicate and assign the task with minPredecessor to VM k
-                    duplicateAndAssignTask(minPredecessor, k);
-                    
-                    // Update AST and AFT of each task in DAG
-                    updateTaskTiming();
-                    
-                    System.out.println("  Task timing updated after duplication");
-                } else {
-                    System.out.println("  Duplication not beneficial: minST (" + minST + ") >= current AST (" + currentAST + ")");
-                }
-            } else {
-                System.out.println("Task " + taskId + " is an entry task or has AST = 0, no duplication needed");
             }
         }
         
         System.out.println("\n=== LOTD ALGORITHM COMPLETED ===");
-        return vmWaitingLists;
+        printFinalSchedule();
+        
+        return vmSchedule;
     }
     
     /**
-     * Initialize task timing information from the current schedule
+     * Represents an idle slot on a VM
      */
-    private void initializeTaskTiming() {
-        System.out.println("Initializing task timing information...");
+    private static class IdleSlot {
+        double start;
+        double end;
+        double duration;
         
-        // Use topological ordering to calculate timing correctly
+        IdleSlot(double start, double end) {
+            this.start = start;
+            this.end = end;
+            this.duration = end - start;
+        }
+    }
+    
+    /**
+     * Get tasks at level 0 (entry tasks with no predecessors)
+     */
+    private List<Integer> getLevel0Tasks() {
+        List<Integer> level0 = new ArrayList<>();
+        for (task t : tasks) {
+            if (t.getPre() == null || t.getPre().isEmpty()) {
+                level0.add(t.getID());
+            }
+        }
+        return level0;
+    }
+    
+    /**
+     * Initialize task timing from current schedule
+     */
+    private void initializeTaskTimingCorrect() {
+        taskAST.clear();
+        taskAFT.clear();
+        
+        // Process tasks in topological order
         List<task> sortedTasks = topologicalSort();
         
         for (task t : sortedTasks) {
             int taskId = t.getID();
+            Integer vmId = taskToVM.get(taskId);
             
-            // For entry tasks (no predecessors), AST = 0
-            if (t.getPre().isEmpty()) {
-                taskAST.put(taskId, 0.0);
-                double execTime = calculateExecutionTime(taskId, getAssignedVM(taskId));
-                taskAFT.put(taskId, execTime);
-                System.out.println("  Entry task " + taskId + ": AST=0.0, AFT=" + execTime);
-            } else {
-                // For non-entry tasks, calculate based on predecessors
-                double maxPredFinishTime = 0.0;
-                for (int predId : t.getPre()) {
-                    double predFinishTime = taskAFT.getOrDefault(predId, 0.0);
-                    // Add communication cost if tasks are on different VMs
-                    int predVM = getAssignedVM(predId);
-                    int currentVM = getAssignedVM(taskId);
-                    if (predVM != currentVM) {
-                        predFinishTime += 1.0; // Simple communication cost
-                    }
-                    maxPredFinishTime = Math.max(maxPredFinishTime, predFinishTime);
-                }
-                
-                taskAST.put(taskId, maxPredFinishTime);
-                double execTime = calculateExecutionTime(taskId, getAssignedVM(taskId));
-                taskAFT.put(taskId, maxPredFinishTime + execTime);
-                System.out.println("  Task " + taskId + ": AST=" + maxPredFinishTime + ", AFT=" + (maxPredFinishTime + execTime));
+            if (vmId == null) {
+                // Task not assigned, skip
+                continue;
             }
+            
+            double st;
+            if (t.getPre() == null || t.getPre().isEmpty()) {
+                // Entry task
+                st = 0.0;
+            } else {
+                // Calculate ST = max{FT(pred) + Ttrans(pred, ti)}
+                st = 0.0;
+                for (Integer predId : t.getPre()) {
+                    Double predAFT = taskAFT.get(predId);
+                    if (predAFT == null) continue;
+                    
+                    Integer predVM = taskToVM.get(predId);
+                    double transTime = 0.0;
+                    if (predVM != null && !predVM.equals(vmId)) {
+                        // Different VMs - add transmission time
+                        transTime = calculateTransmissionTime(predId, taskId, predVM, vmId);
+                    }
+                    st = Math.max(st, predAFT + transTime);
+                }
+            }
+            
+            double et = calculateET(t, vmId);
+            double ft = st + et;
+            
+            taskAST.put(taskId, st);
+            taskAFT.put(taskId, ft);
         }
-        
-        System.out.println("Task timing initialization completed");
     }
     
     /**
-     * Perform topological sort of tasks to ensure correct dependency order
+     * Calculate Execution Time: ET = size / processing_capacity
+     */
+    private double calculateET(task t, int vmId) {
+        if (vmId < 0 || vmId >= vms.size()) {
+            return t.getSize(); // Default
+        }
+        VM vm = vms.get(vmId);
+        double capacity = vm.getCapability("processingCapacity");
+        if (capacity <= 0) {
+            capacity = vm.getCapability("processing");
+        }
+        if (capacity <= 0) {
+            return t.getSize();
+        }
+        return t.getSize() / capacity;
+    }
+    
+    /**
+     * Calculate transmission time between two tasks on different VMs
+     */
+    private double calculateTransmissionTime(int srcTaskId, int dstTaskId, int srcVM, int dstVM) {
+        if (srcVM == dstVM) return 0.0;
+        
+        task srcTask = smgt.getTaskById(srcTaskId);
+        if (srcTask == null) return 0.0;
+        
+        VM src = vms.get(srcVM);
+        double bandwidth = src.getBandwidthToVM(dstVM);
+        if (bandwidth <= 0) bandwidth = 25.0; // Default bandwidth
+        
+        double dataSize = srcTask.getSize() * 0.4; // CCR = 0.4
+        return dataSize / bandwidth;
+    }
+    
+    /**
+     * Find idle slots on a VM based on current task schedule
+     */
+    private List<IdleSlot> findIdleSlots(int vmId) {
+        List<IdleSlot> slots = new ArrayList<>();
+        List<Integer> vmTasks = vmSchedule.getOrDefault(vmId, new ArrayList<>());
+        
+        if (vmTasks.isEmpty()) {
+            // Entire timeline is idle
+            slots.add(new IdleSlot(0.0, Double.MAX_VALUE));
+            return slots;
+        }
+        
+        // Sort tasks by their start time on this VM
+        List<double[]> intervals = new ArrayList<>();
+        for (Integer taskId : vmTasks) {
+            Double st = taskAST.get(taskId);
+            Double ft = taskAFT.get(taskId);
+            if (st != null && ft != null) {
+                intervals.add(new double[]{st, ft});
+            }
+        }
+        intervals.sort((a, b) -> Double.compare(a[0], b[0]));
+        
+        // Find gaps
+        double currentEnd = 0.0;
+        for (double[] interval : intervals) {
+            if (interval[0] > currentEnd) {
+                slots.add(new IdleSlot(currentEnd, interval[0]));
+            }
+            currentEnd = Math.max(currentEnd, interval[1]);
+        }
+        
+        // Add slot at the end
+        slots.add(new IdleSlot(currentEnd, currentEnd + 1000.0));
+        
+        return slots;
+    }
+    
+    /**
+     * Simulate inserting a task duplicate in a slot
+     */
+    private boolean simulateInsertion(int taskId, int vmId, IdleSlot slot) {
+        task t = smgt.getTaskById(taskId);
+        if (t == null) return false;
+        
+        double et = calculateET(t, vmId);
+        double newST = slot.start;
+        double newFT = newST + et;
+        
+        // Check it fits in the slot
+        if (newFT > slot.end && slot.end < Double.MAX_VALUE) {
+            return false;
+        }
+        
+        // Temporarily update timing
+        taskAST.put(-taskId, newST); // Use negative ID for duplicate
+        taskAFT.put(-taskId, newFT);
+        
+        return true;
+    }
+    
+    /**
+     * Check Rule 2: AFT_new <= AFT_old for all tasks
+     */
+    private boolean checkRule2(Map<Integer, Double> oldAFT) {
+        for (Map.Entry<Integer, Double> entry : taskAFT.entrySet()) {
+            int taskId = entry.getKey();
+            if (taskId < 0) continue; // Skip duplicates
+            
+            Double oldFT = oldAFT.get(taskId);
+            Double newFT = entry.getValue();
+            
+            if (oldFT != null && newFT != null && newFT > oldFT + 0.001) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    /**
+     * Perform the actual duplication
+     */
+    private void performDuplication(int taskId, int vmId, IdleSlot slot) {
+        task t = smgt.getTaskById(taskId);
+        if (t == null) return;
+        
+        // Add to duplicated tasks set
+        duplicatedTasks.get(vmId).add(taskId);
+        
+        // Add to VM schedule
+        vmSchedule.get(vmId).add(taskId);
+        
+        // Update timing
+        double et = calculateET(t, vmId);
+        taskAST.put(taskId, slot.start);
+        taskAFT.put(taskId, slot.start + et);
+        
+        System.out.println("    Duplicated t" + taskId + " to VM" + vmId + 
+                          " [ST=" + slot.start + ", FT=" + (slot.start + et) + "]");
+    }
+    
+    /**
+     * Update successors to use the duplicate if beneficial
+     */
+    private void updateSuccessorsForDuplicate(int taskId, int vmK) {
+        task ti = smgt.getTaskById(taskId);
+        if (ti == null) return;
+        
+        Integer origVM = taskToVM.get(taskId);
+        Double dupAFT = taskAFT.get(taskId);
+        
+        for (Integer succId : ti.getSucc()) {
+            Integer succVM = taskToVM.get(succId);
+            if (succVM == null || !succVM.equals(vmK)) continue;
+            
+            // Calculate transmission time from original vs duplicate
+            double transFromOrig = (origVM != null && !origVM.equals(vmK)) ? 
+                calculateTransmissionTime(taskId, succId, origVM, vmK) : 0.0;
+            double transFromDup = 0.0; // Same VM, no transmission
+            
+            Double origAFT = taskAFT.get(taskId);
+            
+            if (dupAFT != null && origAFT != null) {
+                double availFromOrig = origAFT + transFromOrig;
+                double availFromDup = dupAFT + transFromDup;
+                
+                if (availFromDup < availFromOrig) {
+                    // Update successor to use duplicate
+                    Double oldSuccAST = taskAST.get(succId);
+                    Double newSuccAST = availFromDup;
+                    
+                    if (oldSuccAST != null && newSuccAST < oldSuccAST) {
+                        task succ = smgt.getTaskById(succId);
+                        double succET = calculateET(succ, vmK);
+                        taskAST.put(succId, newSuccAST);
+                        taskAFT.put(succId, newSuccAST + succET);
+                        System.out.println("    Updated successor t" + succId + " to use duplicate");
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Rollback a simulated insertion
+     */
+    private void rollbackInsertion(int taskId, int vmId, Map<Integer, Double> oldAFT) {
+        taskAST.remove(-taskId);
+        taskAFT.remove(-taskId);
+        taskAFT.putAll(oldAFT);
+    }
+    
+    /**
+     * Perform topological sort of tasks
      */
     private List<task> topologicalSort() {
         List<task> result = new ArrayList<>();
@@ -168,18 +438,12 @@ public class LOTD {
             }
         }
         
-        Collections.reverse(result); // Reverse to get correct order
+        Collections.reverse(result);
         return result;
     }
     
-    /**
-     * Utility method for topological sort
-     */
     private void topologicalSortUtil(int taskId, Set<Integer> visited, Set<Integer> visiting, List<task> result) {
-        if (visiting.contains(taskId)) {
-            return; // Cycle detected, skip
-        }
-        if (visited.contains(taskId)) {
+        if (visiting.contains(taskId) || visited.contains(taskId)) {
             return;
         }
         
@@ -190,139 +454,41 @@ public class LOTD {
             for (int succId : currentTask.getSucc()) {
                 topologicalSortUtil(succId, visited, visiting, result);
             }
+            result.add(currentTask);
         }
         
         visiting.remove(taskId);
         visited.add(taskId);
-        if (currentTask != null) {
-            result.add(currentTask);
-        }
     }
     
     /**
-     * Check if a task is replicated on any VM
+     * Print final schedule
      */
-    private boolean isTaskReplicated(int taskId) {
-        for (Set<Integer> vmReplicated : replicatedTasks.values()) {
-            if (vmReplicated.contains(taskId)) {
-                return true;
-            }
+    private void printFinalSchedule() {
+        System.out.println("\nFinal Schedule after LOTD:");
+        for (Map.Entry<Integer, List<Integer>> entry : vmSchedule.entrySet()) {
+            int vmId = entry.getKey();
+            Set<Integer> dups = duplicatedTasks.getOrDefault(vmId, new HashSet<>());
+            System.out.println("  VM" + vmId + ": " + entry.getValue() + 
+                              (dups.isEmpty() ? "" : " (duplicates: " + dups + ")"));
         }
-        return false;
     }
     
-    /**
-     * Calculate start time of a task after duplication of its predecessor
-     */
-    private double calculateStartTimeAfterDuplication(int taskId, int predecessorId, int vmId) {
-        // Get the current AST of the predecessor
-        double predecessorAST = taskAST.getOrDefault(predecessorId, 0.0);
-        
-        // Calculate execution time of predecessor on the target VM
-        double predExecTimeOnTargetVM = calculateExecutionTime(predecessorId, vmId);
-        
-        // The predecessor would finish at: AST + ET on target VM
-        double predecessorFinishOnTargetVM = predecessorAST + predExecTimeOnTargetVM;
-        
-        // Since the task and its duplicated predecessor are on the same VM,
-        // there's no communication cost, so the task can start immediately
-        // after the predecessor finishes
-        double newStartTime = predecessorFinishOnTargetVM;
-        
-        System.out.println("      Predecessor " + predecessorId + " AST: " + predecessorAST);
-        System.out.println("      Predecessor " + predecessorId + " ET on VM" + vmId + ": " + predExecTimeOnTargetVM);
-        System.out.println("      Predecessor " + predecessorId + " would finish on VM" + vmId + " at: " + predecessorFinishOnTargetVM);
-        System.out.println("      Task " + taskId + " could start at: " + newStartTime + " (no communication cost)");
-        
-        return newStartTime;
-    }
+    // ========== Original method kept for backward compatibility ==========
     
     /**
-     * Duplicate and assign a task to a specific VM
+     * Original executeLOTD - kept for backward compatibility
+     * @deprecated Use executeLOTDCorrect instead
      */
-    private void duplicateAndAssignTask(int taskId, int vmId) {
-        System.out.println("    Duplicating task " + taskId + " to VM " + vmId);
+    public Map<Integer, List<Integer>> executeLOTD() {
+        // Step 1: Call DCP and SMGT to generate pre-schedule S
+        System.out.println("=== EXECUTING LOTD ALGORITHM (LEGACY) ===");
         
-        // Add task to the replicated tasks set for this VM
-        replicatedTasks.get(vmId).add(taskId);
+        // Generate initial schedule using SMGT
+        Map<Integer, List<Integer>> preSchedule = smgt.runSMGTAlgorithmCorrect();
         
-        // Add task to VM's waiting list if not already present
-        List<Integer> waitingList = vmWaitingLists.get(vmId);
-        if (!waitingList.contains(taskId)) {
-            waitingList.add(taskId);
-        }
-        
-        System.out.println("    Task " + taskId + " successfully duplicated to VM " + vmId);
-    }
-    
-    /**
-     * Update AST and AFT of each task in DAG after duplication
-     */
-    private void updateTaskTiming() {
-        System.out.println("    Updating task timing information...");
-        
-        // Recalculate timing for all tasks considering the new duplications
-        // This is a simplified update - in practice would use topological sorting
-        // and consider all dependencies and VM assignments
-        
-        for (task t : tasks) {
-            if (t.getPre().isEmpty()) {
-                // Entry tasks remain the same
-                continue;
-            }
-            
-            // Recalculate based on potentially updated predecessor finish times
-            double maxPredFinishTime = 0.0;
-            for (int predId : t.getPre()) {
-                double predFinishTime = taskAFT.getOrDefault(predId, 0.0);
-                
-                // Consider if predecessor is replicated on the same VM as current task
-                int currentTaskVM = getAssignedVM(t.getID());
-                if (replicatedTasks.get(currentTaskVM).contains(predId)) {
-                    // No communication cost if replicated on same VM
-                    predFinishTime = Math.min(predFinishTime, 
-                        calculateExecutionTime(predId, currentTaskVM));
-                }
-                
-                maxPredFinishTime = Math.max(maxPredFinishTime, predFinishTime);
-            }
-            
-            // Update timing
-            taskAST.put(t.getID(), maxPredFinishTime);
-            taskAFT.put(t.getID(), maxPredFinishTime + calculateExecutionTime(t.getID(), getAssignedVM(t.getID())));
-        }
-        
-        System.out.println("    Task timing update completed");
-    }
-    
-    /**
-     * Calculate execution time of a task on a specific VM
-     */
-    private double calculateExecutionTime(int taskId, int vmId) {
-        task t = smgt.getTaskById(taskId);
-        if (t == null || vmId >= vms.size() || vmId < 0) {
-            return 1.0; // Default execution time
-        }
-        
-        // Use actual task size and assume VM processing rate of 1.0
-        // In a real implementation, this would consider VM capabilities
-        double taskSize = t.getSize();
-        double processingRate = 1.0; // Simplified processing rate
-        
-        return taskSize / processingRate;
-    }
-    
-    /**
-     * Get the VM ID where a task is currently assigned
-     */
-    private int getAssignedVM(int taskId) {
-        // Find which VM has this task in its waiting list
-        for (Map.Entry<Integer, List<Integer>> entry : vmWaitingLists.entrySet()) {
-            if (entry.getValue().contains(taskId)) {
-                return entry.getKey();
-            }
-        }
-        return 0; // Default to VM 0 if not found
+        // Use the corrected version
+        return executeLOTDCorrect(preSchedule);
     }
     
     // Getter methods for accessing results
@@ -334,11 +500,11 @@ public class LOTD {
         return new HashMap<>(taskAFT);
     }
     
-    public Map<Integer, Set<Integer>> getReplicatedTasks() {
-        return new HashMap<>(replicatedTasks);
+    public Map<Integer, Set<Integer>> getDuplicatedTasks() {
+        return new HashMap<>(duplicatedTasks);
     }
     
-    public Map<Integer, List<Integer>> getVMWaitingLists() {
-        return new HashMap<>(vmWaitingLists);
+    public Map<Integer, List<Integer>> getVMSchedule() {
+        return new HashMap<>(vmSchedule);
     }
 }

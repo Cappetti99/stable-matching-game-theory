@@ -3,7 +3,200 @@ import java.util.*;
 
 public class DCP {
     
-    // Main DCP algorithm implementation following the pseudocode
+    /**
+     * Result class to hold complete DCP results including CP scheduling
+     */
+    public static class DCPScheduleResult {
+        public Set<Integer> criticalPath;
+        public Map<Integer, Integer> cpTaskToVM;      // task ID -> VM ID assignment
+        public Map<Integer, Double> cpTaskAST;        // task ID -> Actual Start Time
+        public Map<Integer, Double> cpTaskAFT;        // task ID -> Actual Finish Time
+        public Map<Integer, Double> taskRanks;        // all task ranks
+        
+        public DCPScheduleResult() {
+            this.criticalPath = new HashSet<>();
+            this.cpTaskToVM = new HashMap<>();
+            this.cpTaskAST = new HashMap<>();
+            this.cpTaskAFT = new HashMap<>();
+            this.taskRanks = new HashMap<>();
+        }
+    }
+    
+    /**
+     * Complete DCP algorithm following pseudocode lines 1-25
+     * Identifies critical path AND schedules CP tasks to VMs with minimum finish time
+     */
+    public static DCPScheduleResult executeDCPWithScheduling(List<task> tasks, 
+                                                              Map<Integer, List<Integer>> taskLevels,
+                                                              task exitTask, 
+                                                              Map<String, Double> communicationCosts,
+                                                              Map<Integer, VM> vmMapping) {
+        
+        DCPScheduleResult result = new DCPScheduleResult();
+        
+        // Step 1: Initialize CP with an empty set
+        Set<Integer> CP = new HashSet<>();
+        
+        // Step 2-10: Calculate ranks for all tasks
+        Map<Integer, Double> taskRanks = new HashMap<>();
+        Map<Integer, task> taskMap = new HashMap<>();
+        
+        // Create task lookup map
+        for (task t : tasks) {
+            taskMap.put(t.getID(), t);
+        }
+        
+        // Calculate rank of exit task first (line 4-5)
+        double exitRank = calculateTaskWeight(exitTask, vmMapping);
+        taskRanks.put(exitTask.getID(), exitRank);
+        
+        // Calculate rank for all other tasks (lines 6-9)
+        for (task t : tasks) {
+            if (t.getID() != exitTask.getID()) {
+                calculateRankIterative(t.getID(), taskMap, taskRanks, communicationCosts, vmMapping);
+            }
+        }
+        
+        // Step 12-16: Select task with max rank per level for CP
+        // Sort levels to process in order
+        List<Integer> sortedLevels = new ArrayList<>(taskLevels.keySet());
+        Collections.sort(sortedLevels);
+        
+        for (Integer level : sortedLevels) {
+            List<Integer> tasksInLevel = taskLevels.get(level);
+            int maxRankTask = selectMaxRankTask(tasksInLevel, taskRanks);
+            if (maxRankTask != -1) {
+                CP.add(maxRankTask);
+            }
+        }
+        
+        // Step 19-23: Schedule CP tasks to VM with minimum finish time
+        // Track VM availability (when each VM becomes free)
+        Map<Integer, Double> vmAvailableTime = new HashMap<>();
+        for (Integer vmId : vmMapping.keySet()) {
+            vmAvailableTime.put(vmId, 0.0);
+        }
+        
+        // Process CP tasks in topological order (by level)
+        for (Integer level : sortedLevels) {
+            for (Integer taskId : CP) {
+                // Check if this task belongs to current level
+                if (!taskLevels.get(level).contains(taskId)) {
+                    continue;
+                }
+                
+                task cpTask = taskMap.get(taskId);
+                if (cpTask == null) continue;
+                
+                // Find VM with minimum finish time for this task (line 20)
+                int bestVM = -1;
+                double minFT = Double.POSITIVE_INFINITY;
+                double bestST = 0.0;
+                
+                for (Map.Entry<Integer, VM> vmEntry : vmMapping.entrySet()) {
+                    int vmId = vmEntry.getKey();
+                    VM vm = vmEntry.getValue();
+                    
+                    // Calculate start time considering predecessors
+                    double st = calculateCPTaskStartTime(cpTask, vmId, result.cpTaskAFT, 
+                                                         result.cpTaskToVM, taskMap, 
+                                                         communicationCosts, vmMapping);
+                    
+                    // ST must be at least when VM becomes available
+                    st = Math.max(st, vmAvailableTime.get(vmId));
+                    
+                    // Calculate execution time: ET = size / capacity
+                    double et = calculateTaskWeight(cpTask, vmMapping); // Average ET
+                    double processingCapacity = vm.getCapability("processingCapacity");
+                    if (processingCapacity > 0) {
+                        et = cpTask.getSize() / processingCapacity;
+                    }
+                    
+                    // Calculate finish time: FT = ST + ET
+                    double ft = st + et;
+                    
+                    if (ft < minFT) {
+                        minFT = ft;
+                        bestVM = vmId;
+                        bestST = st;
+                    }
+                }
+                
+                // Assign task to best VM (lines 21-22)
+                if (bestVM != -1) {
+                    result.cpTaskToVM.put(taskId, bestVM);
+                    result.cpTaskAST.put(taskId, bestST);
+                    result.cpTaskAFT.put(taskId, minFT);
+                    vmAvailableTime.put(bestVM, minFT); // Update VM availability
+                }
+            }
+        }
+        
+        result.criticalPath = CP;
+        result.taskRanks = taskRanks;
+        
+        return result;
+    }
+    
+    /**
+     * Calculate start time for a CP task considering its predecessors in CP
+     */
+    private static double calculateCPTaskStartTime(task cpTask, int targetVMId,
+                                                    Map<Integer, Double> cpTaskAFT,
+                                                    Map<Integer, Integer> cpTaskToVM,
+                                                    Map<Integer, task> taskMap,
+                                                    Map<String, Double> communicationCosts,
+                                                    Map<Integer, VM> vmMapping) {
+        
+        // Entry task starts at 0
+        if (cpTask.getPre() == null || cpTask.getPre().isEmpty()) {
+            return 0.0;
+        }
+        
+        double maxPredFinishWithComm = 0.0;
+        
+        for (Integer predId : cpTask.getPre()) {
+            Double predAFT = cpTaskAFT.get(predId);
+            if (predAFT == null) {
+                // Predecessor not yet scheduled (not in CP), assume it will be handled by SMGT
+                continue;
+            }
+            
+            Integer predVMId = cpTaskToVM.get(predId);
+            if (predVMId == null) continue;
+            
+            // Calculate communication cost
+            double commCost = 0.0;
+            if (predVMId != targetVMId) {
+                // Different VMs - add communication cost
+                String commKey = predId + "_" + cpTask.getID();
+                commCost = communicationCosts.getOrDefault(commKey, 0.0);
+                
+                // If no specific cost, calculate based on bandwidth
+                if (commCost == 0.0) {
+                    task predTask = taskMap.get(predId);
+                    if (predTask != null) {
+                        VM predVM = vmMapping.get(predVMId);
+                        VM targetVM = vmMapping.get(targetVMId);
+                        if (predVM != null && targetVM != null) {
+                            double bandwidth = predVM.getBandwidthToVM(targetVMId);
+                            if (bandwidth > 0) {
+                                commCost = predTask.getSize() * 0.4 / bandwidth; // CCR default 0.4
+                            }
+                        }
+                    }
+                }
+            }
+            // Same VM: no communication cost
+            
+            double finishWithComm = predAFT + commCost;
+            maxPredFinishWithComm = Math.max(maxPredFinishWithComm, finishWithComm);
+        }
+        
+        return maxPredFinishWithComm;
+    }
+    
+    // Original method kept for backward compatibility
     public static Set<Integer> executeDCP(List<task> tasks, Map<Integer, List<Integer>> taskLevels, 
                                          task exitTask, Map<String, Double> communicationCosts,
                                          Map<Integer, VM> vmMapping) {
