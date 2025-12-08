@@ -64,21 +64,20 @@ public class Metrics {
      * 
      * @param ti The task for which to calculate start time
      * @param vmK The VM hosting the task
-     * @param isEntryTask Whether this task is an entry task (has no predecessors)
-     * @param predecessorFinishTimes Map of predecessor task IDs to their finish times
-     * @param predecessorTasks Map of predecessor task IDs to their task objects
-     * @param predecessorVMs Map of predecessor task IDs to their hosting VMs
-     * @param dataTransferSizes Map of predecessor task IDs to data transfer sizes to current task
+     * @param taskFinishTimes Map of task IDs to their finish times
+     * @param taskVMAssignments Map of task IDs to their hosting VMs
+     * @param allTasks Map of task IDs to task objects
+     * @param CCR Communication-to-Computation Ratio
      * @return The start time of the task on the VM
      */
-    public static double ST(task ti, VM vmK, boolean isEntryTask, 
-                           java.util.Map<Integer, Double> predecessorFinishTimes,
-                           java.util.Map<Integer, task> predecessorTasks,
-                           java.util.Map<Integer, VM> predecessorVMs,
-                           java.util.Map<Integer, Double> dataTransferSizes) {
+    public static double ST(task ti, VM vmK,
+                           java.util.Map<Integer, Double> taskFinishTimes,
+                           java.util.Map<Integer, VM> taskVMAssignments,
+                           java.util.Map<Integer, task> allTasks,
+                           double CCR) {
         
         // If this is an entry task (tentry), start time is 0
-        if (isEntryTask || ti.getPre().isEmpty()) {
+        if (ti.getPre() == null || ti.getPre().isEmpty()) {
             return 0.0;
         }
         
@@ -87,31 +86,25 @@ public class Metrics {
         // For each predecessor task tj in pre(ti)
         for (Integer tjId : ti.getPre()) {
             // Get finish time of predecessor task tj
-            Double ftj = predecessorFinishTimes.get(tjId);
+            Double ftj = taskFinishTimes.get(tjId);
             if (ftj == null) {
                 continue; // Skip if finish time not available
             }
             
             // Get predecessor task object
-            task tj = predecessorTasks.get(tjId);
+            task tj = allTasks.get(tjId);
             if (tj == null) {
                 continue; // Skip if task object not available
             }
             
             // Get VM hosting predecessor task tj
-            VM vmL = predecessorVMs.get(tjId);
+            VM vmL = taskVMAssignments.get(tjId);
             if (vmL == null) {
                 continue; // Skip if VM not available
             }
             
-            // Get data transfer size from tj to ti
-            Double dataSize = dataTransferSizes.get(tjId);
-            if (dataSize == null) {
-                dataSize = 0.0; // Default to 0 if no data transfer
-            }
-            
             // Calculate transmission time from tj to ti
-            double ttrans = Ttrans(tj, ti, vmL, vmK, 0.4);
+            double ttrans = Ttrans(tj, ti, vmL, vmK, CCR);
             
             // Calculate potential start time: FTj + Ttrans(tj, ti)
             double potentialStartTime = ftj + ttrans;
@@ -133,6 +126,20 @@ public class Metrics {
     public static double ST(task ti, VM vmK) {
         // Assume this is an entry task if no other parameters provided
         return 0.0;
+    }
+    
+    /**
+     * @deprecated Use ST(task, VM, Map<Integer,Double>, Map<Integer,VM>, Map<Integer,task>, double) instead
+     * Legacy version for backward compatibility
+     */
+    @Deprecated
+    public static double ST(task ti, VM vmK, boolean isEntryTask, 
+                           java.util.Map<Integer, Double> predecessorFinishTimes,
+                           java.util.Map<Integer, task> predecessorTasks,
+                           java.util.Map<Integer, VM> predecessorVMs,
+                           java.util.Map<Integer, Double> dataTransferSizes) {
+        // Convert to new signature
+        return ST(ti, vmK, predecessorFinishTimes, predecessorVMs, predecessorTasks, 0.4);
     }
     
     /**
@@ -197,27 +204,38 @@ public class Metrics {
      * @param ti The task
      * @param vmK The VM hosting the task
      * @param capabilityType The type of capability required by the task
-     * @param isEntryTask Whether this task is an entry task
-     * @param predecessorFinishTimes Map of predecessor task IDs to their finish times
-     * @param predecessorTasks Map of predecessor task IDs to their task objects
-     * @param predecessorVMs Map of predecessor task IDs to their hosting VMs
-     * @param dataTransferSizes Map of predecessor task IDs to data transfer sizes to current task
+     * @param taskFinishTimes Map of task IDs to their finish times
+     * @param taskVMAssignments Map of task IDs to their hosting VMs
+     * @param allTasks Map of task IDs to task objects
+     * @param CCR Communication-to-Computation Ratio
      * @return The finish time of the task on the VM
      */
-    public static double FT(task ti, VM vmK, String capabilityType, boolean isEntryTask,
-                           java.util.Map<Integer, Double> predecessorFinishTimes,
-                           java.util.Map<Integer, task> predecessorTasks,
-                           java.util.Map<Integer, VM> predecessorVMs,
-                           java.util.Map<Integer, Double> dataTransferSizes) {
+    public static double FT(task ti, VM vmK, String capabilityType,
+                           java.util.Map<Integer, Double> taskFinishTimes,
+                           java.util.Map<Integer, VM> taskVMAssignments,
+                           java.util.Map<Integer, task> allTasks,
+                           double CCR) {
         
         // Calculate start time ST(ti, VMk)
-        double startTime = ST(ti, vmK, isEntryTask, predecessorFinishTimes, predecessorTasks, predecessorVMs, dataTransferSizes);
+        double startTime = ST(ti, vmK, taskFinishTimes, taskVMAssignments, allTasks, CCR);
         
         // Calculate execution time ET(ti, VMk)
         double executionTime = ET(ti, vmK, capabilityType);
         
         // Calculate finish time: FT(ti, VMk) = ST(ti, VMk) + ET(ti, VMk)
         return startTime + executionTime;
+    }
+    
+    /**
+     * @deprecated Use FT(task, VM, String, Map, Map, Map, double) instead
+     */
+    @Deprecated
+    public static double FT(task ti, VM vmK, String capabilityType, boolean isEntryTask,
+                           java.util.Map<Integer, Double> predecessorFinishTimes,
+                           java.util.Map<Integer, task> predecessorTasks,
+                           java.util.Map<Integer, VM> predecessorVMs,
+                           java.util.Map<Integer, Double> dataTransferSizes) {
+        return FT(ti, vmK, capabilityType, predecessorFinishTimes, predecessorVMs, predecessorTasks, 0.4);
     }
     
     /**
@@ -292,24 +310,22 @@ public class Metrics {
         }
         
         // Create simulated maps for predecessors
-        java.util.Map<Integer, Double> predecessorFinishTimes = new java.util.HashMap<>();
-        java.util.Map<Integer, task> predecessorTasks = new java.util.HashMap<>();
-        java.util.Map<Integer, VM> predecessorVMs = new java.util.HashMap<>();
-        java.util.Map<Integer, Double> dataTransferSizes = new java.util.HashMap<>();
+        java.util.Map<Integer, Double> taskFinishTimes = new java.util.HashMap<>();
+        java.util.Map<Integer, task> allTasks = new java.util.HashMap<>();
+        java.util.Map<Integer, VM> taskVMAssignments = new java.util.HashMap<>();
         
         // Simulate data for all predecessors
         for (Integer predId : ti.getPre()) {
-            predecessorFinishTimes.put(predId, defaultPredecessorFT);
+            taskFinishTimes.put(predId, defaultPredecessorFT);
             // Create a dummy task for the predecessor
             task dummyPredTask = new task(predId);
             dummyPredTask.setSize(40.0); // Default size
-            predecessorTasks.put(predId, dummyPredTask);
-            predecessorVMs.put(predId, defaultPredecessorVM);
-            dataTransferSizes.put(predId, 16.0); // Default data transfer size
+            allTasks.put(predId, dummyPredTask);
+            taskVMAssignments.put(predId, defaultPredecessorVM);
         }
         
         // Use the complete FT method
-        return FT(ti, vmK, capabilityType, false, predecessorFinishTimes, predecessorTasks, predecessorVMs, dataTransferSizes);
+        return FT(ti, vmK, capabilityType, taskFinishTimes, taskVMAssignments, allTasks, 0.4);
     }
     
     /**
@@ -367,40 +383,33 @@ public class Metrics {
      * Formula: SLR = makespan / ∑|CP|−1 i=0 (min∑m−1 k=0 ET(ti, VMk))
      * 
      * @param makespan The makespan of the workflow
-     * @param criticalPathTaskIds Set of task IDs in the critical path
-     * @param allTasks Map of all tasks (taskId -> task object)
+     * @param criticalPathTasks List of tasks in the critical path
      * @param vms Map of all available VMs
-     * @param capabilityName The name of the capability to use for execution time calculation
      * @return The Scheduling Length Ratio
      */
     public static double SLR(double makespan, 
-                            java.util.Set<Integer> criticalPathTaskIds, 
-                            java.util.Map<String, task> allTasks,
-                            java.util.Map<Integer, VM> vms, 
-                            String capabilityName) {
+                            java.util.List<task> criticalPathTasks,
+                            java.util.Map<Integer, VM> vms) {
         
-        if (criticalPathTaskIds == null || criticalPathTaskIds.isEmpty()) {
+        if (criticalPathTasks == null || criticalPathTasks.isEmpty()) {
             return Double.POSITIVE_INFINITY; // Invalid critical path
         }
         
-        // Convert task IDs to task objects and calculate sum of minimum execution times
+        // Calculate sum of minimum execution times for tasks in critical path
         double sumMinExecutionTimes = 0.0;
         
-        for (Integer taskId : criticalPathTaskIds) {
-            task cpTask = allTasks.get("t" + taskId);
-            if (cpTask != null) {
-                double minET = Double.POSITIVE_INFINITY;
-                
-                // Find minimum execution time across all VMs for this task
-                for (VM vm : vms.values()) {
-                    double et = ET(cpTask, vm, capabilityName);
-                    minET = Math.min(minET, et);
-                }
-                
-                // Add to sum (handle edge case where no valid ET found)
-                if (minET != Double.POSITIVE_INFINITY) {
-                    sumMinExecutionTimes += minET;
-                }
+        for (task cpTask : criticalPathTasks) {
+            double minET = Double.POSITIVE_INFINITY;
+            
+            // Find minimum execution time across all VMs for this task
+            for (VM vm : vms.values()) {
+                double et = ET(cpTask, vm);
+                minET = Math.min(minET, et);
+            }
+            
+            // Add to sum (handle edge case where no valid ET found)
+            if (minET != Double.POSITIVE_INFINITY) {
+                sumMinExecutionTimes += minET;
             }
         }
         
@@ -410,6 +419,34 @@ public class Metrics {
         }
         
         return makespan / sumMinExecutionTimes;
+    }
+    
+    /**
+     * @deprecated Use SLR(double, List<task>, Map<Integer,VM>) instead
+     * Legacy version for backward compatibility with Set<Integer> task IDs
+     */
+    @Deprecated
+    public static double SLR(double makespan, 
+                            java.util.Set<Integer> criticalPathTaskIds, 
+                            java.util.Map<String, task> allTasks,
+                            java.util.Map<Integer, VM> vms, 
+                            String capabilityName) {
+        
+        if (criticalPathTaskIds == null || criticalPathTaskIds.isEmpty()) {
+            return Double.POSITIVE_INFINITY;
+        }
+        
+        // Convert task IDs to task objects
+        java.util.List<task> criticalPathTasks = new java.util.ArrayList<>();
+        for (Integer taskId : criticalPathTaskIds) {
+            task cpTask = allTasks.get("t" + taskId);
+            if (cpTask != null) {
+                criticalPathTasks.add(cpTask);
+            }
+        }
+        
+        // Use new signature
+        return SLR(makespan, criticalPathTasks, vms);
     }
     
     /**

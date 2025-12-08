@@ -114,9 +114,10 @@ public class SMCPTD {
         // Organizza task per livelli e salvalo come campo della classe
         taskLevels = DCP.organizeTasksByLevels(smgt.getTasks());
         
-        // Esegui algoritmo DCP con scheduling (nuova versione)
+        // Esegui algoritmo DCP con scheduling (nuova versione) con CCR = 0.4
+        double CCR = 0.4;
         DCP.DCPScheduleResult dcpResult = DCP.executeDCPWithScheduling(
-            smgt.getTasks(), taskLevels, exitTask, communicationCosts, vmMapping);
+            smgt.getTasks(), taskLevels, exitTask, communicationCosts, vmMapping, CCR);
         
         // Salva il critical path
         criticalPath = dcpResult.criticalPath;
@@ -470,20 +471,46 @@ public class SMCPTD {
             maxFinishTime = Math.max(maxFinishTime, vmFinishTime);
         }
         
-        // STEP 2: Aggiungi correzione per communication costs (CCR)
-        // Stima impatto medio dei tempi di comunicazione
-        double totalCommunicationTime = 0.0;
-        int communicationCount = 0;
+        // STEP 2: Calcola impatto realistico della comunicazione basato su CCR
+        // Conta quante comunicazioni cross-VM ci sono (task su VM diverse)
+        int crossVMCommunications = 0;
+        double totalCommunicationCost = 0.0;
         
-        for (Double commCost : communicationCosts.values()) {
-            totalCommunicationTime += commCost;
-            communicationCount++;
+        // Crea mappa task -> VM
+        Map<Integer, Integer> taskToVM = new HashMap<>();
+        for (Map.Entry<Integer, List<Integer>> entry : assignments.entrySet()) {
+            int vmId = entry.getKey();
+            for (Integer taskId : entry.getValue()) {
+                taskToVM.put(taskId, vmId);
+            }
         }
         
-        if (communicationCount > 0) {
-            double avgCommunicationTime = totalCommunicationTime / communicationCount;
-            // Aggiungi ~20% del tempo medio di comunicazione al makespan
-            maxFinishTime += avgCommunicationTime * 0.2;
+        // Conta comunicazioni cross-VM e somma i costi
+        for (task t : tasks) {
+            Integer srcVM = taskToVM.get(t.getID());
+            if (srcVM == null) continue;
+            
+            for (int succId : t.getSucc()) {
+                Integer destVM = taskToVM.get(succId);
+                if (destVM != null && !destVM.equals(srcVM)) {
+                    crossVMCommunications++;
+                    String key = t.getID() + "_" + succId;
+                    Double commCost = communicationCosts.get(key);
+                    if (commCost != null) {
+                        totalCommunicationCost += commCost;
+                    }
+                }
+            }
+        }
+        
+        // Aggiungi tempo di comunicazione al makespan
+        // Usa una frazione del costo totale di comunicazione cross-VM
+        // Il fattore 0.3 simula che non tutte le comunicazioni sono sul critical path
+        if (crossVMCommunications > 0) {
+            double avgCommCost = totalCommunicationCost / crossVMCommunications;
+            // Aggiungi tempo per le comunicazioni sul critical path (stimato come sqrt del numero)
+            double criticalPathComms = Math.sqrt(crossVMCommunications);
+            maxFinishTime += avgCommCost * criticalPathComms * 0.5;
         }
         
         return maxFinishTime;

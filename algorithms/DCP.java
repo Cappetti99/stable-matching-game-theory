@@ -30,7 +30,8 @@ public class DCP {
                                                               Map<Integer, List<Integer>> taskLevels,
                                                               task exitTask, 
                                                               Map<String, Double> communicationCosts,
-                                                              Map<Integer, VM> vmMapping) {
+                                                              Map<Integer, VM> vmMapping,
+                                                              double CCR) {
         
         DCPScheduleResult result = new DCPScheduleResult();
         
@@ -100,17 +101,16 @@ public class DCP {
                     // Calculate start time considering predecessors
                     double st = calculateCPTaskStartTime(cpTask, vmId, result.cpTaskAFT, 
                                                          result.cpTaskToVM, taskMap, 
-                                                         communicationCosts, vmMapping);
+                                                         communicationCosts, vmMapping, CCR);
                     
                     // ST must be at least when VM becomes available
                     st = Math.max(st, vmAvailableTime.get(vmId));
                     
                     // Calculate execution time: ET = size / capacity
-                    double et = calculateTaskWeight(cpTask, vmMapping); // Average ET
                     double processingCapacity = vm.getCapability("processingCapacity");
-                    if (processingCapacity > 0) {
-                        et = cpTask.getSize() / processingCapacity;
-                    }
+                    double et = (processingCapacity > 0) ? 
+                        cpTask.getSize() / processingCapacity : 
+                        calculateTaskWeight(cpTask, vmMapping); // Fallback to average if capacity unknown
                     
                     // Calculate finish time: FT = ST + ET
                     double ft = st + et;
@@ -139,14 +139,16 @@ public class DCP {
     }
     
     /**
-     * Calculate start time for a CP task considering its predecessors in CP
+     * Calculate start time for a CP task considering ALL its predecessors (both CP and non-CP)
+     * For non-CP predecessors, we estimate their finish time based on average execution time
      */
     private static double calculateCPTaskStartTime(task cpTask, int targetVMId,
                                                     Map<Integer, Double> cpTaskAFT,
                                                     Map<Integer, Integer> cpTaskToVM,
                                                     Map<Integer, task> taskMap,
                                                     Map<String, Double> communicationCosts,
-                                                    Map<Integer, VM> vmMapping) {
+                                                    Map<Integer, VM> vmMapping,
+                                                    double CCR) {
         
         // Entry task starts at 0
         if (cpTask.getPre() == null || cpTask.getPre().isEmpty()) {
@@ -157,18 +159,37 @@ public class DCP {
         
         for (Integer predId : cpTask.getPre()) {
             Double predAFT = cpTaskAFT.get(predId);
+            Integer predVMId = cpTaskToVM.get(predId);
+            
+            // If predecessor is NOT in CP, estimate its finish time
             if (predAFT == null) {
-                // Predecessor not yet scheduled (not in CP), assume it will be handled by SMGT
-                continue;
+                task predTask = taskMap.get(predId);
+                if (predTask != null) {
+                    // Estimate AFT = average execution time (will be refined by SMGT later)
+                    // This ensures we don't underestimate the start time
+                    double estimatedET = calculateTaskWeight(predTask, vmMapping);
+                    
+                    // Recursively estimate start time of non-CP predecessor
+                    double estimatedST = 0.0;
+                    if (predTask.getPre() != null && !predTask.getPre().isEmpty()) {
+                        // Use average of predecessor ranks as rough estimate
+                        estimatedST = estimatedET; // Conservative: assume some delay
+                    }
+                    
+                    predAFT = estimatedST + estimatedET;
+                    
+                    // Assume non-CP task could be on any VM - use worst case for safety
+                    // or assume it's on a different VM from target (requires communication)
+                    predVMId = -1; // Flag as "unknown VM" to force communication cost
+                }
             }
             
-            Integer predVMId = cpTaskToVM.get(predId);
-            if (predVMId == null) continue;
+            if (predAFT == null) continue; // Skip if we still can't determine
             
             // Calculate communication cost
             double commCost = 0.0;
-            if (predVMId != targetVMId) {
-                // Different VMs - add communication cost
+            if (predVMId == null || predVMId == -1 || predVMId != targetVMId) {
+                // Different VMs or unknown VM - add communication cost
                 String commKey = predId + "_" + cpTask.getID();
                 commCost = communicationCosts.getOrDefault(commKey, 0.0);
                 
@@ -176,13 +197,17 @@ public class DCP {
                 if (commCost == 0.0) {
                     task predTask = taskMap.get(predId);
                     if (predTask != null) {
-                        VM predVM = vmMapping.get(predVMId);
-                        VM targetVM = vmMapping.get(targetVMId);
-                        if (predVM != null && targetVM != null) {
-                            double bandwidth = predVM.getBandwidthToVM(targetVMId);
-                            if (bandwidth > 0) {
-                                commCost = predTask.getSize() * 0.4 / bandwidth; // CCR default 0.4
+                        // Use average bandwidth if VM unknown
+                        double avgBandwidth = 100.0; // Default from VM specs
+                        if (predVMId != null && predVMId != -1) {
+                            VM predVM = vmMapping.get(predVMId);
+                            VM targetVM = vmMapping.get(targetVMId);
+                            if (predVM != null && targetVM != null) {
+                                avgBandwidth = predVM.getBandwidthToVM(targetVMId);
                             }
+                        }
+                        if (avgBandwidth > 0) {
+                            commCost = predTask.getSize() * CCR / avgBandwidth;
                         }
                     }
                 }

@@ -7,6 +7,19 @@ public class SMGT {
     private Map<Integer, Integer> taskLevels; // Maps task ID to its level in the DAG
     private Map<Integer, List<Integer>> levelTasks; // Maps level to list of task IDs at that level
     
+    /**
+     * CORREZIONE 2: Classe per gestire threshold dinamico
+     */
+    private static class VMThreshold {
+        int remaining;
+        List<Integer> waitingList;
+        
+        VMThreshold(int initial) {
+            this.remaining = initial;
+            this.waitingList = new ArrayList<>();
+        }
+    }
+    
     public SMGT() {
         this.vms = new ArrayList<>();
         this.tasks = new ArrayList<>();
@@ -15,48 +28,44 @@ public class SMGT {
     }
     
     /**
-     * Calculates the threshold for VM k at level l based on the formula:
-     * threshold(k, l) = (∑(v=0 to l) nv / ∑(i=0 to m-1) pi) × pk
+     * CORREZIONE: Calcola threshold iniziale (NON cumulativo)
+     * Formula corretta: ⌊(Σᵛ⁼⁰ˡ⁻¹ nᵥ / Σpᵢ) × pₖ⌋
      * 
      * @param k VM index (0-based)
      * @param l Level in the DAG (0-based)
      * @return The calculated threshold value as an integer
      */
     public int threshold(int k, int l) {
-        if (k >= vms.size() || l < 0) {
-            throw new IllegalArgumentException("Invalid VM index or level");
+        return calculateInitialThreshold(k, l);
+    }
+    
+    /**
+     * CORREZIONE 1: Calcola threshold iniziale (NON cumulativo)
+     * Formula corretta: ⌊(Σᵛ⁼⁰ˡ⁻¹ nᵥ / Σpᵢ) × pₖ⌋
+     */
+    public int calculateInitialThreshold(int vmIndex, int level) {
+        if (vmIndex >= vms.size() || level < 0) {
+            return 0;
         }
         
-        // Calculate sum of tasks from level 0 to l (inclusive)
-        double sumTasksUpToLevel = 0.0;
-        for (int v = 0; v <= l; v++) {
-            int nv = getNumberOfTasksAtLevel(v);
-            sumTasksUpToLevel += nv;
+        // Somma task da livello 0 a l-1 (NON a l!)
+        double sumTasks = 0.0;
+        for (int v = 0; v < level; v++) { // v < level, NON v <= level
+            sumTasks += getNumberOfTasksAtLevel(v);
         }
         
-        // Calculate sum of all VM processing capacities
-        double sumAllProcessingCapacities = 0.0;
+        // Somma capacità di tutte le VM
+        double sumCapacities = 0.0;
         for (VM vm : vms) {
-            double processingCapacity = getVMProcessingCapacity(vm);
-            sumAllProcessingCapacities += processingCapacity;
+            sumCapacities += getVMProcessingCapacity(vm);
         }
         
-        // Get processing capacity of VM k
-        double pk = getVMProcessingCapacity(vms.get(k));
+        if (sumCapacities == 0) return 0;
         
-        // Apply the threshold formula
-        if (sumAllProcessingCapacities == 0) {
-            return 1; // Avoid division by zero, return minimum threshold
-        }
+        double pk = getVMProcessingCapacity(vms.get(vmIndex));
+        double result = (sumTasks / sumCapacities) * pk;
         
-        double result = (sumTasksUpToLevel / sumAllProcessingCapacities) * pk;
-        
-        // Convert to integer: if between 0 and 1 (inclusive of 0), return 1; otherwise round
-        if (result >= 0 && result < 1) {
-            return 1;
-        } else {
-            return (int) Math.round(result);
-        }
+        return (int) Math.floor(result); // Floor, come da pseudocodice
     }
     
     /**
@@ -89,18 +98,31 @@ public class SMGT {
     public void loadVMsFromCSV(String filename) throws IOException {
         BufferedReader reader = new BufferedReader(new FileReader(filename));
         String line;
+        boolean firstLine = true;
         
         while ((line = reader.readLine()) != null) {
-            // Skip comments and empty lines
+            // Skip header, comments and empty lines
+            if (firstLine) {
+                firstLine = false;
+                if (line.contains("vm_id") || line.contains("processing")) continue; // Skip CSV header
+            }
             if (line.startsWith("#") || line.trim().isEmpty()) {
                 continue;
             }
             
-            String[] parts = line.trim().split("\\s+");
+            // Support both CSV (comma) and whitespace separators
+            String[] parts;
+            if (line.contains(",")) {
+                parts = line.trim().split(",");
+            } else {
+                parts = line.trim().split("\\s+");
+            }
+            
             if (parts.length >= 2) {
-                // Parse vm0 -> 0, vm1 -> 1, etc.
-                int vmId = Integer.parseInt(parts[0].substring(2));
-                double capacity = Double.parseDouble(parts[1]);
+                // Parse various formats: vm0, 0, vm_0 -> 0
+                String vmIdStr = parts[0].trim().toLowerCase().replace("vm_", "").replace("vm", "");
+                int vmId = Integer.parseInt(vmIdStr);
+                double capacity = Double.parseDouble(parts[1].trim());
                 
                 VM vm = new VM(vmId);
                 vm.addCapability("processing", capacity);
@@ -131,23 +153,38 @@ public class SMGT {
     private void loadTaskBasicInfo(String filename) throws IOException {
         BufferedReader reader = new BufferedReader(new FileReader(filename));
         String line;
+        boolean firstLine = true;
         
         while ((line = reader.readLine()) != null) {
-            // Skip comments and empty lines
+            // Skip header, comments and empty lines
+            if (firstLine) {
+                firstLine = false;
+                if (line.contains("id") || line.contains("size")) continue; // Skip CSV header
+            }
             if (line.startsWith("#") || line.trim().isEmpty()) {
                 continue;
             }
             
-            // Split by whitespace (spaces or tabs)
-            String[] parts = line.trim().split("\\s+");
+            // Support both CSV (comma) and whitespace separators
+            String[] parts;
+            if (line.contains(",")) {
+                parts = line.trim().split(",");
+            } else {
+                parts = line.trim().split("\\s+");
+            }
+            
             if (parts.length >= 2) {
-                int taskId = Integer.parseInt(parts[0].replace("t", ""));
-                double size = Double.parseDouble(parts[1]);
+                int taskId = Integer.parseInt(parts[0].replace("t", "").trim());
+                double size = Double.parseDouble(parts[1].trim());
                 double rank = 0.0; // Default rank if not provided
                 
                 // If rank is provided as third column
                 if (parts.length >= 3) {
-                    rank = Double.parseDouble(parts[2]);
+                    try {
+                        rank = Double.parseDouble(parts[2].trim());
+                    } catch (NumberFormatException e) {
+                        // Ignore non-numeric third column
+                    }
                 }
                 
                 task t = new task(taskId);
@@ -170,10 +207,17 @@ public class SMGT {
                 continue; // Skip header
             }
             
-            String[] parts = line.trim().split("\\s+");
+            // Support both CSV (comma) and whitespace separators
+            String[] parts;
+            if (line.contains(",")) {
+                parts = line.trim().split(",");
+            } else {
+                parts = line.trim().split("\\s+");
+            }
+            
             if (parts.length >= 2) {
-                int predId = Integer.parseInt(parts[0].replace("t", ""));
-                int succId = Integer.parseInt(parts[1].replace("t", ""));
+                int predId = Integer.parseInt(parts[0].replace("t", "").trim());
+                int succId = Integer.parseInt(parts[1].replace("t", "").trim());
                 
                 // Ensure tasks exist
                 ensureTaskExists(predId);
@@ -372,6 +416,172 @@ public class SMGT {
         }
         
         return allVMPreferences;
+    }
+    
+    /**
+     * CORREZIONE 3: Implementazione corretta di SMGT con threshold dinamico
+     */
+    public Map<Integer, List<Integer>> runSMGT(Set<Integer> criticalPath) {
+        Map<Integer, List<Integer>> finalAssignments = new HashMap<>();
+        
+        // Inizializza schedule vuoto
+        for (int i = 0; i < vms.size(); i++) {
+            finalAssignments.put(i, new ArrayList<>());
+        }
+        
+        // Ottieni livelli ordinati
+        List<Integer> levels = new ArrayList<>(levelTasks.keySet());
+        Collections.sort(levels);
+        
+        System.out.println("=== SMGT Algorithm Start ===");
+        System.out.println("Critical Path: " + criticalPath);
+        
+        // Processa ogni livello
+        for (Integer level : levels) {
+            processLevel(level, criticalPath, finalAssignments);
+        }
+        
+        return finalAssignments;
+    }
+    
+    /**
+     * Processa un singolo livello secondo pseudocodice
+     */
+    private void processLevel(int level, Set<Integer> criticalPath, 
+                              Map<Integer, List<Integer>> finalAssignments) {
+        
+        System.out.println("\n--- Processing Level " + level + " ---");
+        
+        // Linea 4: Tₗ ← {task nel livello l} \ CP
+        List<Integer> levelTaskIds = levelTasks.getOrDefault(level, new ArrayList<>());
+        Set<Integer> unassigned = new HashSet<>();
+        for (Integer taskId : levelTaskIds) {
+            if (!criticalPath.contains(taskId)) {
+                unassigned.add(taskId);
+            }
+        }
+        
+        if (unassigned.isEmpty()) {
+            System.out.println("No non-CP tasks in this level");
+            return;
+        }
+        
+        System.out.println("Tasks to assign: " + unassigned);
+        
+        // Linee 7-11: Calcola threshold e inizializza waiting lists
+        Map<Integer, VMThreshold> vmThresholds = new HashMap<>();
+        for (int vmIndex = 0; vmIndex < vms.size(); vmIndex++) {
+            int threshold = calculateInitialThreshold(vmIndex, level);
+            vmThresholds.put(vmIndex, new VMThreshold(threshold));
+            System.out.println("VM" + vmIndex + " threshold: " + threshold);
+        }
+        
+        // Linee 14-19: Genera preference list per task (DINAMICA)
+        Map<Integer, List<Integer>> taskPreferences = new HashMap<>();
+        for (Integer taskId : unassigned) {
+            taskPreferences.put(taskId, generateTaskPreferences(taskId));
+        }
+        
+        // Linee 22-27: Genera preference list per VM
+        Map<Integer, List<Integer>> vmPreferences = generateAllVMPreferences();
+        
+        // Linee 30-61: Processo di matching stabile
+        while (!unassigned.isEmpty()) {
+            // Linea 32: preleva task
+            Integer ti = unassigned.iterator().next();
+            unassigned.remove(ti);
+            
+            // Linea 33: prima VM in preference(ti)
+            List<Integer> tiPrefs = taskPreferences.get(ti);
+            if (tiPrefs.isEmpty()) {
+                System.out.println("Task t" + ti + " has no more VM preferences!");
+                continue;
+            }
+            
+            Integer vmk = tiPrefs.get(0);
+            VMThreshold vmThreshold = vmThresholds.get(vmk);
+            
+            System.out.println("\nTrying to assign t" + ti + " to VM" + vmk + 
+                             " (remaining: " + vmThreshold.remaining + ")");
+            
+            // Linea 35: threshold(VMₖ, l) > 0?
+            if (vmThreshold.remaining > 0) {
+                // Linee 37-40: VM ha spazio
+                vmThreshold.waitingList.add(ti);
+                finalAssignments.get(vmk).add(ti);
+                vmThreshold.remaining--; // CORREZIONE: decrementa threshold!
+                
+                System.out.println("✓ Assigned t" + ti + " to VM" + vmk);
+                
+            } else {
+                // Linee 42-60: VM piena, cerca task da rigettare
+                Integer tWorst = findWorstTask(vmThreshold.waitingList, vmk, vmPreferences);
+                
+                if (tWorst == null) {
+                    // Nessun task da rigettare, prova prossima VM
+                    System.out.println("✗ VM" + vmk + " full, no task to replace");
+                    tiPrefs.remove(0); // Linea 57
+                    unassigned.add(ti); // Linea 58
+                    continue;
+                }
+                
+                double ftTi = calculateFinishTime(ti, vmk);
+                double ftWorst = calculateFinishTime(tWorst, vmk);
+                
+                // Linea 45: FT(tᵢ, VMₖ) < FT(t_worst, VMₖ)?
+                if (ftTi < ftWorst) {
+                    // Linee 47-54: ti è preferito, sostituisci
+                    vmThreshold.waitingList.remove(tWorst);
+                    vmThreshold.waitingList.add(ti);
+                    finalAssignments.get(vmk).remove(tWorst);
+                    finalAssignments.get(vmk).add(ti);
+                    
+                    // CORREZIONE: rimuovi VMk da preference(t_worst)
+                    taskPreferences.get(tWorst).remove(vmk);
+                    unassigned.add(tWorst); // Linea 54
+                    
+                    System.out.println("✓ Replaced t" + tWorst + " with t" + ti + " on VM" + vmk);
+                    
+                } else {
+                    // Linee 56-58: t_worst rimane, rigetta ti
+                    tiPrefs.remove(0); // Linea 57: rimuovi VMk da preference(ti)
+                    unassigned.add(ti); // Linea 58
+                    
+                    System.out.println("✗ VM" + vmk + " prefers t" + tWorst + " over t" + ti);
+                }
+            }
+        }
+        
+        // Debug: stato finale del livello
+        System.out.println("\nLevel " + level + " assignments:");
+        for (int vmIndex = 0; vmIndex < vms.size(); vmIndex++) {
+            VMThreshold vmt = vmThresholds.get(vmIndex);
+            System.out.println("VM" + vmIndex + ": " + vmt.waitingList + 
+                             " (used " + vmt.waitingList.size() + 
+                             "/" + (vmt.waitingList.size() + vmt.remaining) + ")");
+        }
+    }
+    
+    /**
+     * Trova il task con FT massimo nella waiting list
+     * (Linea 43: t_worst ← task con FT massimo)
+     */
+    private Integer findWorstTask(List<Integer> waitingList, int vmIndex, 
+                                  Map<Integer, List<Integer>> vmPreferences) {
+        if (waitingList.isEmpty()) return null;
+        
+        Integer worst = null;
+        double maxFT = -1;
+        
+        for (Integer taskId : waitingList) {
+            double ft = calculateFinishTime(taskId, vmIndex);
+            if (ft > maxFT) {
+                maxFT = ft;
+                worst = taskId;
+            }
+        }
+        
+        return worst;
     }
     
     /**

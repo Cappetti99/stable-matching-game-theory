@@ -1,0 +1,154 @@
+[
+  {
+    "workflow": "montage",
+    "target_tasks": 100,
+    "actual_tasks": 98,
+    "edges": 232,
+    "vms": 5,
+    "category": "small"
+  },
+  {
+    "workflow": "montage",
+    "target_tasks": 500,
+    "actual_tasks": 495,
+    "edges": 1406,
+    "vms": 10,
+    "category": "medium"
+  },
+  {
+    "workflow": "montage",
+    "target_tasks": 1000,
+    "actual_tasks": 994,
+    "edges": 2775,
+    "vms": 50,
+    "category": "large"
+  },
+  {
+    "workflow": "montage",
+    "target_tasks": 1500,
+    "actual_tasks": 1497,
+    "edges": 4559,
+    "vms": 50,
+    "category": "large"
+  },
+  {
+    "workflow": "epigenomics",
+    "target_tasks": 50,
+    "actual_tasks": 45,
+    "edges": 53,
+    "vms": 5,
+    "category": "small"
+  },
+  {
+    "workflow": "epigenomics",
+    "target_tasks": 100,
+    "actual_tasks": 97,
+    "edges": 118,
+    "vms": 5,
+    "category": "small"
+  },
+  {
+    "workflow": "epigenomics",
+    "target_tasks": 500,
+    "actual_tasks": 495,
+    "edges": 608,
+    "vms": 10,
+    "category": "medium"
+  },
+  {
+    "workflow": "epigenomics",
+    "target_tasks": 1000,
+    "actual_tasks": 997,
+    "edges": 1236,
+    "vms": 50,
+    "category": "large"
+  },
+  {
+    "workflow": "epigenomics",
+    "target_tasks": 1500,
+    "actual_tasks": 1497,
+    "edges": 1948,
+    "vms": 50,
+    "category": "large"
+  },
+  {
+    "workflow": "cycles",
+    "target_tasks": 100,
+    "actual_tasks": 95,
+    "edges": 139,
+    "vms": 5,
+    "category": "small"
+  },
+  {
+    "workflow": "cycles",
+    "target_tasks": 500,
+    "actual_tasks": 498,
+    "edges": 750,
+    "vms": 10,
+    "category": "medium"
+  },
+  {
+    "workflow": "cycles",
+    "target_tasks": 1000,
+    "actual_tasks": 997,
+    "edges": 1461,
+    "vms": 50,
+    "category": "large"
+  },
+  {
+    "workflow": "cycles",
+    "target_tasks": 1500,
+    "actual_tasks": 1495,
+    "edges": 2223,
+    "vms": 50,
+    "category": "large"
+  },
+  {
+    "workflow": "srasearch",
+    "target_tasks": 30,
+    "actual_tasks": 28,
+    "edges": 39,
+    "vms": 5,
+    "category": "small"
+  },
+  {
+    "workflow": "srasearch",
+    "target_tasks": 50,
+    "actual_tasks": 48,
+    "edges": 69,
+    "vms": 5,
+    "category": "small"
+  },
+  {
+    "workflow": "srasearch",
+    "target_tasks": 100,
+    "actual_tasks": 98,
+    "edges": 142,
+    "vms": 5,
+    "category": "small"
+  },
+  {
+    "workflow": "srasearch",
+    "target_tasks": 500,
+    "actual_tasks": 497,
+    "edges": 787,
+    "vms": 10,
+    "category": "medium"
+  },
+  {
+    "workflow": "srasearch",
+    "target_tasks": 1000,
+    "actual_tasks": 998,
+    "edges": 1687,
+    "vms": 50,
+    "category": "large"
+  },
+  {
+    "workflow": "srasearch",
+    "target_tasks": 1500,
+    "actual_tasks": 1498,
+    "edges": 2583,
+    "vms": 50,
+    "category": "large"
+  }
+]
