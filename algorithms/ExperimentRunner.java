@@ -26,17 +26,17 @@ import java.util.*;
  */
 public class ExperimentRunner {
     
-    // Workflow Pegasus disponibili
-    private static final String[] WORKFLOWS = {"montage", "epigenomics", "cycles", "srasearch"};
+    // Workflow Pegasus XML reali dal paper (convertiti da XML a CSV)
+    private static final String[] WORKFLOWS = {"cybershake", "epigenomics", "ligo", "montage"};
     
     // CCR range: 0.4 → 2.0 con step 0.2 (come richiesto dal paper)
     private static final double[] CCR_VALUES = {0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0};
     
-    // Experiment 1: CCR effect configurations (basato su workflow Pegasus disponibili)
-    // Nota: non tutti i workflow supportano tutte le dimensioni
-    private static final int[][] SMALL_CONFIGS = {{100, 5}};  // 100 task disponibile per tutti
-    private static final int[][] MEDIUM_CONFIGS = {{500, 10}};
-    private static final int[][] LARGE_CONFIGS = {{1000, 50}, {1500, 50}};
+    // Experiment 1: CCR effect configurations (basato sui workflow Pegasus XML reali)
+    // Configurazioni disponibili: 30-50-100-1000 task
+    private static final int[][] SMALL_CONFIGS = {{30, 5}, {50, 5}};  
+    private static final int[][] MEDIUM_CONFIGS = {{100, 10}};
+    private static final int[][] LARGE_CONFIGS = {{1000, 50}};
     
     // Experiment 2: VM effect configurations
     private static final int[] VM_COUNTS = {10, 20, 30, 40, 50};
@@ -275,9 +275,9 @@ public class ExperimentRunner {
      * Trova la directory del workflow Pegasus con supporto per VM variabili
      */
     private static String findPegasusWorkflowDir(String workflow, int targetTasks, int targetVMs) {
-        File pegasusDir = new File("../data_pegasus");
+        File pegasusDir = new File("../data_pegasus_xml");
         if (!pegasusDir.exists()) {
-            System.out.println("   ⚠️ Directory data_pegasus non trovata: " + pegasusDir.getAbsolutePath());
+            System.out.println("   ⚠️ Directory data_pegasus_xml non trovata: " + pegasusDir.getAbsolutePath());
             return null;
         }
         
