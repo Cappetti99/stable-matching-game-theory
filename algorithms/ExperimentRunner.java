@@ -26,6 +26,14 @@ import java.util.*;
  */
 public class ExperimentRunner {
     
+    // ============================================================================
+    // CONFIGURAZIONE ESPERIMENTI
+    // ============================================================================
+    
+    // Numero di run multiple per stabilizzare i risultati
+    private static final int NUM_RUNS = 10;      // Run effettive da mediare
+    private static final int WARMUP_RUNS = 1;    // Run di warmup da scartare
+    
     // Workflow Pegasus XML reali dal paper (convertiti da XML a CSV)
     private static final String[] WORKFLOWS = {"cybershake", "epigenomics", "ligo", "montage"};
     
@@ -78,12 +86,24 @@ public class ExperimentRunner {
     }
     
     public static void main(String[] args) {
+        // Check for test_single mode
+        if (args.length > 0 && args[0].equals("test_single")) {
+            runTestSingle();
+            return;
+        }
+        
         System.out.println("╔════════════════════════════════════════════════════════════════╗");
         System.out.println("║     SM-CPTD PAPER EXPERIMENTS - Full Benchmark Suite          ║");
         System.out.println("╠════════════════════════════════════════════════════════════════╣");
         System.out.println("║  Experiment 1: CCR Effect (Figures 3-8)                       ║");
         System.out.println("║  Experiment 2: VM Count Effect (Figures 9-10)                 ║");
         System.out.println("║  Metrics: SLR, AVU, VF                                        ║");
+        System.out.println("╠════════════════════════════════════════════════════════════════╣");
+        System.out.printf("║  Multiple Runs: %d runs + %d warmup = %d total per config     ║%n", 
+            NUM_RUNS, WARMUP_RUNS, NUM_RUNS + WARMUP_RUNS);
+        System.out.println("║  Results: Average of " + NUM_RUNS + " runs (after warmup)                  ║");
+        System.out.println("╠════════════════════════════════════════════════════════════════╣");
+        System.out.println("║  ⏱️  Estimated time: ~3-4 hours (164 configs × 11 runs each)   ║");
         System.out.println("╚════════════════════════════════════════════════════════════════╝");
         System.out.println();
         
@@ -137,22 +157,30 @@ public class ExperimentRunner {
         System.out.println("📊 ESPERIMENTO 1: Effetto del CCR (Figure 3-8)");
         System.out.println("=".repeat(70));
         
-        // Small workflows
-        System.out.println("\n📦 SMALL WORKFLOWS (30, 50, 100 task - 5 VM)");
-        for (int[] config : SMALL_CONFIGS) {
-            runCCRExperiment(workflows, config[0], config[1], "EXP1_SMALL");
+        // Small workflows - usa configurazioni specifiche per ogni workflow
+        System.out.println("\n📦 SMALL WORKFLOWS (30-50 task - 5 VM)");
+        for (String workflow : workflows) {
+            // CyberShake ha 30 task, gli altri hanno 47-50 task
+            if (workflow.equals("cybershake")) {
+                runCCRExperiment(new String[]{workflow}, 30, 5, "EXP1_SMALL");
+            } else if (workflow.equals("epigenomics")) {
+                runCCRExperiment(new String[]{workflow}, 47, 5, "EXP1_SMALL");
+            } else {
+                runCCRExperiment(new String[]{workflow}, 50, 5, "EXP1_SMALL");
+            }
         }
         
         // Medium workflows
-        System.out.println("\n📦 MEDIUM WORKFLOWS (500 task - 10 VM)");
+        System.out.println("\n📦 MEDIUM WORKFLOWS (100 task - 10 VM)");
         for (int[] config : MEDIUM_CONFIGS) {
             runCCRExperiment(workflows, config[0], config[1], "EXP1_MEDIUM");
         }
         
-        // Large workflows
-        System.out.println("\n📦 LARGE WORKFLOWS (1000, 1500 task - 50 VM)");
-        for (int[] config : LARGE_CONFIGS) {
-            runCCRExperiment(workflows, config[0], config[1], "EXP1_LARGE");
+        // Large workflows - epigenomics ha 997 task invece di 1000
+        System.out.println("\n📦 LARGE WORKFLOWS (997-1000 task - 50 VM)");
+        for (String workflow : workflows) {
+            int tasks = workflow.equals("epigenomics") ? 997 : 1000;
+            runCCRExperiment(new String[]{workflow}, tasks, 50, "EXP1_LARGE");
         }
     }
     
@@ -163,21 +191,22 @@ public class ExperimentRunner {
         System.out.println("\n" + "=".repeat(70));
         System.out.println("📊 ESPERIMENTO 2: Effetto del numero di VM (Figure 9-10)");
         System.out.println("=".repeat(70));
-        System.out.println("   Task fissi: " + FIXED_TASKS + ", CCR fisso: " + FIXED_CCR);
         
         for (String workflow : workflows) {
-            System.out.println("\n🔬 Workflow: " + workflow);
+            // Epigenomics ha 997 task, gli altri 1000
+            int tasks = workflow.equals("epigenomics") ? 997 : 1000;
+            System.out.println("\n🔬 Workflow: " + workflow + " (" + tasks + " task, CCR fisso: " + FIXED_CCR + ")");
             
             for (int numVMs : VM_COUNTS) {
                 System.out.printf("   VM=%d: ", numVMs);
                 
                 try {
                     ExperimentResult result = runSingleExperiment(
-                        workflow, FIXED_TASKS, numVMs, FIXED_CCR, "EXP2_VM"
+                        workflow, tasks, numVMs, FIXED_CCR, "EXP2_VM", NUM_RUNS, WARMUP_RUNS
                     );
                     results.add(result);
-                    System.out.printf("SLR=%.4f, AVU=%.4f, VF=%.6f%n", 
-                        result.slr, result.avu, result.vf);
+                    System.out.printf("SLR=%.4f, AVU=%.4f, VF=%.6f (avg of %d runs)%n", 
+                        result.slr, result.avu, result.vf, NUM_RUNS);
                 } catch (Exception e) {
                     System.out.println("❌ Errore: " + e.getMessage());
                 }
@@ -197,11 +226,11 @@ public class ExperimentRunner {
                 
                 try {
                     ExperimentResult result = runSingleExperiment(
-                        workflow, numTasks, numVMs, ccr, expName
+                        workflow, numTasks, numVMs, ccr, expName, NUM_RUNS, WARMUP_RUNS
                     );
                     results.add(result);
-                    System.out.printf("SLR=%.4f, AVU=%.4f, VF=%.6f%n", 
-                        result.slr, result.avu, result.vf);
+                    System.out.printf("SLR=%.4f, AVU=%.4f, VF=%.6f (avg of %d runs)%n", 
+                        result.slr, result.avu, result.vf, NUM_RUNS);
                 } catch (Exception e) {
                     System.out.println("❌ Errore: " + e.getMessage());
                 }
@@ -214,6 +243,25 @@ public class ExperimentRunner {
      */
     private static ExperimentResult runSingleExperiment(String workflow, int numTasks, 
                                                         int numVMs, double ccr, String expName) 
+            throws Exception {
+        
+        return runSingleExperiment(workflow, numTasks, numVMs, ccr, expName, 1, 0);
+    }
+    
+    /**
+     * Esegue un singolo esperimento con multiple run e calcola la media
+     * @param workflow Nome del workflow
+     * @param numTasks Numero di task
+     * @param numVMs Numero di VM
+     * @param ccr Communication to Computation Ratio
+     * @param expName Nome dell'esperimento
+     * @param numRuns Numero di run da eseguire (default: 1)
+     * @param warmupRuns Numero di run di warmup da scartare (default: 0)
+     * @return Risultato medio delle run
+     */
+    private static ExperimentResult runSingleExperiment(String workflow, int numTasks, 
+                                                        int numVMs, double ccr, String expName,
+                                                        int numRuns, int warmupRuns) 
             throws Exception {
         
         // 1. Trova la directory del workflow Pegasus
@@ -235,33 +283,149 @@ public class ExperimentRunner {
             return null;
         }
         
-        // 2. Carica dati in SMGT
-        SMGT smgt = new SMGT();
-        smgt.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
-        smgt.loadVMsFromCSV(workflowDir + "/processing_capacity.csv");
+        // Lista per memorizzare i risultati delle run
+        List<RunMetrics> runs = new ArrayList<>();
+        int totalRuns = warmupRuns + numRuns;
         
-        // 3. Calcola costi di comunicazione con CCR specificato
-        Map<String, Double> commCosts = calculateCommunicationCosts(smgt, ccr);
+        // Mostra progresso solo se ci sono multiple run
+        boolean showProgress = totalRuns > 1;
         
-        // 4. Crea mapping VM
-        Map<Integer, VM> vmMapping = new HashMap<>();
-        for (VM vm : smgt.getVMs()) {
-            vmMapping.put(vm.getID(), vm);
+        for (int runIdx = 0; runIdx < totalRuns; runIdx++) {
+            boolean isWarmup = runIdx < warmupRuns;
+            
+            if (showProgress && runIdx == 0 && isWarmup) {
+                System.out.print("[warmup]");
+            } else if (showProgress && runIdx == warmupRuns) {
+                System.out.print("[runs: ");
+            }
+            if (showProgress && !isWarmup) {
+                System.out.print(".");
+            }
+            
+            // 2. Carica dati in SMGT
+            SMGT smgt = new SMGT();
+            smgt.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
+            smgt.loadVMsFromCSV(workflowDir + "/processing_capacity.csv");
+            
+            // 3. Calcola costi di comunicazione con CCR specificato
+            Map<String, Double> commCosts = calculateCommunicationCosts(smgt, ccr);
+            
+            // 4. Crea mapping VM
+            Map<Integer, VM> vmMapping = new HashMap<>();
+            for (VM vm : smgt.getVMs()) {
+                vmMapping.put(vm.getID(), vm);
+            }
+            
+            // 5. Esegui SM-CPTD
+            SMCPTD smcptd = new SMCPTD();
+            smcptd.loadData(workflowDir + "/dag.csv", workflowDir + "/task.csv", workflowDir + "/processing_capacity.csv");
+            
+            Map<Integer, List<Integer>> assignments = smcptd.executeSMCPTD(commCosts, vmMapping);
+            
+            // 6. Calcola metriche
+            double makespan = smcptd.getMakespan();
+            double slr = calculateSLR(smgt, makespan);
+            double avu = calculateAVU(smgt, assignments, makespan);
+            double vf = calculateVF(smgt, assignments, makespan);
+            
+            // Salva le metriche (solo se non è warmup)
+            if (!isWarmup) {
+                runs.add(new RunMetrics(slr, avu, vf, makespan));
+            }
         }
         
-        // 5. Esegui SM-CPTD
-        SMCPTD smcptd = new SMCPTD();
-        smcptd.loadData(workflowDir + "/dag.csv", workflowDir + "/task.csv", workflowDir + "/processing_capacity.csv");
+        if (showProgress) {
+            System.out.print("] ");
+        }
         
-        Map<Integer, List<Integer>> assignments = smcptd.executeSMCPTD(commCosts, vmMapping);
+        // Calcola la media dei risultati
+        double avgSLR = runs.stream().mapToDouble(r -> r.slr).average().orElse(0);
+        double avgAVU = runs.stream().mapToDouble(r -> r.avu).average().orElse(0);
+        double avgVF = runs.stream().mapToDouble(r -> r.vf).average().orElse(0);
+        double avgMakespan = runs.stream().mapToDouble(r -> r.makespan).average().orElse(0);
         
-        // 6. Calcola metriche
-        double makespan = smcptd.getMakespan();
-        double slr = calculateSLR(smgt, makespan);
-        double avu = calculateAVU(smgt, assignments, makespan);
-        double vf = calculateVF(smgt, assignments, makespan);
+        // Calcola deviazione standard (opzionale per debug)
+        if (numRuns > 1 && false) { // Set to true per vedere le deviazioni standard
+            double stdSLR = calculateStdDev(runs.stream().mapToDouble(r -> r.slr).toArray(), avgSLR);
+            double stdAVU = calculateStdDev(runs.stream().mapToDouble(r -> r.avu).toArray(), avgAVU);
+            double stdVF = calculateStdDev(runs.stream().mapToDouble(r -> r.vf).toArray(), avgVF);
+            System.out.printf("    [StdDev: SLR=±%.4f, AVU=±%.4f, VF=±%.6f]%n", stdSLR, stdAVU, stdVF);
+        }
         
-        return new ExperimentResult(expName, workflow, smgt.getTasks().size(), numVMs, ccr, slr, avu, vf, makespan);
+        // Usa il numero di task dalla prima run (sono sempre gli stessi)
+        SMGT smgt = new SMGT();
+        smgt.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
+        int actualTasks = smgt.getTasks().size();
+        
+        return new ExperimentResult(expName, workflow, actualTasks, numVMs, ccr, avgSLR, avgAVU, avgVF, avgMakespan);
+    }
+    
+    /**
+     * Calcola la deviazione standard
+     */
+    private static double calculateStdDev(double[] values, double mean) {
+        if (values.length <= 1) return 0;
+        double sumSquaredDiff = 0;
+        for (double val : values) {
+            sumSquaredDiff += Math.pow(val - mean, 2);
+        }
+        return Math.sqrt(sumSquaredDiff / values.length);
+    }
+    
+    /**
+     * Classe helper per memorizzare le metriche di una singola run
+     */
+    private static class RunMetrics {
+        double slr, avu, vf, makespan;
+        
+        RunMetrics(double slr, double avu, double vf, double makespan) {
+            this.slr = slr;
+            this.avu = avu;
+            this.vf = vf;
+            this.makespan = makespan;
+        }
+    }
+    
+    /**
+     * Trova il file XML del workflow più vicino al numero di task richiesto
+     */
+    private static String findWorkflowXML(String workflow, int targetTasks) {
+        // Mappa dei workflow alle directory
+        String workflowDir = "../workflow/" + workflow.toLowerCase();
+        File dir = new File(workflowDir);
+        
+        if (!dir.exists() || !dir.isDirectory()) {
+            return null;
+        }
+        
+        String bestMatch = null;
+        int bestDiff = Integer.MAX_VALUE;
+        
+        // Cerca il file XML più vicino al numero di task richiesto
+        for (File file : dir.listFiles()) {
+            if (file.isFile() && file.getName().endsWith(".xml")) {
+                String name = file.getName();
+                // Formato: Workflow_123.xml
+                int underscoreIdx = name.lastIndexOf("_");
+                int dotIdx = name.lastIndexOf(".");
+                
+                if (underscoreIdx > 0 && dotIdx > underscoreIdx) {
+                    String taskStr = name.substring(underscoreIdx + 1, dotIdx);
+                    try {
+                        int tasks = Integer.parseInt(taskStr);
+                        int diff = Math.abs(tasks - targetTasks);
+                        if (diff < bestDiff) {
+                            bestDiff = diff;
+                            bestMatch = file.getAbsolutePath();
+                        }
+                    } catch (NumberFormatException e) {
+                        // Ignora
+                    }
+                }
+            }
+        }
+        
+        return bestMatch;
     }
     
     /**
@@ -275,9 +439,24 @@ public class ExperimentRunner {
      * Trova la directory del workflow Pegasus con supporto per VM variabili
      */
     private static String findPegasusWorkflowDir(String workflow, int targetTasks, int targetVMs) {
+        // Prima prova con la cartella workflow XML
+        String xmlFile = findWorkflowXML(workflow, targetTasks);
+        if (xmlFile != null) {
+            // Converti XML in CSV al volo
+            try {
+                String outputDir = "../data/data_temp_" + workflow + "_" + targetTasks;
+                int vms = targetVMs > 0 ? targetVMs : 5; // Default 5 VM
+                PegasusXMLParser.parseAndConvert(xmlFile, outputDir, vms);
+                return outputDir;
+            } catch (Exception e) {
+                System.out.println("   ⚠️ Errore conversione XML: " + e.getMessage());
+            }
+        }
+        
+        // Fallback: prova con data_pegasus_xml
         File pegasusDir = new File("../data_pegasus_xml");
         if (!pegasusDir.exists()) {
-            System.out.println("   ⚠️ Directory data_pegasus_xml non trovata: " + pegasusDir.getAbsolutePath());
+            System.out.println("   ⚠️ Workflow non trovato per " + workflow + " " + targetTasks + " task");
             return null;
         }
         
@@ -395,14 +574,32 @@ public class ExperimentRunner {
             for (task t : smgt.getTasks()) {
                 double minET = Double.MAX_VALUE;
                 for (VM vm : smgt.getVMs()) {
-                    double et = t.getSize() / vm.getCapability("processingCapacity");
-                    if (et < minET) minET = et;
+                    double cap = vm.getCapability("processingCapacity");
+                    if (cap > 0) {
+                        double et = t.getSize() / cap;
+                        if (et < minET) minET = et;
+                    }
                 }
-                cpMin += minET;
+                if (minET < Double.MAX_VALUE) {
+                    cpMin += minET;
+                }
             }
         }
         
-        return makespan / cpMin;
+        double slr = makespan / cpMin;
+        
+        // Debug logging (disable in production)
+        boolean DEBUG_SLR = false; // Set to true for debugging
+        if (DEBUG_SLR) {
+            System.out.println("\n=== SLR CALCULATION ===");
+            System.out.println("Makespan: " + makespan);
+            System.out.println("CP Min (lower bound): " + cpMin);
+            System.out.println("SLR: " + slr);
+            System.out.println("Tasks: " + smgt.getTasks().size());
+            System.out.println("VMs: " + smgt.getVMs().size());
+        }
+        
+        return slr;
     }
     
     /**
@@ -562,18 +759,30 @@ public class ExperimentRunner {
             }
             
             if (vm != null) {
+                double vmCapacity = vm.getCapability("processingCapacity");
+                if (vmCapacity <= 0 || Double.isNaN(vmCapacity) || Double.isInfinite(vmCapacity)) {
+                    continue; // Skip VM con capacità invalida
+                }
+                
                 for (int taskId : taskIds) {
                     for (task t : smgt.getTasks()) {
                         if (t.getID() == taskId) {
                             // Satisfaction = 1 - (actual_ET / min_ET)
-                            double actualET = t.getSize() / vm.getCapability("processingCapacity");
+                            double actualET = t.getSize() / vmCapacity;
                             double minET = Double.MAX_VALUE;
                             for (VM v2 : smgt.getVMs()) {
-                                double et = t.getSize() / v2.getCapability("processingCapacity");
-                                if (et < minET) minET = et;
+                                double cap = v2.getCapability("processingCapacity");
+                                if (cap > 0 && !Double.isNaN(cap) && !Double.isInfinite(cap)) {
+                                    double et = t.getSize() / cap;
+                                    if (et < minET) minET = et;
+                                }
                             }
-                            double satisfaction = minET / actualET; // 0 to 1
-                            satisfactions.add(satisfaction);
+                            if (minET < Double.MAX_VALUE && actualET > 0 && !Double.isNaN(actualET) && !Double.isInfinite(actualET)) {
+                                double satisfaction = minET / actualET; // 0 to 1
+                                if (!Double.isNaN(satisfaction) && !Double.isInfinite(satisfaction)) {
+                                    satisfactions.add(satisfaction);
+                                }
+                            }
                             break;
                         }
                     }
@@ -581,7 +790,7 @@ public class ExperimentRunner {
             }
         }
         
-        if (satisfactions.isEmpty()) return 0;
+        if (satisfactions.isEmpty()) return Double.NaN;
         
         // Calcola media
         double mean = 0;
@@ -595,7 +804,7 @@ public class ExperimentRunner {
         }
         variance /= satisfactions.size();
         
-        return variance;
+        return Double.isNaN(variance) || Double.isInfinite(variance) ? Double.NaN : variance;
     }
     
     /**
@@ -668,5 +877,52 @@ public class ExperimentRunner {
         }
         
         System.out.println("\n✅ Esperimenti completati!");
+    }
+    
+    /**
+     * Test singolo per debug - CyberShake Small con CCR variabili
+     */
+    private static void runTestSingle() {
+        System.out.println("╔════════════════════════════════════════════════════════════════╗");
+        System.out.println("║              TEST SINGOLO - DEBUG MODE                         ║");
+        System.out.println("║  Workflow: CyberShake Small (30 tasks, 5 VMs)                 ║");
+        System.out.println("║  Testing CCR values to verify SLR calculation                 ║");
+        System.out.println("╚════════════════════════════════════════════════════════════════╝\n");
+        
+        double[] testCCRs = {0.4, 0.8, 1.2, 1.6, 2.0};
+        
+        System.out.println("CCR\tSLR\tAVU\tVF\tMakespan");
+        System.out.println("---\t---\t---\t--\t--------");
+        
+        for (double ccr : testCCRs) {
+            try {
+                ExperimentResult result = runSingleExperiment(
+                    "cybershake",  // workflow
+                    30,            // numTasks
+                    5,             // numVMs
+                    ccr,           // ccr
+                    "TEST_SMALL",  // expName
+                    NUM_RUNS,      // numRuns
+                    WARMUP_RUNS    // warmupRuns
+                );
+                
+                System.out.printf(Locale.US, "%.1f\t%.3f\t%.1f%%\t%.6f\t%.2f%n",
+                    result.ccr,
+                    result.slr,
+                    result.avu * 100,
+                    result.vf,
+                    result.makespan
+                );
+                
+            } catch (Exception e) {
+                System.err.println("Error at CCR=" + ccr + ": " + e.getMessage());
+            }
+        }
+        
+        System.out.println("\n📊 Expected values from paper (approx):");
+        System.out.println("   CCR=0.4: SLR ~1.1-1.2");
+        System.out.println("   CCR=2.0: SLR ~1.5-1.8");
+        System.out.println("   AVU should be 40-70%");
+        System.out.println("\n✅ Test completato!");
     }
 }

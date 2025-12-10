@@ -165,18 +165,26 @@ public class DCP {
             if (predAFT == null) {
                 task predTask = taskMap.get(predId);
                 if (predTask != null) {
-                    // Estimate AFT = average execution time (will be refined by SMGT later)
-                    // This ensures we don't underestimate the start time
-                    double estimatedET = calculateTaskWeight(predTask, vmMapping);
+                    // OPTIMISTIC ESTIMATION: Use MINIMUM execution time
+                    // This assumes non-CP task will be scheduled on fastest VM
+                    double estimatedET = getMinExecutionTime(predTask, vmMapping);
                     
                     // Recursively estimate start time of non-CP predecessor
                     double estimatedST = 0.0;
                     if (predTask.getPre() != null && !predTask.getPre().isEmpty()) {
-                        // Use average of predecessor ranks as rough estimate
-                        estimatedST = estimatedET; // Conservative: assume some delay
+                        // Conservative: assume some delay from its predecessors
+                        estimatedST = estimatedET; 
                     }
                     
                     predAFT = estimatedST + estimatedET;
+                    
+                    // Debug logging
+                    if (false) { // Set to true for debugging
+                        System.out.println("⚠️  CP Task " + cpTask.getID() + 
+                                         " depends on non-CP task " + predId);
+                        System.out.println("    Estimated AFT: " + predAFT + 
+                                         " (minET: " + estimatedET + ")");
+                    }
                     
                     // Assume non-CP task could be on any VM - use worst case for safety
                     // or assume it's on a different VM from target (requires communication)
@@ -317,6 +325,29 @@ public class DCP {
         // Return average computation time across all VMs
         return vmCount > 0 ? totalComputationTime / vmCount : t.getSize();
     }
+    
+    /**
+     * Calculate MINIMUM execution time for a task across all VMs
+     * Used for optimistic estimation of non-CP task completion times
+     */
+    private static double getMinExecutionTime(task t, Map<Integer, VM> vmMapping) {
+        if (vmMapping == null || vmMapping.isEmpty()) {
+            return t.getSize();
+        }
+        
+        double minET = Double.MAX_VALUE;
+        
+        for (VM vm : vmMapping.values()) {
+            double processingCapacity = vm.getCapability("processingCapacity");
+            if (processingCapacity > 0) {
+                double et = t.getSize() / processingCapacity;
+                minET = Math.min(minET, et);
+            }
+        }
+        
+        return minET < Double.MAX_VALUE ? minET : t.getSize();
+    }
+
     
     // Select task with maximum rank in a given level
     private static int selectMaxRankTask(List<Integer> tasksInLevel, Map<Integer, Double> taskRanks) {

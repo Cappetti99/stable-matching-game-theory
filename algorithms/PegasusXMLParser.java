@@ -186,7 +186,7 @@ public class PegasusXMLParser {
             writer.println("vm_id,processing_capacity");
             for (int i = 0; i < numVMs; i++) {
                 double capacity = 10.0 + rand.nextDouble() * 10.0; // 10-20
-                writer.printf("%d,%.2f\n", i, capacity);
+                writer.printf(Locale.US, "%d,%.2f\n", i, capacity);
             }
         }
         

@@ -4,17 +4,108 @@ import java.util.*;
 
 public class Main {
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws Exception {
+        System.out.println("╔════════════════════════════════════════════════════════════════╗");
+        System.out.println("║     SM-CPTD PAPER EXPERIMENTS - Full Benchmark Suite          ║");
+        System.out.println("╠════════════════════════════════════════════════════════════════╣");
+        System.out.println("║  Experiment 1: CCR Effect (Figures 3-8)                       ║");
+        System.out.println("║  Experiment 2: VM Count Effect (Figures 9-10)                 ║");
+        System.out.println("║  Metrics: SLR, AVU, VF                                        ║");
+        System.out.println("╚════════════════════════════════════════════════════════════════╝");
+        System.out.println();
+        
+        // Run full experiments
+        System.out.println("🚀 Starting full experiment suite...");
+        System.out.println();
+        
+        // Call ExperimentRunner
+        ExperimentRunner.main(args);
+        
+        System.out.println();
+        System.out.println("╔════════════════════════════════════════════════════════════════╗");
+        System.out.println("║                    GENERATING FIGURES                          ║");
+        System.out.println("╚════════════════════════════════════════════════════════════════╝");
+        System.out.println();
+        
+        // Generate figures using Python scripts
+        generateFigures();
+        
+        System.out.println();
+        System.out.println("╔════════════════════════════════════════════════════════════════╗");
+        System.out.println("║                    ALL DONE! ✓                                 ║");
+        System.out.println("╠════════════════════════════════════════════════════════════════╣");
+        System.out.println("║  Results saved in: results/                                    ║");
+        System.out.println("║  Figures saved in: results/figures/                            ║");
+        System.out.println("╚════════════════════════════════════════════════════════════════╝");
+    }
+    
+    private static void generateFigures() {
+        System.out.println("📊 Generating paper figures...");
+        
+        try {
+            // Check if Python is available
+            ProcessBuilder pb = new ProcessBuilder("python3", "--version");
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            int exitCode = process.waitFor();
+            
+            if (exitCode != 0) {
+                System.out.println("   ⚠️  Python3 not found. Skipping figure generation.");
+                System.out.println("   💡 To generate figures manually, run:");
+                System.out.println("      cd generators && python3 generate_paper_figures.py");
+                return;
+            }
+            
+            // Run Python script to generate figures
+            System.out.println("   📈 Running Python script: generate_paper_figures.py");
+            pb = new ProcessBuilder("python3", "generate_paper_figures.py", "--auto");
+            pb.directory(new File("../generators"));
+            pb.redirectErrorStream(true);
+            
+            process = pb.start();
+            
+            // Print output
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println("      " + line);
+            }
+            
+            exitCode = process.waitFor();
+            
+            if (exitCode == 0) {
+                System.out.println("   ✅ Figures generated successfully!");
+            } else {
+                System.out.println("   ⚠️  Figure generation completed with warnings (exit code: " + exitCode + ")");
+            }
+            
+        } catch (Exception e) {
+            System.out.println("   ⚠️  Error generating figures: " + e.getMessage());
+            System.out.println("   💡 To generate figures manually, run:");
+            System.out.println("      cd generators && python3 generate_paper_figures.py");
+        }
+    }
+    
+    // Legacy test method - kept for backward compatibility
+    private static void runLegacyTest() throws Exception {
         System.out.println("=== DCP Algorithm Test ===");
         
-        // Correct file paths (files are in the data directory)
-        String taskFile = "../data/task.csv";
-        String dagFile = "../data/dag.csv";
-        String vmFile = "../data/vm.csv";
-        String processingCapacityFile = "../data/processing_capacity.csv";
+        // Parse workflow XML and generate CSV files
+        String workflowFile = "../workflow/montage/Montage_50.xml";
+        String dataDir = "../data";
+        int numVMs = 3;
+        
+        System.out.println("\n1. Parsing workflow from XML...");
+        PegasusXMLParser.parseAndConvert(workflowFile, dataDir, numVMs);
+        
+        // File paths for generated CSV files
+        String taskFile = dataDir + "/task.csv";
+        String dagFile = dataDir + "/dag.csv";
+        String vmFile = dataDir + "/vm.csv";
+        String processingCapacityFile = dataDir + "/processing_capacity.csv";
 
-        // Test 1: Load and validate data
-        System.out.println("\n1. Loading data from CSV files...");
+        // Test 2: Load and validate data
+        System.out.println("\n2. Loading data from generated CSV files...");
         Map<String, task> taskMap = loadTasks(taskFile);
         System.out.println("   Loaded " + taskMap.size() + " tasks");
 
@@ -37,14 +128,14 @@ public class Main {
             System.out.println("     VM" + (vm.getID() + 1) + ": " + processingCapacity);
         }
 
-        // Test 2: Display task information
-        System.out.println("\n2. Task Information:");
+        // Test 3: Display task information
+        System.out.println("\n3. Task Information:");
         taskList.stream()
                 .sorted((t1, t2) -> Integer.compare(t1.getID(), t2.getID()))
                 .forEach(t -> System.out.println("   " + t));
 
-        // Test 3: Find entry and exit tasks
-        System.out.println("\n3. Finding entry and exit tasks...");
+        // Test 4: Find entry and exit tasks
+        System.out.println("\n4. Finding entry and exit tasks...");
         
         // Find all entry tasks (tasks without predecessors)
         List<task> entryTasks = taskList.stream()
@@ -156,10 +247,15 @@ public class Main {
         Map<String, task> map = new HashMap<>();
         try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
             String line;
+            boolean isFirstLine = true;
             while ((line = br.readLine()) != null) {
+                if (isFirstLine) {
+                    isFirstLine = false;
+                    continue; // Skip header
+                }
                 if (line.startsWith("#") || line.isBlank()) continue;
-                String[] parts = line.trim().split("\\s+");
-                int taskID = Integer.parseInt(parts[0].substring(1)); // t2 → 2
+                String[] parts = line.trim().split(",");
+                int taskID = Integer.parseInt(parts[0]);
                 double size = Double.parseDouble(parts[1]);
                 task t = new task(taskID);
                 t.setSize(size);
@@ -173,12 +269,19 @@ public class Main {
     private static void loadDependencies(String filePath, Map<String, task> taskMap) throws IOException {
         try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
             String line;
+            boolean isFirstLine = true;
             while ((line = br.readLine()) != null) {
+                if (isFirstLine) {
+                    isFirstLine = false;
+                    continue; // Skip header
+                }
                 if (line.startsWith("#") || line.isBlank()) continue;
-                String[] parts = line.trim().split("\\s+");
-                task from = taskMap.get(parts[0]);
-                for (int i = 1; i < parts.length; i++) {
-                    task to = taskMap.get(parts[i]);
+                String[] parts = line.trim().split(",");
+                int predId = Integer.parseInt(parts[0]);
+                int succId = Integer.parseInt(parts[1]);
+                task from = taskMap.get("t" + predId);
+                task to = taskMap.get("t" + succId);
+                if (from != null && to != null) {
                     from.addSuccessor(to.getID());
                     to.addPredecessor(from.getID());
                 }
@@ -189,42 +292,20 @@ public class Main {
     // Carica le VM e la matrice di larghezza di banda
     private static Map<Integer, VM> loadVMs(String filePath) throws IOException {
         Map<Integer, VM> vms = new HashMap<>();
-        List<String> vmNames = new ArrayList<>();
         
         try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
             String line;
             boolean isFirstLine = true;
             
             while ((line = br.readLine()) != null) {
-                // Skip comments
-                if (line.startsWith("#")) continue;
-                if (line.isBlank()) continue;
-                
-                // Parse con virgola o spazi
-                String[] parts = line.contains(",") ? line.trim().split(",") : line.trim().split("\\s+");
-                
                 if (isFirstLine) {
-                    // Prima riga è l'header: VM,vm0,vm1,vm2,vm3,vm4
-                    for (int i = 1; i < parts.length; i++) {
-                        vmNames.add(parts[i].trim());
-                    }
                     isFirstLine = false;
-                    continue;
+                    continue; // Skip header "id"
                 }
+                if (line.startsWith("#") || line.isBlank()) continue;
                 
-                // Righe dati: vm0,1000,26.3,20.4,22.0,20.0
-                String vmName = parts[0].trim();
-                int vmId = Integer.parseInt(vmName.substring(2)); // vm0 -> 0, vm1 -> 1
-                
-                // Crea VM
+                int vmId = Integer.parseInt(line.trim());
                 VM vm = new VM(vmId);
-                
-                // Aggiungi larghezza di banda verso altre VM
-                for (int i = 1; i < parts.length; i++) {
-                    double bandwidth = Double.parseDouble(parts[i].trim());
-                    vm.setBandwidthToVM(i - 1, bandwidth);
-                }
-                
                 vms.put(vmId, vm);
             }
         }
@@ -235,13 +316,16 @@ public class Main {
     private static void loadProcessingCapacities(String filePath, Map<Integer, VM> vmMapping) throws IOException {
         try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
             String line;
+            boolean isFirstLine = true;
             while ((line = br.readLine()) != null) {
+                if (isFirstLine) {
+                    isFirstLine = false;
+                    continue; // Skip header "vm_id,processing_capacity"
+                }
                 if (line.startsWith("#") || line.isBlank()) continue;
-                String[] parts = line.trim().split("\\s+");
+                String[] parts = line.trim().split(",");
                 
-                // Estrae l'ID della VM dal nome (vm0 -> 0, vm1 -> 1, ecc.)
-                String vmName = parts[0];
-                int vmId = Integer.parseInt(vmName.substring(2)); // vm0 -> 0, vm1 -> 1
+                int vmId = Integer.parseInt(parts[0]);
                 double processingCapacity = Double.parseDouble(parts[1]);
                 
                 // Aggiunge la capacità di elaborazione alla VM corrispondente

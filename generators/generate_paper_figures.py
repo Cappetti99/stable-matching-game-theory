@@ -175,11 +175,12 @@ def plot_slr_vs_ccr(data, scale='small', output_filename='figure3_slr_vs_ccr.png
             ax.set_ylim(y_min - margin, y_max + margin)
     
     plt.tight_layout()
-    output_path = Path('../assets') / output_filename
+    output_path = Path('../results/figures') / output_filename
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"Saved: {output_path}")
-    plt.show()
+    plt.close()
 
 # ============================================================================
 # FUNZIONI DI PLOTTING - FIGURA 6, 7, 8 (AVU vs CCR)
@@ -241,11 +242,196 @@ def plot_avu_vs_ccr(data, scale='small', output_filename='figure6_avu_vs_ccr.png
         ax.set_ylim(0, 100)  # AVU sempre 0-100%
     
     plt.tight_layout()
-    output_path = Path('../assets') / output_filename
+    output_path = Path('../results/figures') / output_filename
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"Saved: {output_path}")
-    plt.show()
+    plt.close()
+
+# ============================================================================
+# FUNZIONI DI PLOTTING - FIGURA AVU (Allocation VM Usage)
+# ============================================================================
+
+def plot_vf_vs_ccr(data, scale='large', output_filename='figure_vf_large.png'):
+    """
+    Genera grafico VF (Violation Frequency) vs CCR per large workflows
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    fig.suptitle(f'Comparison of VF in different {scale}-scale workflows', 
+                 fontsize=14, fontweight='bold')
+    
+    for idx, (ax, workflow) in enumerate(zip(axes.flat, WORKFLOW_ORDER)):
+        if workflow not in data:
+            continue
+            
+        workflow_results = data[workflow]
+        
+        # Estrai info su tasks e VMs
+        info = workflow_results.get('info', {})
+        tasks = info.get('tasks', '?')
+        vms = info.get('vms', '?')
+        
+        # Plot per ogni algoritmo
+        for algo_name, algo_data in workflow_results.items():
+            if algo_name == 'info':  # Salta il campo info
+                continue
+            
+            style = ALGO_STYLES.get(algo_name, {})
+            
+            ccr_vals = algo_data['CCR']
+            vf_vals = algo_data['VF']
+            
+            ax.plot(ccr_vals, vf_vals, 
+                   label=style.get('label', algo_name),
+                   color=style.get('color', None),
+                   marker=style.get('marker', 'o'),
+                   linewidth=style.get('linewidth', 1.5),
+                   markersize=style.get('markersize', 7),
+                   linestyle=style.get('linestyle', '-'),
+                   zorder=style.get('zorder', 3))
+        
+        # Configurazione assi
+        ax.set_xlabel('CCR', fontsize=11)
+        ax.set_ylabel('VF', fontsize=11)
+        ax.set_title(f'{WORKFLOW_TITLES[workflow]} ({tasks}×{vms})', fontsize=12, fontweight='bold')
+        
+        # Grid
+        ax.grid(True, linestyle='--', alpha=0.3, color='gray', linewidth=0.5)
+        
+        # Legenda
+        ax.legend(loc='best', fontsize=9, framealpha=0.9, 
+                 edgecolor='black', fancybox=False)
+        
+        # Limiti assi
+        ax.set_xlim(0.35, 2.05)
+        ax.set_xticks(CCR_VALUES)
+    
+    plt.tight_layout()
+    output_path = Path('../results/figures') / output_filename
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
+    print(f"Saved: {output_path}")
+    plt.close()
+
+# ============================================================================
+# FUNZIONE COMPARATIVA - SLR, AVU, VF per diversi metodi
+# ============================================================================
+
+def plot_metrics_comparison(data, scale='large', output_filename='figure_metrics_comparison.png'):
+    """
+    Genera grafico comparativo di SLR, AVU e VF per diversi algoritmi
+    Mostra 4 workflow, ognuno con 3 subplot (SLR, AVU, VF)
+    """
+    fig, axes = plt.subplots(4, 3, figsize=(15, 14))
+    fig.suptitle(f'Comparison of SLR, AVU and VF for different methods ({scale}-scale)', 
+                 fontsize=15, fontweight='bold')
+    
+    for row_idx, workflow in enumerate(WORKFLOW_ORDER):
+        if workflow not in data:
+            continue
+            
+        workflow_results = data[workflow]
+        info = workflow_results.get('info', {})
+        tasks = info.get('tasks', '?')
+        vms = info.get('vms', '?')
+        
+        # SLR subplot (colonna 0)
+        ax_slr = axes[row_idx, 0]
+        # AVU subplot (colonna 1)
+        ax_avu = axes[row_idx, 1]
+        # VF subplot (colonna 2)
+        ax_vf = axes[row_idx, 2]
+        
+        # Plot per ogni algoritmo
+        for algo_name, algo_data in workflow_results.items():
+            if algo_name == 'info':
+                continue
+            
+            style = ALGO_STYLES.get(algo_name, {})
+            ccr_vals = algo_data['CCR']
+            
+            # SLR
+            ax_slr.plot(ccr_vals, algo_data['SLR'], 
+                       label=style.get('label', algo_name),
+                       color=style.get('color', None),
+                       marker=style.get('marker', 'o'),
+                       linewidth=style.get('linewidth', 1.5),
+                       markersize=style.get('markersize', 7),
+                       linestyle=style.get('linestyle', '-'),
+                       zorder=style.get('zorder', 3))
+            
+            # AVU (in percentuale)
+            avu_percent = [v * 100 for v in algo_data['AVU']]
+            ax_avu.plot(ccr_vals, avu_percent, 
+                       label=style.get('label', algo_name),
+                       color=style.get('color', None),
+                       marker=style.get('marker', 'o'),
+                       linewidth=style.get('linewidth', 1.5),
+                       markersize=style.get('markersize', 7),
+                       linestyle=style.get('linestyle', '-'),
+                       zorder=style.get('zorder', 3))
+            
+            # VF
+            ax_vf.plot(ccr_vals, algo_data['VF'], 
+                      label=style.get('label', algo_name),
+                      color=style.get('color', None),
+                      marker=style.get('marker', 'o'),
+                      linewidth=style.get('linewidth', 1.5),
+                      markersize=style.get('markersize', 7),
+                      linestyle=style.get('linestyle', '-'),
+                      zorder=style.get('zorder', 3))
+        
+        # Configurazione SLR
+        ax_slr.set_ylabel(f'{WORKFLOW_TITLES[workflow]} ({tasks}×{vms})\nSLR', fontsize=11, fontweight='bold')
+        ax_slr.grid(True, linestyle='--', alpha=0.3, color='gray', linewidth=0.5)
+        ax_slr.set_xlim(0.35, 2.05)
+        ax_slr.set_xticks(CCR_VALUES)
+        if row_idx == 0:
+            ax_slr.set_title('SLR', fontsize=12, fontweight='bold')
+        if row_idx == 3:
+            ax_slr.set_xlabel('CCR', fontsize=11)
+        else:
+            ax_slr.set_xticklabels([])
+        
+        # Configurazione AVU
+        ax_avu.set_ylabel('AVU (%)', fontsize=11)
+        ax_avu.grid(True, linestyle='--', alpha=0.3, color='gray', linewidth=0.5)
+        ax_avu.set_xlim(0.35, 2.05)
+        ax_avu.set_xticks(CCR_VALUES)
+        ax_avu.set_ylim(0, 100)
+        if row_idx == 0:
+            ax_avu.set_title('AVU', fontsize=12, fontweight='bold')
+        if row_idx == 3:
+            ax_avu.set_xlabel('CCR', fontsize=11)
+        else:
+            ax_avu.set_xticklabels([])
+        
+        # Configurazione VF
+        ax_vf.set_ylabel('VF', fontsize=11)
+        ax_vf.grid(True, linestyle='--', alpha=0.3, color='gray', linewidth=0.5)
+        ax_vf.set_xlim(0.35, 2.05)
+        ax_vf.set_xticks(CCR_VALUES)
+        if row_idx == 0:
+            ax_vf.set_title('VF', fontsize=12, fontweight='bold')
+        if row_idx == 3:
+            ax_vf.set_xlabel('CCR', fontsize=11)
+        else:
+            ax_vf.set_xticklabels([])
+        
+        # Legenda solo nella prima riga
+        if row_idx == 0:
+            ax_slr.legend(loc='best', fontsize=9, framealpha=0.9, 
+                         edgecolor='black', fancybox=False)
+    
+    plt.tight_layout()
+    output_path = Path('../results/figures') / output_filename
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
+    print(f"Saved: {output_path}")
+    plt.close()
 
 # ============================================================================
 # FUNZIONE PRINCIPALE
@@ -294,16 +480,26 @@ def generate_all_figures():
     plot_avu_vs_ccr(data_large, scale='large', 
                     output_filename='figure8_avu_vs_ccr_large.png')
     
+    print("  → Generating VF Comparison (Large)...")
+    plot_vf_vs_ccr(data_large, scale='large', 
+                   output_filename='figure_vf_large.png')
+    
+    print("  → Generating Metrics Comparison (SLR, AVU, VF - Large)...")
+    plot_metrics_comparison(data_large, scale='large', 
+                           output_filename='figure_metrics_comparison_large.png')
+    
     print("\n" + "="*70)
     print("✅ COMPLETATO! Tutti i grafici sono stati generati.")
     print("="*70)
-    print("\nFile generati in assets/:")
+    print("\nFile generati in results/figures/:")
     print("  - figure3_slr_vs_ccr_small.png (+ PDF)")
     print("  - figure4_slr_vs_ccr_medium.png (+ PDF)")
     print("  - figure5_slr_vs_ccr_large.png (+ PDF)")
     print("  - figure6_avu_vs_ccr_small.png (+ PDF)")
     print("  - figure7_avu_vs_ccr_medium.png (+ PDF)")
     print("  - figure8_avu_vs_ccr_large.png (+ PDF)")
+    print("  - figure_vf_large.png (+ PDF)")
+    print("  - figure_metrics_comparison_large.png (+ PDF)")
 
 # ============================================================================
 # FUNZIONI AGGIUNTIVE - STATISTICHE E VERIFICA
@@ -383,12 +579,17 @@ def verify_data_completeness():
 # ============================================================================
 
 if __name__ == '__main__':
+    import sys
+    
     # Verifica e stampa info sui dati
     print_data_summary()
     data_complete = verify_data_completeness()
     
+    # Check if running in non-interactive mode (from Java)
+    auto_mode = '--auto' in sys.argv or not sys.stdin.isatty()
+    
     # Genera tutte le figure
-    if data_complete:
+    if data_complete or auto_mode:
         generate_all_figures()
     else:
         print("\n⚠️  WARNING: Dati incompleti! Procedo comunque...")
