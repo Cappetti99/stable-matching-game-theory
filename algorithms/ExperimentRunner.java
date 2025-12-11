@@ -31,8 +31,8 @@ public class ExperimentRunner {
     // ============================================================================
     
     // Numero di run multiple per stabilizzare i risultati
-    private static final int NUM_RUNS = 10;      // Run effettive da mediare
-    private static final int WARMUP_RUNS = 1;    // Run di warmup da scartare
+    private static final int NUM_RUNS = 1;       // TEMPORANEO: 1 run per test veloce (poi riportare a 10)
+    private static final int WARMUP_RUNS = 0;    // TEMPORANEO: 0 warmup per test veloce (poi riportare a 1)
     
     // Workflow Pegasus XML reali dal paper (convertiti da XML a CSV)
     private static final String[] WORKFLOWS = {"cybershake", "epigenomics", "ligo", "montage"};
@@ -158,11 +158,11 @@ public class ExperimentRunner {
         System.out.println("=".repeat(70));
         
         // Small workflows - usa configurazioni specifiche per ogni workflow
-        System.out.println("\n📦 SMALL WORKFLOWS (30-50 task - 5 VM)");
+        System.out.println("\n📦 SMALL WORKFLOWS (47-50 task - 5 VM)");
         for (String workflow : workflows) {
-            // CyberShake ha 30 task, gli altri hanno 47-50 task
             if (workflow.equals("cybershake")) {
-                runCCRExperiment(new String[]{workflow}, 30, 5, "EXP1_SMALL");
+                // CyberShake ha sia 30 che 50 task disponibili - usa 50
+                runCCRExperiment(new String[]{workflow}, 50, 5, "EXP1_SMALL");
             } else if (workflow.equals("epigenomics")) {
                 runCCRExperiment(new String[]{workflow}, 47, 5, "EXP1_SMALL");
             } else {
@@ -270,8 +270,8 @@ public class ExperimentRunner {
             // Esperimento 2: cerca directory con VM specificato
             workflowDir = findPegasusWorkflowDir(workflow.toLowerCase(), numTasks, numVMs);
         } else {
-            // Esperimento 1: cerca solo per numero task
-            workflowDir = findPegasusWorkflowDir(workflow.toLowerCase(), numTasks);
+            // Esperimento 1: passa comunque il numero di VM al parser per generare capacità corrette
+            workflowDir = findPegasusWorkflowDir(workflow.toLowerCase(), numTasks, numVMs);
         }
         
         if (workflowDir == null) {

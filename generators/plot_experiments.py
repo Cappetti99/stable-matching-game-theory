@@ -75,7 +75,7 @@ def plot_metric_by_workflow(organized, metric, metric_label, output_file):
     fig.suptitle(f'SM-CPTD: {metric_label} vs CCR', fontsize=16, fontweight='bold')
     
     # Workflow Pegasus disponibili
-    workflow_names = ['MONTAGE', 'EPIGENOMICS', 'CYCLES', 'SRASEARCH']
+    workflow_names = ['cybershake', 'epigenomics', 'ligo', 'montage']
     
     for idx, wf_name in enumerate(workflow_names):
         ax = axes[idx // 2, idx % 2]
@@ -122,8 +122,8 @@ def plot_all_metrics_single_size(organized, tasks_filter, output_file):
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     fig.suptitle(f'SM-CPTD Performance ({tasks_filter} tasks) vs CCR', fontsize=14, fontweight='bold')
     
-    colors = {'MONTAGE': '#2196F3', 'EPIGENOMICS': '#4CAF50', 'CYCLES': '#FF9800', 'SRASEARCH': '#9C27B0'}
-    markers = {'MONTAGE': 'o', 'EPIGENOMICS': 's', 'CYCLES': '^', 'SRASEARCH': 'D'}
+    colors = {'cybershake': '#2196F3', 'epigenomics': '#4CAF50', 'ligo': '#FF9800', 'montage': '#9C27B0'}
+    markers = {'cybershake': 'o', 'epigenomics': 's', 'ligo': '^', 'montage': 'D'}
     
     metrics = [('slr', 'SLR (Schedule Length Ratio)'), 
                ('avu', 'AVU (Average VM Utilization)'),
@@ -246,8 +246,8 @@ def plot_paper_style_by_category(organized, output_dir):
         'large': {'tasks_range': (900, 1600), 'title': 'Large Workflows (1000-1500 tasks, 50 VMs)'}
     }
     
-    colors = {'MONTAGE': '#1f77b4', 'EPIGENOMICS': '#ff7f0e', 'CYCLES': '#2ca02c', 'SRASEARCH': '#d62728'}
-    markers = {'MONTAGE': 'o', 'EPIGENOMICS': 's', 'CYCLES': '^', 'SRASEARCH': 'D'}
+    colors = {'cybershake': '#1f77b4', 'epigenomics': '#ff7f0e', 'ligo': '#2ca02c', 'montage': '#d62728'}
+    markers = {'cybershake': 'o', 'epigenomics': 's', 'ligo': '^', 'montage': 'D'}
     
     for cat_name, cat_config in categories.items():
         fig, axes = plt.subplots(1, 3, figsize=(15, 4.5))
@@ -345,14 +345,14 @@ def plot_exp2_vm_effect(organized_exp2, output_dir):
         print("⚠️ Nessun dato per Esperimento 2 (VM effect)")
         return
     
-    colors = {'MONTAGE': '#1f77b4', 'EPIGENOMICS': '#ff7f0e', 'CYCLES': '#2ca02c', 'SRASEARCH': '#d62728'}
-    markers = {'MONTAGE': 'o', 'EPIGENOMICS': 's', 'CYCLES': '^', 'SRASEARCH': 'D'}
+    colors = {'cybershake': '#1f77b4', 'epigenomics': '#ff7f0e', 'ligo': '#2ca02c', 'montage': '#d62728'}
+    markers = {'cybershake': 'o', 'epigenomics': 's', 'ligo': '^', 'montage': 'D'}
     
     # Figura 9: SLR vs VMs (2x2 subplots, uno per workflow)
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     fig.suptitle('SM-CPTD: SLR vs Number of VMs (1000 tasks, CCR=1.0)', fontsize=14, fontweight='bold')
     
-    workflow_order = ['MONTAGE', 'EPIGENOMICS', 'CYCLES', 'SRASEARCH']
+    workflow_order = ['cybershake', 'epigenomics', 'ligo', 'montage']
     
     for idx, wf_name in enumerate(workflow_order):
         ax = axes[idx // 2, idx % 2]

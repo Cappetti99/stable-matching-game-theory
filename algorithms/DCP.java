@@ -165,9 +165,9 @@ public class DCP {
             if (predAFT == null) {
                 task predTask = taskMap.get(predId);
                 if (predTask != null) {
-                    // OPTIMISTIC ESTIMATION: Use MINIMUM execution time
-                    // This assumes non-CP task will be scheduled on fastest VM
-                    double estimatedET = getMinExecutionTime(predTask, vmMapping);
+                    // REALISTIC ESTIMATION: Use AVERAGE execution time (as per paper Section 3.2.1)
+                    // MIN was too optimistic for workflows with long dependency chains
+                    double estimatedET = getAverageExecutionTime(predTask, vmMapping);
                     
                     // Recursively estimate start time of non-CP predecessor
                     double estimatedST = 0.0;
@@ -328,7 +328,7 @@ public class DCP {
     
     /**
      * Calculate MINIMUM execution time for a task across all VMs
-     * Used for optimistic estimation of non-CP task completion times
+     * Kept for potential future use, but getAverageExecutionTime is preferred
      */
     private static double getMinExecutionTime(task t, Map<Integer, VM> vmMapping) {
         if (vmMapping == null || vmMapping.isEmpty()) {
@@ -346,6 +346,31 @@ public class DCP {
         }
         
         return minET < Double.MAX_VALUE ? minET : t.getSize();
+    }
+    
+    /**
+     * Calculate AVERAGE execution time for a task across all VMs
+     * Used for realistic estimation of non-CP task completion times
+     * (as specified in paper Section 3.2.1)
+     */
+    private static double getAverageExecutionTime(task t, Map<Integer, VM> vmMapping) {
+        if (vmMapping == null || vmMapping.isEmpty()) {
+            return t.getSize();
+        }
+        
+        double sumET = 0.0;
+        int count = 0;
+        
+        for (VM vm : vmMapping.values()) {
+            double processingCapacity = vm.getCapability("processingCapacity");
+            if (processingCapacity > 0) {
+                double et = t.getSize() / processingCapacity;
+                sumET += et;
+                count++;
+            }
+        }
+        
+        return count > 0 ? (sumET / count) : t.getSize();
     }
 
     
