@@ -138,13 +138,15 @@ public class PegasusXMLParser {
         new File(outputDir).mkdirs();
         
         // Scrivi task.csv
+        // Paper: task sizes uniformly distributed in [500, 700]
+        Random taskRand = new Random();
         try (PrintWriter writer = new PrintWriter(new FileWriter(outputDir + "/task.csv"))) {
             writer.println("id,size");
             for (Map.Entry<String, Job> entry : jobs.entrySet()) {
                 int id = jobIdToTaskId.get(entry.getKey());
-                Job job = entry.getValue();
-                // Usa runtime come size del task
-                writer.printf("%d,%.2f\n", id, job.runtime);
+                // Genera size secondo paper: [500, 700] uniforme
+                double size = 500.0 + taskRand.nextDouble() * 200.0;
+                writer.printf("%.0f,%.2f\n", (double)id, size);
             }
         }
         
@@ -181,19 +183,39 @@ public class PegasusXMLParser {
         }
         
         // Scrivi processing_capacity.csv
-        Random rand = new Random(42);
+        // Paper: VM processing capacities uniformly distributed in [20, 30]
+        Random vmRand = new Random();
         try (PrintWriter writer = new PrintWriter(new FileWriter(outputDir + "/processing_capacity.csv"))) {
             writer.println("vm_id,processing_capacity");
             for (int i = 0; i < numVMs; i++) {
-                double capacity = 10.0 + rand.nextDouble() * 10.0; // 10-20
+                double capacity = 20.0 + vmRand.nextDouble() * 10.0; // [20, 30]
                 writer.printf(Locale.US, "%d,%.2f\n", i, capacity);
             }
         }
         
+        // Scrivi bandwidth.csv
+        // Paper: bandwidth between VMs uniformly distributed in [20, 30]
+        Random bwRand = new Random();
+        try (PrintWriter writer = new PrintWriter(new FileWriter(outputDir + "/bandwidth.csv"))) {
+            writer.println("vm_i,vm_j,bandwidth");
+            for (int i = 0; i < numVMs; i++) {
+                for (int j = 0; j < numVMs; j++) {
+                    if (i == j) {
+                        // Bandwidth to self = 0 (no communication needed)
+                        writer.printf("%d,%d,0.00\n", i, j);
+                    } else {
+                        // [20, 30] uniforme
+                        double bandwidth = 20.0 + bwRand.nextDouble() * 10.0;
+                        writer.printf("%d,%d,%.2f\n", i, j, bandwidth);
+                    }
+                }
+            }
+        }
+        
         System.out.println("  ✓ Output saved to: " + outputDir);
-        System.out.println("    - Tasks: " + jobs.size());
+        System.out.println("    - Tasks: " + jobs.size() + " (sizes: [500, 700] uniform)");
         System.out.println("    - Edges: " + edgeSet.size());
-        System.out.println("    - VMs: " + numVMs);
+        System.out.println("    - VMs: " + numVMs + " (capacity: [20, 30] uniform, bandwidth: [20, 30] uniform)");
     }
     
     public static void main(String[] args) {

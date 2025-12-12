@@ -134,6 +134,49 @@ public class SMGT {
     }
     
     /**
+     * Loads bandwidth data from bandwidth.csv
+     * Format: vm_i,vm_j,bandwidth
+     */
+    public void loadBandwidthFromCSV(String filename) throws IOException {
+        File bandwidthFile = new File(filename);
+        if (!bandwidthFile.exists()) {
+            System.out.println("⚠️  Warning: bandwidth.csv not found, using default bandwidth");
+            return;
+        }
+        
+        BufferedReader reader = new BufferedReader(new FileReader(filename));
+        String line;
+        boolean firstLine = true;
+        
+        while ((line = reader.readLine()) != null) {
+            // Skip header and empty lines
+            if (firstLine) {
+                firstLine = false;
+                if (line.contains("vm_i") || line.contains("bandwidth")) continue;
+            }
+            if (line.startsWith("#") || line.trim().isEmpty()) {
+                continue;
+            }
+            
+            String[] parts = line.trim().split(",");
+            if (parts.length >= 3) {
+                int vmI = Integer.parseInt(parts[0].trim());
+                int vmJ = Integer.parseInt(parts[1].trim());
+                double bandwidth = Double.parseDouble(parts[2].trim());
+                
+                // Find VM and set bandwidth
+                for (VM vm : vms) {
+                    if (vm.getID() == vmI) {
+                        vm.setBandwidthToVM(vmJ, bandwidth);
+                        break;
+                    }
+                }
+            }
+        }
+        reader.close();
+    }
+    
+    /**
      * Loads task data and builds the DAG structure
      */
     public void loadTasksFromCSV(String dagFilename, String taskFilename) throws IOException {

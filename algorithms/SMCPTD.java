@@ -57,6 +57,14 @@ public class SMCPTD {
         smgt.loadTasksFromCSV(dagFilename, taskFilename);
         smgt.loadVMsFromCSV(vmFilename);
         
+        // Carica bandwidth se disponibile
+        String bandwidthFile = vmFilename.replace("processing_capacity.csv", "bandwidth.csv");
+        try {
+            smgt.loadBandwidthFromCSV(bandwidthFile);
+        } catch (IOException e) {
+            // Bandwidth file opzionale
+        }
+        
         System.out.println("✅ Dati caricati: " + smgt.getTasks().size() + " task, " + smgt.getVMs().size() + " VM");
     }
     

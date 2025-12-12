@@ -306,6 +306,7 @@ public class ExperimentRunner {
             SMGT smgt = new SMGT();
             smgt.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
             smgt.loadVMsFromCSV(workflowDir + "/processing_capacity.csv");
+            smgt.loadBandwidthFromCSV(workflowDir + "/bandwidth.csv");
             
             // 3. Calcola costi di comunicazione con CCR specificato
             Map<String, Double> commCosts = calculateCommunicationCosts(smgt, ccr);
