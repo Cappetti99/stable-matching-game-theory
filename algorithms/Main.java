@@ -864,7 +864,7 @@ public class Main {
                 System.out.println("     VM" + vm + " thresholds:");
                 for (int level = 0; level <= maxLevel; level++) {
                     try {
-                        int threshold = smgt.threshold(vm, level);
+                        int threshold = smgt.calculateInitialThreshold(vm, level);
                         System.out.printf("       threshold(%d, %d) = %d%n", vm, level, threshold);
                     } catch (Exception e) {
                         System.out.println(

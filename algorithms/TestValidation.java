@@ -15,9 +15,9 @@ public class TestValidation {
         System.out.println("╚═══════════════════════════════════════════════════════════╝\n");
 
         // Carica dati disponibili
-        String taskFile = "../data/task.csv";
-        String dagFile = "../data/dag.csv";
-        String processingCapacityFile = "../data/processing_capacity.csv";
+        String taskFile = "../data_pegasus_xml/cybershake_30/task.csv";
+        String dagFile = "../data_pegasus_xml/cybershake_30/dag.csv";
+        String processingCapacityFile = "../data_pegasus_xml/cybershake_30/processing_capacity.csv";
 
         SMGT smgt = new SMGT();
         smgt.loadVMsFromCSV(processingCapacityFile);
