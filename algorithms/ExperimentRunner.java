@@ -302,35 +302,30 @@ public class ExperimentRunner {
                 System.out.print(".");
             }
             
-            // 2. Carica dati usando DataLoader
-            SMGT smgt = new SMGT();
-            List<task> tasks = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
-            List<VM> vms = DataLoader.loadVMsFromCSV(workflowDir + "/processing_capacity.csv");
-            DataLoader.loadBandwidthFromCSV(workflowDir + "/bandwidth.csv", vms);
-            
-            // Imposta i dati in SMGT
-            smgt.setTasks(tasks);
-            smgt.setVMs(vms);
-            smgt.calculateTaskLevels();
-            
+            // 2. Carica dati UNA SOLA VOLTA (DataLoader genera valori random)
+            SMCPTD smcptd = new SMCPTD();
+            smcptd.loadData(workflowDir + "/dag.csv", workflowDir + "/task.csv", workflowDir + "/processing_capacity.csv");
+
+            // Usa gli stessi task/VM dell'istanza SMCPTD per evitare incoerenze
+            SMGT smgt = smcptd.getSMGT();
+            DataLoader.loadBandwidthFromCSV(workflowDir + "/bandwidth.csv", smgt.getVMs());
+
             // 3. Calcola costi di comunicazione con CCR specificato
             Map<String, Double> commCosts = calculateCommunicationCosts(smgt, ccr);
-            
+
             // 4. Crea mapping VM
             Map<Integer, VM> vmMapping = new HashMap<>();
             for (VM vm : smgt.getVMs()) {
                 vmMapping.put(vm.getID(), vm);
             }
-            
+
             // 5. Esegui SM-CPTD
-            SMCPTD smcptd = new SMCPTD();
-            smcptd.loadData(workflowDir + "/dag.csv", workflowDir + "/task.csv", workflowDir + "/processing_capacity.csv");
-            
             Map<Integer, List<Integer>> assignments = smcptd.executeSMCPTD(commCosts, vmMapping);
             
             // 6. Calcola metriche
             double makespan = smcptd.getMakespan();
-            double slr = calculateSLR(smgt, makespan);
+            // Usa l'SLR calcolato da SMCPTD (Eq. 7) usando il CP trovato da DCP
+            double slr = smcptd.getSLR();
             double avu = calculateAVU(smgt, assignments, makespan);
             double vf = calculateVF(smgt, assignments, makespan);
             
@@ -536,171 +531,30 @@ public class ExperimentRunner {
     private static Map<String, Double> calculateCommunicationCosts(SMGT smgt, double ccr) {
         Map<String, Double> costs = new HashMap<>();
         
-        // Calcola media computation time
-        double avgComputationTime = 0;
+        // 1. Calcola average computation time
+        double avgCompTime = 0;
         for (task t : smgt.getTasks()) {
             double avgET = 0;
             for (VM vm : smgt.getVMs()) {
                 avgET += t.getSize() / vm.getCapability("processingCapacity");
             }
-            avgET /= smgt.getVMs().size();
-            avgComputationTime += avgET;
+            avgCompTime += avgET / smgt.getVMs().size();
         }
-        avgComputationTime /= smgt.getTasks().size();
+        avgCompTime /= smgt.getTasks().size();
         
-        // Costo comunicazione = CCR * avgComputationTime
-        double baseCost = ccr * avgComputationTime;
-        
-        // Assegna costi a tutte le coppie di task connessi
+        // 2. Communication cost = (size_task * CCR) / avgBandwidth
+        // avgBandwidth = media uniforme [20, 30]
+        double avgBandwidth = 25.0;
         for (task t : smgt.getTasks()) {
             for (int succId : t.getSucc()) {
                 String key = t.getID() + "_" + succId;
-                // Variazione ±20% per realismo
-                double variation = 0.8 + Math.random() * 0.4;
-                costs.put(key, baseCost * variation);
+                double dataSize = t.getSize() * ccr;
+                double commCost = dataSize / avgBandwidth;
+                costs.put(key, commCost);
             }
         }
         
         return costs;
-    }
-    
-    /**
-     * Calcola SLR (Schedule Length Ratio)
-     * SLR = Makespan / CP_min
-     * dove CP_min è la somma dei tempi minimi di esecuzione dei task sul critical path
-     */
-    private static double calculateSLR(SMGT smgt, double makespan) {
-        // Trova il critical path e calcola CP_min
-        double cpMin = calculateCriticalPathMinTime(smgt);
-        
-        if (cpMin <= 0) {
-            // Fallback: usa la somma di tutti i minET
-            cpMin = 0;
-            for (task t : smgt.getTasks()) {
-                double minET = Double.MAX_VALUE;
-                for (VM vm : smgt.getVMs()) {
-                    double cap = vm.getCapability("processingCapacity");
-                    if (cap > 0) {
-                        double et = t.getSize() / cap;
-                        if (et < minET) minET = et;
-                    }
-                }
-                if (minET < Double.MAX_VALUE) {
-                    cpMin += minET;
-                }
-            }
-        }
-        
-        double slr = makespan / cpMin;
-        
-        // Debug logging (disable in production)
-        boolean DEBUG_SLR = false; // Set to true for debugging
-        if (DEBUG_SLR) {
-            System.out.println("\n=== SLR CALCULATION ===");
-            System.out.println("Makespan: " + makespan);
-            System.out.println("CP Min (lower bound): " + cpMin);
-            System.out.println("SLR: " + slr);
-            System.out.println("Tasks: " + smgt.getTasks().size());
-            System.out.println("VMs: " + smgt.getVMs().size());
-        }
-        
-        return slr;
-    }
-    
-    /**
-     * Calcola il tempo minimo del critical path
-     */
-    private static double calculateCriticalPathMinTime(SMGT smgt) {
-        List<task> tasks = smgt.getTasks();
-        List<VM> vms = smgt.getVMs();
-        
-        // Mappa task ID -> task
-        Map<Integer, task> taskMap = new HashMap<>();
-        for (task t : tasks) {
-            taskMap.put(t.getID(), t);
-        }
-        
-        // Calcola minET per ogni task
-        Map<Integer, Double> minET = new HashMap<>();
-        for (task t : tasks) {
-            double min = Double.MAX_VALUE;
-            for (VM vm : vms) {
-                double et = t.getSize() / vm.getCapability("processingCapacity");
-                if (et < min) min = et;
-            }
-            minET.put(t.getID(), min);
-        }
-        
-        // Calcola il longest path (critical path) usando programmazione dinamica
-        // Per ogni task, calcola il tempo minimo dal task fino alla fine
-        Map<Integer, Double> longestPathFrom = new HashMap<>();
-        
-        // Trova i task di uscita (senza successori)
-        List<task> exitTasks = new ArrayList<>();
-        for (task t : tasks) {
-            if (t.getSucc().isEmpty()) {
-                exitTasks.add(t);
-            }
-        }
-        
-        // Inizializza task di uscita
-        for (task t : exitTasks) {
-            longestPathFrom.put(t.getID(), minET.get(t.getID()));
-        }
-        
-        // Ordine topologico inverso (da exit a entry)
-        Set<Integer> processed = new HashSet<>(longestPathFrom.keySet());
-        boolean changed = true;
-        
-        while (changed) {
-            changed = false;
-            for (task t : tasks) {
-                if (processed.contains(t.getID())) continue;
-                
-                // Verifica se tutti i successori sono stati processati
-                boolean allSuccProcessed = true;
-                for (int succId : t.getSucc()) {
-                    if (!processed.contains(succId)) {
-                        allSuccProcessed = false;
-                        break;
-                    }
-                }
-                
-                if (allSuccProcessed) {
-                    // Calcola il longest path da questo task
-                    double maxSuccPath = 0;
-                    for (int succId : t.getSucc()) {
-                        double succPath = longestPathFrom.getOrDefault(succId, 0.0);
-                        if (succPath > maxSuccPath) {
-                            maxSuccPath = succPath;
-                        }
-                    }
-                    longestPathFrom.put(t.getID(), minET.get(t.getID()) + maxSuccPath);
-                    processed.add(t.getID());
-                    changed = true;
-                }
-            }
-        }
-        
-        // Il critical path è il massimo tra tutti i task di ingresso
-        double cpMin = 0;
-        for (task t : tasks) {
-            if (t.getPre().isEmpty()) {  // Entry task
-                double pathLength = longestPathFrom.getOrDefault(t.getID(), 0.0);
-                if (pathLength > cpMin) {
-                    cpMin = pathLength;
-                }
-            }
-        }
-        
-        // Se non ci sono entry task espliciti, prendi il massimo
-        if (cpMin == 0) {
-            for (Double path : longestPathFrom.values()) {
-                if (path > cpMin) cpMin = path;
-            }
-        }
-        
-        return cpMin;
     }
     
     /**

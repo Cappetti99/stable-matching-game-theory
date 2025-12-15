@@ -1,6 +1,8 @@
 import java.util.*;
 
 public class LOTD {
+
+    private static final double RULE2_EPSILON = 1e-6;
     private SMGT smgt;
     private List<VM> vms;
     private List<task> tasks;
@@ -366,24 +368,26 @@ public class LOTD {
     }
     
     /**
-     * CORREZIONE 1: Check Rule 2 - AFT_new <= AFT_old solo per task su VMk
+     * Rule 2 (paper): accetta la duplicazione solo se non peggiora la schedulazione.
+     *
+     * Implementazione: verifica che il makespan globale non aumenti (entro epsilon).
      */
     private boolean checkRule2(int vmId, Map<Integer, Double> oldAFT) {
-        // Solo task già schedulati su VMk
-        List<Integer> vmTasks = vmSchedule.getOrDefault(vmId, new ArrayList<>());
-        
-        for (Integer taskId : vmTasks) {
-            if (taskId < 0) continue; // Skip duplicates marker
-            
-            Double oldFT = oldAFT.get(taskId);
-            Double newFT = taskAFT.get(taskId);
-            
-            if (oldFT != null && newFT != null && newFT > oldFT + 0.001) {
-                System.out.println("    ✗ Task t" + taskId + " AFT increased: " 
-                                 + oldFT + " -> " + newFT);
-                return false;
-            }
+        double oldMakespan = oldAFT.values().stream()
+                .mapToDouble(Double::doubleValue)
+                .max()
+                .orElse(0.0);
+
+        double newMakespan = taskAFT.values().stream()
+                .mapToDouble(Double::doubleValue)
+                .max()
+                .orElse(0.0);
+
+        if (newMakespan > oldMakespan + RULE2_EPSILON) {
+            System.out.println("    ✗ Makespan increased (Rule 2): " + oldMakespan + " -> " + newMakespan);
+            return false;
         }
+
         return true;
     }
     

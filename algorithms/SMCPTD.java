@@ -178,10 +178,6 @@ public class SMCPTD {
                         if (predVM != vmId) {
                             String commKey = predId + "_" + taskId;
                             double commCost = communicationCosts.getOrDefault(commKey, 0.0);
-                            double bandwidth = vm.getBandwidthToVM(predVM);
-                            if (bandwidth > 0) {
-                                commCost = commCost / bandwidth;
-                            }
                             st = Math.max(st, predAFT + commCost);
                         } else {
                             st = Math.max(st, predAFT);
@@ -489,8 +485,18 @@ public class SMCPTD {
         System.out.println("   📈 Calcolo makespan e SLR...");
 
         try {
-            // Calcola makespan sui risultati finali
-            makespan = calculateMakespan(finalAssignments, smgt.getTasks(), vmMapping, communicationCosts);
+            // Calcola makespan dai tempi (AST/AFT) calcolati da LOTD, che rispettano
+            // dipendenze tra task, trasmissioni dati e serializzazione su VM.
+            // Fallback: se LOTD non è disponibile o non ha AFT, usa il vecchio calcolo.
+            if (lotd != null && lotd.getTaskAFT() != null && !lotd.getTaskAFT().isEmpty()) {
+                Map<Integer, Double> taskAFT = lotd.getTaskAFT();
+                makespan = taskAFT.values().stream()
+                        .mapToDouble(Double::doubleValue)
+                        .max()
+                        .orElse(0.0);
+            } else {
+                makespan = calculateMakespan(finalAssignments, smgt.getTasks(), vmMapping, communicationCosts);
+            }
 
             // DEBUG: Verifica critical path
             System.out.println("   🔍 DEBUG Critical Path: " + criticalPath);

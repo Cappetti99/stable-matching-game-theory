@@ -28,15 +28,20 @@ public class SMGT {
     }
 
     /**
-     * Calcola threshold iniziale (NON cumulativo)
-     * Formula: ⌊(Σᵛ⁼⁰ˡ⁻¹ nᵥ / Σpᵢ) × pₖ⌋
+     * Calcola il threshold cumulativo come nel paper.
+     *
+     * Semantica del parametro `level`:
+     * - `level` è il livello $l$ del paper (1-indexed).
+     * - I livelli del DAG in questa implementazione sono 0-indexed.
+     *
+     * Formula (pseudocodice): threshold(VM_k, l) = ⌊(Σ_{v=0}^{l-1} n_v / Σp_i) × p_k⌋
      */
     public int calculateInitialThreshold(int vmIndex, int level) {
         if (vmIndex >= vms.size() || level < 0) {
             return 0;
         }
 
-        // Somma task da livello 0 a l-1 (NON a l!)
+        // Somma task da livello 0 a l-1 (livelli 0-indexed del DAG)
         double sumTasks = 0.0;
         for (int v = 0; v < level; v++) { // v < level, NON v <= level
             sumTasks += getNumberOfTasksAtLevel(v);
@@ -367,7 +372,7 @@ public class SMGT {
         // Linee 7-11: Calcola threshold e inizializza waiting lists
         Map<Integer, VMThreshold> vmThresholds = new HashMap<>();
         for (int vmIndex = 0; vmIndex < vms.size(); vmIndex++) {
-            int threshold = calculateInitialThreshold(vmIndex, level);
+            int threshold = calculateInitialThreshold(vmIndex, level + 1);
             vmThresholds.put(vmIndex, new VMThreshold(threshold));
             System.out.println("VM" + vmIndex + " threshold: " + threshold);
         }
@@ -611,7 +616,7 @@ public class SMGT {
         Integer criticalTask = findCriticalTask(tasksInLevel);
         if (criticalTask != null) {
             int fastestVM = findFastestVM();
-            int fastestVMThreshold = calculateInitialThreshold(fastestVM, level);
+            int fastestVMThreshold = calculateInitialThreshold(fastestVM, level + 1);
             List<Integer> fastestVMWaitingList = vmWaitingLists.get(fastestVM);
 
             if (fastestVMWaitingList.size() < fastestVMThreshold) {
@@ -637,7 +642,7 @@ public class SMGT {
                         getVMProcessingCapacity(vms.get(vm1))));
 
                 for (Integer vmIndex : vmsByCapacity) {
-                    int vmThreshold = calculateInitialThreshold(vmIndex, level);
+                    int vmThreshold = calculateInitialThreshold(vmIndex, level + 1);
                     List<Integer> vmWaitingList = vmWaitingLists.get(vmIndex);
 
                     if (vmWaitingList.size() < vmThreshold) {
@@ -673,7 +678,7 @@ public class SMGT {
             // Try each VM in order of task's preference
             for (int j = 0; j < taskPrefList.size(); j++) {
                 Integer vmIndex = taskPrefList.get(j);
-                int thresholdValue = calculateInitialThreshold(vmIndex, level);
+                int thresholdValue = calculateInitialThreshold(vmIndex, level + 1);
                 List<Integer> vmWaitingList = vmWaitingLists.get(vmIndex);
 
                 System.out.println("  Trying VM" + vmIndex + " (total assigned: " + vmWaitingList.size() +
@@ -734,7 +739,7 @@ public class SMGT {
                 // Try to find any VM that still has capacity (respecting thresholds)
                 boolean foundVMWithCapacity = false;
                 for (int vmIndex = 0; vmIndex < vms.size(); vmIndex++) {
-                    int thresholdValue = calculateInitialThreshold(vmIndex, level);
+                    int thresholdValue = calculateInitialThreshold(vmIndex, level + 1);
                     List<Integer> vmWaitingList = vmWaitingLists.get(vmIndex);
 
                     if (vmWaitingList.size() < thresholdValue) {
@@ -754,7 +759,7 @@ public class SMGT {
                             + " cannot be assigned - all VMs at threshold capacity!");
                     System.out.println("     Current VM loads vs thresholds:");
                     for (int vmIndex = 0; vmIndex < vms.size(); vmIndex++) {
-                        int thresholdValue = calculateInitialThreshold(vmIndex, level);
+                        int thresholdValue = calculateInitialThreshold(vmIndex, level + 1);
                         int currentLoad = vmWaitingLists.get(vmIndex).size();
                         System.out.println("       VM" + vmIndex + ": " + currentLoad + "/" + thresholdValue);
                     }
@@ -883,7 +888,7 @@ public class SMGT {
                 Integer vmIndex = taskPrefList.get(0);
                 taskPrefList.remove(0);
 
-                int thresholdValue = calculateInitialThreshold(vmIndex, level);
+                int thresholdValue = calculateInitialThreshold(vmIndex, level + 1);
                 List<Integer> vmWaitingList = vmWaitingLists.get(vmIndex);
 
                 // Count only non-CP tasks for threshold comparison
@@ -961,7 +966,7 @@ public class SMGT {
         int maxCapacity = -1;
 
         for (int vmIndex = 0; vmIndex < vms.size(); vmIndex++) {
-            int thresholdValue = calculateInitialThreshold(vmIndex, level);
+            int thresholdValue = calculateInitialThreshold(vmIndex, level + 1);
             List<Integer> waitingList = vmWaitingLists.get(vmIndex);
             long nonCPCount = waitingList.stream()
                     .filter(t -> !criticalPath.contains(t))
