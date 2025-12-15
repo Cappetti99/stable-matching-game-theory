@@ -149,7 +149,7 @@ public class PegasusXMLParser {
         
         // Scrivi task.csv
         // Paper: task sizes uniformly distributed in [500, 700]
-        Random taskRand = new Random();
+        Random taskRand = SeededRandom.forScope("PegasusXMLParser.taskSizes:" + xmlFile + ":" + numVMs);
         try (PrintWriter writer = new PrintWriter(new FileWriter(outputDir + "/task.csv"))) {
             writer.println("id,size");
             for (Map.Entry<String, Job> entry : jobs.entrySet()) {
@@ -194,7 +194,7 @@ public class PegasusXMLParser {
         
         // Scrivi processing_capacity.csv
         // Paper: VM processing capacities uniformly distributed in [20, 30]
-        Random vmRand = new Random();
+        Random vmRand = SeededRandom.forScope("PegasusXMLParser.vmCapacity:" + xmlFile + ":" + numVMs);
         try (PrintWriter writer = new PrintWriter(new FileWriter(outputDir + "/processing_capacity.csv"))) {
             writer.println("vm_id,processing_capacity");
             for (int i = 0; i < numVMs; i++) {
@@ -205,7 +205,7 @@ public class PegasusXMLParser {
         
         // Scrivi bandwidth.csv
         // Paper: bandwidth between VMs uniformly distributed in [20, 30]
-        Random bwRand = new Random();
+        Random bwRand = SeededRandom.forScope("PegasusXMLParser.bandwidth:" + xmlFile + ":" + numVMs);
         try (PrintWriter writer = new PrintWriter(new FileWriter(outputDir + "/bandwidth.csv"))) {
             writer.println("vm_i,vm_j,bandwidth");
             for (int i = 0; i < numVMs; i++) {

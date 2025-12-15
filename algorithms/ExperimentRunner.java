@@ -86,6 +86,7 @@ public class ExperimentRunner {
     }
     
     public static void main(String[] args) {
+        SeededRandom.initFromArgs(args);
         // Check for test_single mode
         if (args.length > 0 && args[0].equals("test_single")) {
             runTestSingle();

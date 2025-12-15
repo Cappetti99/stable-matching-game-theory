@@ -5,38 +5,16 @@ import java.util.*;
 public class Main {
 
     public static void main(String[] args) throws Exception {
-        System.out.println("╔════════════════════════════════════════════════════════════════╗");
-        System.out.println("║     SM-CPTD PAPER EXPERIMENTS - Full Benchmark Suite          ║");
-        System.out.println("╠════════════════════════════════════════════════════════════════╣");
-        System.out.println("║  Experiment 1: CCR Effect (Figures 3-8)                       ║");
-        System.out.println("║  Experiment 2: VM Count Effect (Figures 9-10)                 ║");
-        System.out.println("║  Metrics: SLR, AVU, VF                                        ║");
-        System.out.println("╚════════════════════════════════════════════════════════════════╝");
-        System.out.println();
+        SeededRandom.initFromArgs(args);
+        System.out.println("Starting experiments...");
 
         // Run full experiments
-        System.out.println("🚀 Starting full experiment suite...");
-        System.out.println();
-
-        // Call ExperimentRunner
         ExperimentRunner.main(args);
 
-        System.out.println();
-        System.out.println("╔════════════════════════════════════════════════════════════════╗");
-        System.out.println("║                    GENERATING FIGURES                          ║");
-        System.out.println("╚════════════════════════════════════════════════════════════════╝");
-        System.out.println();
-
-        // Generate figures using Python scripts
+        // Optionally generate figures (requires python3)
         generateFigures();
 
-        System.out.println();
-        System.out.println("╔════════════════════════════════════════════════════════════════╗");
-        System.out.println("║                    ALL DONE! ✓                                 ║");
-        System.out.println("╠════════════════════════════════════════════════════════════════╣");
-        System.out.println("║  Results saved in: results/                                    ║");
-        System.out.println("║  Figures saved in: results/figures/                            ║");
-        System.out.println("╚════════════════════════════════════════════════════════════════╝");
+        System.out.println("Done. Results: results/ , Figures: results/figures/");
     }
 
     private static void generateFigures() {

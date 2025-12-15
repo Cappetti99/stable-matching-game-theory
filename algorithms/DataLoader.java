@@ -26,7 +26,7 @@ public class DataLoader {
         BufferedReader reader = new BufferedReader(new FileReader(filename));
         String line;
         boolean firstLine = true;
-        Random rand = new Random(); // No seed for true randomness
+        Random rand = SeededRandom.forScope("DataLoader.loadVMsFromCSV:" + filename);
 
         while ((line = reader.readLine()) != null) {
             // Skip header, comments and empty lines
@@ -73,7 +73,7 @@ public class DataLoader {
      * @param vms List of VMs to apply bandwidth to
      */
     public static void loadBandwidthFromCSV(String filename, List<VM> vms) throws IOException {
-        Random rand = new Random(); // No seed for true randomness
+        Random rand = SeededRandom.forScope("DataLoader.loadBandwidthFromCSV:" + filename);
         
         // Generate random bandwidth for all VM pairs: [20, 30] Mbps
         for (VM vmI : vms) {
@@ -99,7 +99,7 @@ public class DataLoader {
         BufferedReader reader = new BufferedReader(new FileReader(filename));
         String line;
         boolean firstLine = true;
-        Random rand = new Random(); // No seed for true randomness
+        Random rand = SeededRandom.forScope("DataLoader.loadTaskBasicInfo:" + filename);
 
         while ((line = reader.readLine()) != null) {
             // Skip header, comments and empty lines
