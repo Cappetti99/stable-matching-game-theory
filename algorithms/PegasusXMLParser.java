@@ -8,8 +8,18 @@ import org.w3c.dom.*;
  * Parser per file XML Pegasus DAX
  * Converte workflow CyberShake ed Epigenomics in formato CSV per SM-CPTD
  * 
+ * IMPORTANTE: I valori numerici nei CSV generati (task sizes, VM capacities, bandwidth)
+ * vengono IGNORATI da DataLoader, che genera valori con distribuzione uniforme:
+ * - Task sizes: [500, 700] MIPS (uniform)
+ * - VM capacities: [10, 20] MIPS (uniform)
+ * - Bandwidth: [20, 30] Mbps (uniform)
+ * 
+ * I CSV sono usati SOLO per:
+ * - Struttura del DAG (predecessori/successori)
+ * - Numero e ID di task e VM
+ * 
  * Input: file .xml Pegasus DAX
- * Output: task.csv, dag.csv, vm.csv, processing_capacity.csv
+ * Output: task.csv, dag.csv, vm.csv, processing_capacity.csv, bandwidth.csv
  */
 public class PegasusXMLParser {
     

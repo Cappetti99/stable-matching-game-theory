@@ -55,11 +55,16 @@ public class SMCPTD {
     public void loadData(String dagFilename, String taskFilename, String vmFilename) throws IOException {
         System.out.println("🚀 SM-CPTD: Caricamento dati...");
 
-        // Carica dati in SMGT (che gestisce task e VM)
-        smgt.loadTasksFromCSV(dagFilename, taskFilename);
-        smgt.loadVMsFromCSV(vmFilename);
+        // Carica dati usando DataLoader
+        List<task> tasks = DataLoader.loadTasksFromCSV(dagFilename, taskFilename);
+        List<VM> vms = DataLoader.loadVMsFromCSV(vmFilename);
+        
+        // Imposta i dati in SMGT
+        smgt.setTasks(tasks);
+        smgt.setVMs(vms);
+        smgt.calculateTaskLevels();
 
-        System.out.println("✅ Dati caricati: " + smgt.getTasks().size() + " task, " + smgt.getVMs().size() + " VM");
+        System.out.println("✅ Dati caricati: " + tasks.size() + " task, " + vms.size() + " VM");
     }
 
     /**
@@ -80,9 +85,18 @@ public class SMCPTD {
             System.out.println("\n📍 STEP 1: Esecuzione DCP (Dynamic Critical Path)");
             Set<Integer> dcpResult = executeDCP(communicationCosts, vmMapping);
 
+            // STEP 1.5: Schedule CP tasks with greedy minimum finish time
+            System.out.println("\n⚡ STEP 1.5: Schedulazione task Critical Path (greedy)");
+            Map<Integer, Integer> cpSchedule = scheduleCPTasks(dcpResult, communicationCosts, vmMapping);
+
             // STEP 2: SMGT - Stable Matching Game Theory (excluding CP tasks)
-            System.out.println("\n🎮 STEP 2: Esecuzione SMGT (escludendo task del Critical Path)");
+            System.out.println("\n🎮 STEP 2: Esecuzione SMGT (task non-CP)");
             executeSMGTWithCP(dcpResult);
+
+            // STEP 2.5: Merge CP schedule with SMGT assignments
+            System.out.println("\n🔗 STEP 2.5: Unione schedulazione CP + SMGT");
+            Map<Integer, List<Integer>> mergedAssignments = mergeCPWithSMGT(cpSchedule, smgtAssignments);
+            smgtAssignments = mergedAssignments;
 
             // STEP 3: LOTD - List of Task Duplication
             System.out.println("\n📋 STEP 3: Esecuzione LOTD (List of Task Duplication)");
@@ -102,6 +116,133 @@ public class SMCPTD {
             e.printStackTrace();
             return smgtAssignments; // Fallback ai risultati SMGT
         }
+    }
+
+    /**
+     * STEP 1.5: Schedula i task del Critical Path con strategia greedy
+     * Ogni task CP viene assegnato alla VM che minimizza il finish time
+     */
+    private Map<Integer, Integer> scheduleCPTasks(
+            Set<Integer> CP,
+            Map<String, Double> communicationCosts,
+            Map<Integer, VM> vmMapping) {
+        
+        Map<Integer, Integer> cpTaskToVM = new HashMap<>();
+        Map<Integer, Double> cpTaskAFT = new HashMap<>();
+        Map<Integer, Double> vmAvailableTime = new HashMap<>();
+        
+        // Inizializza VM availability
+        for (Integer vmId : vmMapping.keySet()) {
+            vmAvailableTime.put(vmId, 0.0);
+        }
+        
+        // Ordina task CP in ordine topologico (usando levels)
+        List<Integer> sortedCP = new ArrayList<>(CP);
+        sortedCP.sort((t1, t2) -> {
+            Integer level1 = taskLevels.entrySet().stream()
+                .filter(e -> e.getValue().contains(t1))
+                .map(Map.Entry::getKey)
+                .findFirst().orElse(999);
+            Integer level2 = taskLevels.entrySet().stream()
+                .filter(e -> e.getValue().contains(t2))
+                .map(Map.Entry::getKey)
+                .findFirst().orElse(999);
+            return level1.compareTo(level2);
+        });
+        
+        System.out.println("   📋 Schedulazione " + sortedCP.size() + " task CP in ordine topologico");
+        
+        // Per ogni task CP (in ordine topologico)
+        for (Integer taskId : sortedCP) {
+            task cpTask = getTaskById(taskId);
+            if (cpTask == null) continue;
+            
+            // Trova VM con minimum finish time
+            int bestVM = -1;
+            double minFT = Double.POSITIVE_INFINITY;
+            
+            for (Map.Entry<Integer, VM> vmEntry : vmMapping.entrySet()) {
+                int vmId = vmEntry.getKey();
+                VM vm = vmEntry.getValue();
+                
+                // Calcola ST considerando predecessori già schedulati
+                double st = vmAvailableTime.get(vmId);
+                
+                // Considera communication time da predecessori CP già schedulati
+                for (Integer predId : cpTask.getPre()) {
+                    if (cpTaskToVM.containsKey(predId)) {
+                        int predVM = cpTaskToVM.get(predId);
+                        double predAFT = cpTaskAFT.get(predId);
+                        
+                        // Se predecessore su VM diversa, aggiungi communication cost
+                        if (predVM != vmId) {
+                            String commKey = predId + "_" + taskId;
+                            double commCost = communicationCosts.getOrDefault(commKey, 0.0);
+                            double bandwidth = vm.getBandwidthToVM(predVM);
+                            if (bandwidth > 0) {
+                                commCost = commCost / bandwidth;
+                            }
+                            st = Math.max(st, predAFT + commCost);
+                        } else {
+                            st = Math.max(st, predAFT);
+                        }
+                    }
+                }
+                
+                // Calcola ET e FT
+                double capacity = vm.getProcessingCapabilities().values().iterator().next();
+                double et = cpTask.getSize() / capacity;
+                double ft = st + et;
+                
+                if (ft < minFT) {
+                    minFT = ft;
+                    bestVM = vmId;
+                }
+            }
+            
+            // Assegna task a best VM
+            if (bestVM != -1) {
+                cpTaskToVM.put(taskId, bestVM);
+                cpTaskAFT.put(taskId, minFT);
+                vmAvailableTime.put(bestVM, minFT);
+            }
+        }
+        
+        System.out.println("   ✅ Task CP schedulati su " + 
+            new HashSet<>(cpTaskToVM.values()).size() + " VM diverse");
+        
+        return cpTaskToVM;
+    }
+
+    /**
+     * STEP 2.5: Unisce lo schedule dei task CP con gli assegnamenti SMGT
+     */
+    private Map<Integer, List<Integer>> mergeCPWithSMGT(
+            Map<Integer, Integer> cpSchedule,
+            Map<Integer, List<Integer>> smgtAssignments) {
+        
+        Map<Integer, List<Integer>> merged = new HashMap<>();
+        
+        // Copia assegnamenti SMGT
+        for (Map.Entry<Integer, List<Integer>> entry : smgtAssignments.entrySet()) {
+            merged.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+        }
+        
+        // Aggiungi task CP
+        for (Map.Entry<Integer, Integer> entry : cpSchedule.entrySet()) {
+            int taskId = entry.getKey();
+            int vmId = entry.getValue();
+            
+            merged.computeIfAbsent(vmId, k -> new ArrayList<>()).add(taskId);
+        }
+        
+        // Conta task per tipo
+        int cpCount = cpSchedule.size();
+        int smgtCount = smgtAssignments.values().stream().mapToInt(List::size).sum();
+        
+        System.out.println("   ✅ Merged: " + cpCount + " task CP + " + smgtCount + " task SMGT");
+        
+        return merged;
     }
 
     /**
@@ -129,6 +270,16 @@ public class SMCPTD {
         System.out.println("   📋 Task critici: " + criticalPathSet.toString());
 
         return criticalPathSet;
+    }
+
+    /**
+     * Helper: Trova task per ID
+     */
+    private task getTaskById(int taskId) {
+        return smgt.getTasks().stream()
+            .filter(t -> t.getID() == taskId)
+            .findFirst()
+            .orElse(null);
     }
 
     /**

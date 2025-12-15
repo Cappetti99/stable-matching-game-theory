@@ -302,11 +302,16 @@ public class ExperimentRunner {
                 System.out.print(".");
             }
             
-            // 2. Carica dati in SMGT
+            // 2. Carica dati usando DataLoader
             SMGT smgt = new SMGT();
-            smgt.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
-            smgt.loadVMsFromCSV(workflowDir + "/processing_capacity.csv");
-            smgt.loadBandwidthFromCSV(workflowDir + "/bandwidth.csv");
+            List<task> tasks = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
+            List<VM> vms = DataLoader.loadVMsFromCSV(workflowDir + "/processing_capacity.csv");
+            DataLoader.loadBandwidthFromCSV(workflowDir + "/bandwidth.csv", vms);
+            
+            // Imposta i dati in SMGT
+            smgt.setTasks(tasks);
+            smgt.setVMs(vms);
+            smgt.calculateTaskLevels();
             
             // 3. Calcola costi di comunicazione con CCR specificato
             Map<String, Double> commCosts = calculateCommunicationCosts(smgt, ccr);
@@ -354,9 +359,8 @@ public class ExperimentRunner {
         }
         
         // Usa il numero di task dalla prima run (sono sempre gli stessi)
-        SMGT smgt = new SMGT();
-        smgt.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
-        int actualTasks = smgt.getTasks().size();
+        List<task> tasks = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
+        int actualTasks = tasks.size();
         
         return new ExperimentResult(expName, workflow, actualTasks, numVMs, ccr, avgSLR, avgAVU, avgVF, avgMakespan);
     }

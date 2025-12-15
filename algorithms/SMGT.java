@@ -84,45 +84,27 @@ public class SMGT {
     }
 
     /**
+     * Sets the task list (used when loading data externally)
+     */
+    public void setTasks(List<task> tasks) {
+        this.tasks = tasks;
+    }
+
+    /**
+     * Sets the VM list (used when loading data externally)
+     */
+    public void setVMs(List<VM> vms) {
+        this.vms = vms;
+    }
+
+    /**
+     * Loads VM data from processing_capacity.csv
+     */
+    /**
      * Loads VM data from processing_capacity.csv
      */
     public void loadVMsFromCSV(String filename) throws IOException {
-        BufferedReader reader = new BufferedReader(new FileReader(filename));
-        String line;
-        boolean firstLine = true;
-
-        while ((line = reader.readLine()) != null) {
-            // Skip header, comments and empty lines
-            if (firstLine) {
-                firstLine = false;
-                if (line.contains("vm_id") || line.contains("processing"))
-                    continue; // Skip CSV header
-            }
-            if (line.startsWith("#") || line.trim().isEmpty()) {
-                continue;
-            }
-
-            // Support both CSV (comma) and whitespace separators
-            String[] parts;
-            if (line.contains(",")) {
-                parts = line.trim().split(",");
-            } else {
-                parts = line.trim().split("\\s+");
-            }
-
-            if (parts.length >= 2) {
-                // Parse various formats: vm0, 0, vm_0 -> 0
-                String vmIdStr = parts[0].trim().toLowerCase().replace("vm_", "").replace("vm", "");
-                int vmId = Integer.parseInt(vmIdStr);
-                double capacity = Double.parseDouble(parts[1].trim());
-
-                VM vm = new VM(vmId);
-                vm.addCapability("processing", capacity);
-                vm.addCapability("processingCapacity", capacity);
-                vms.add(vm);
-            }
-        }
-        reader.close();
+        vms = DataLoader.loadVMsFromCSV(filename);
     }
 
     /**
@@ -130,149 +112,17 @@ public class SMGT {
      * Format: vm_i,vm_j,bandwidth
      */
     public void loadBandwidthFromCSV(String filename) throws IOException {
-        File bandwidthFile = new File(filename);
-        if (!bandwidthFile.exists()) {
-            System.out.println("⚠️  Warning: bandwidth.csv not found, using default bandwidth");
-            return;
-        }
-        
-        BufferedReader reader = new BufferedReader(new FileReader(filename));
-        String line;
-        boolean firstLine = true;
-        
-        while ((line = reader.readLine()) != null) {
-            // Skip header and empty lines
-            if (firstLine) {
-                firstLine = false;
-                if (line.contains("vm_i") || line.contains("bandwidth")) continue;
-            }
-            if (line.startsWith("#") || line.trim().isEmpty()) {
-                continue;
-            }
-            
-            String[] parts = line.trim().split(",");
-            if (parts.length >= 3) {
-                int vmI = Integer.parseInt(parts[0].trim());
-                int vmJ = Integer.parseInt(parts[1].trim());
-                double bandwidth = Double.parseDouble(parts[2].trim());
-                
-                // Find VM and set bandwidth
-                for (VM vm : vms) {
-                    if (vm.getID() == vmI) {
-                        vm.setBandwidthToVM(vmJ, bandwidth);
-                        break;
-                    }
-                }
-            }
-        }
-        reader.close();
+        DataLoader.loadBandwidthFromCSV(filename, vms);
     }
     
     /**
      * Loads task data and builds the DAG structure
      */
     public void loadTasksFromCSV(String dagFilename, String taskFilename) throws IOException {
-        // First load task basic info if task.csv exists
-        File taskFile = new File(taskFilename);
-        if (taskFile.exists()) {
-            loadTaskBasicInfo(taskFilename);
-        }
-
-        // Load DAG structure
-        loadDAGStructure(dagFilename);
-
+        tasks = DataLoader.loadTasksFromCSV(dagFilename, taskFilename);
+        
         // Calculate levels for all tasks
         calculateTaskLevels();
-    }
-
-    private void loadTaskBasicInfo(String filename) throws IOException {
-        BufferedReader reader = new BufferedReader(new FileReader(filename));
-        String line;
-        boolean firstLine = true;
-
-        while ((line = reader.readLine()) != null) {
-            // Skip header, comments and empty lines
-            if (firstLine) {
-                firstLine = false;
-                if (line.contains("id") || line.contains("size"))
-                    continue; // Skip CSV header
-            }
-            if (line.startsWith("#") || line.trim().isEmpty()) {
-                continue;
-            }
-
-            // Support both CSV (comma) and whitespace separators
-            String[] parts;
-            if (line.contains(",")) {
-                parts = line.trim().split(",");
-            } else {
-                parts = line.trim().split("\\s+");
-            }
-
-            if (parts.length >= 2) {
-                int taskId = Integer.parseInt(parts[0].replace("t", "").trim());
-                double size = Double.parseDouble(parts[1].trim()); // #TODO: cambiare perchè è una distribuzione
-                                                                   // uniforme
-                double rank = 0.0; // Default rank if not provided, non lo calcola?
-
-                // If rank is provided as third column
-                if (parts.length >= 3) {
-                    try {
-                        rank = Double.parseDouble(parts[2].trim());
-                    } catch (NumberFormatException e) {
-                        // Ignore non-numeric third column
-                    }
-                }
-
-                task t = new task(taskId);
-                t.setSize(size);
-                t.setRank(rank);
-                tasks.add(t);
-            }
-        }
-        reader.close();
-    }
-
-    private void loadDAGStructure(String filename) throws IOException {
-        BufferedReader reader = new BufferedReader(new FileReader(filename));
-        String line;
-        boolean firstLine = true;
-
-        while ((line = reader.readLine()) != null) {
-            if (firstLine) {
-                firstLine = false;
-                continue; // Skip header
-            }
-
-            // Support both CSV (comma) and whitespace separators
-            String[] parts;
-            if (line.contains(",")) {
-                parts = line.trim().split(",");
-            } else {
-                parts = line.trim().split("\\s+");
-            }
-
-            if (parts.length >= 2) {
-                int predId = Integer.parseInt(parts[0].replace("t", "").trim());
-                int succId = Integer.parseInt(parts[1].replace("t", "").trim());
-
-                // Ensure tasks exist
-                ensureTaskExists(predId);
-                ensureTaskExists(succId);
-
-                // Add relationships
-                getTaskById(predId).getSucc().add(succId);
-                getTaskById(succId).getPre().add(predId);
-            }
-        }
-        reader.close();
-    }
-
-    private void ensureTaskExists(int taskId) {
-        if (getTaskById(taskId) == null) {
-            task t = new task(taskId);
-            tasks.add(t);
-        }
     }
 
     public task getTaskById(int taskId) {
@@ -285,7 +135,7 @@ public class SMGT {
     /**
      * Calculates the level of each task in the DAG using topological ordering
      */
-    private void calculateTaskLevels() {
+    public void calculateTaskLevels() {
         taskLevels.clear();
         levelTasks.clear();
 
