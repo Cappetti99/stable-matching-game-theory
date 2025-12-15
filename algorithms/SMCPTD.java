@@ -485,42 +485,29 @@ public class SMCPTD {
         System.out.println("   📈 Calcolo makespan e SLR...");
 
         try {
-            // Calcola makespan dai tempi (AST/AFT) calcolati da LOTD, che rispettano
-            // dipendenze tra task, trasmissioni dati e serializzazione su VM.
-            // Fallback: se LOTD non è disponibile o non ha AFT, usa il vecchio calcolo.
+            // CORREZIONE: Calcola makespan usando AFT da LOTD
+            // Paper Equazione 6: makespan = max(MS(VMk))
             if (lotd != null && lotd.getTaskAFT() != null && !lotd.getTaskAFT().isEmpty()) {
                 Map<Integer, Double> taskAFT = lotd.getTaskAFT();
                 makespan = taskAFT.values().stream()
                         .mapToDouble(Double::doubleValue)
                         .max()
                         .orElse(0.0);
+
+                System.out.println("   ✓ Makespan from LOTD AFT: " + String.format("%.3f", makespan));
             } else {
-                makespan = calculateMakespan(finalAssignments, smgt.getTasks(), vmMapping, communicationCosts);
+                // Fallback: calcolo semplificato
+                System.out.println("   ⚠️  LOTD AFT not available, using fallback calculation");
+                makespan = calculateMakespanFallback(finalAssignments, smgt.getTasks(), vmMapping, communicationCosts);
             }
 
-            // DEBUG: Verifica critical path
-            System.out.println("   🔍 DEBUG Critical Path: " + criticalPath);
-
-            // Calcola SLR
+            // Calcola SLR usando il critical path corretto
             Map<String, task> taskMap = new HashMap<>();
             for (task t : smgt.getTasks()) {
                 taskMap.put("t" + t.getID(), t);
-                taskMap.put(String.valueOf(t.getID()), t);
             }
 
-            // DEBUG: Verifica task map
-            System.out.println("   🔍 DEBUG Task Map keys: " + taskMap.keySet());
-
             if (!criticalPath.isEmpty()) {
-                // DEBUG: Verifica se i task del critical path sono nella mappa
-                for (Integer taskId : criticalPath) {
-                    String taskKey = "t" + taskId;
-                    if (!taskMap.containsKey(taskKey)) {
-                        System.err.println("   ⚠️  Task " + taskKey + " non trovato nella mappa!");
-                    }
-                }
-
-                // Calcola SLR manualmente per debug
                 double sumMinExecutionTimes = 0.0;
                 for (Integer taskId : criticalPath) {
                     task cpTask = taskMap.get("t" + taskId);
@@ -533,30 +520,18 @@ public class SMCPTD {
                         if (minET != Double.POSITIVE_INFINITY) {
                             sumMinExecutionTimes += minET;
                         }
-                        System.out.println("   🔍 Task t" + taskId + " minET: " + minET);
-                    } else {
-                        System.err.println("   ❌ Task t" + taskId + " non trovato!");
                     }
                 }
-
-                System.out.println("   🔍 Sum Min Execution Times: " + sumMinExecutionTimes);
-                System.out.println("   🔍 Makespan: " + makespan);
 
                 if (sumMinExecutionTimes > 0) {
                     slr = makespan / sumMinExecutionTimes;
                 } else {
-                    System.err.println("   ❌ Sum Min Execution Times è 0, usando fallback");
-                    double minExecSum = calculateMinExecutionTimeSum(smgt.getTasks(), vmMapping, "processing");
-                    slr = makespan / minExecSum;
+                    slr = Double.POSITIVE_INFINITY;
                 }
-            } else {
-                // Fallback SLR
-                double minExecSum = calculateMinExecutionTimeSum(smgt.getTasks(), vmMapping, "processing");
-                slr = makespan / minExecSum;
             }
 
-            System.out.println("   ✅ Metriche calcolate: Makespan=" + String.format("%.3f", makespan) +
-                    ", SLR=" + String.format("%.3f", slr));
+            System.out.println("   ✅ Metriche calcolate: Makespan=" +
+                    String.format("%.3f", makespan) + ", SLR=" + String.format("%.3f", slr));
 
         } catch (Exception e) {
             System.err.println("   ⚠️  Errore calcolo metriche: " + e.getMessage());
@@ -564,6 +539,39 @@ public class SMCPTD {
             makespan = 0.0;
             slr = Double.POSITIVE_INFINITY;
         }
+    }
+
+    /**
+     * Fallback per calcolo makespan quando LOTD AFT non disponibile
+     */
+    private double calculateMakespanFallback(Map<Integer, List<Integer>> assignments,
+            List<task> tasks,
+            Map<Integer, VM> vmMapping,
+            Map<String, Double> communicationCosts) {
+        double maxFinishTime = 0.0;
+
+        for (Map.Entry<Integer, List<Integer>> entry : assignments.entrySet()) {
+            int vmId = entry.getKey();
+            List<Integer> assignedTasks = entry.getValue();
+
+            if (assignedTasks.isEmpty())
+                continue;
+
+            VM vm = vmMapping.get(vmId);
+            double vmFinishTime = 0.0;
+
+            for (Integer taskId : assignedTasks) {
+                task t = findTaskById(tasks, taskId);
+                if (t != null) {
+                    double execTime = t.getSize() / vm.getCapability("processing");
+                    vmFinishTime += execTime;
+                }
+            }
+
+            maxFinishTime = Math.max(maxFinishTime, vmFinishTime);
+        }
+
+        return maxFinishTime;
     }
 
     /**

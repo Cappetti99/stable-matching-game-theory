@@ -368,24 +368,33 @@ public class LOTD {
     }
     
     /**
-     * Rule 2 (paper): accetta la duplicazione solo se non peggiora la schedulazione.
-     *
-     * Implementazione: verifica che il makespan globale non aumenti (entro epsilon).
+     * CORREZIONE: Rule 2 secondo il paper
+     * "The completion time of the OTHER TASKS in the waiting list of the selected VM cannot increase"
      */
     private boolean checkRule2(int vmId, Map<Integer, Double> oldAFT) {
-        double oldMakespan = oldAFT.values().stream()
-                .mapToDouble(Double::doubleValue)
-                .max()
-                .orElse(0.0);
+        List<Integer> vmTasks = vmSchedule.get(vmId);
 
-        double newMakespan = taskAFT.values().stream()
-                .mapToDouble(Double::doubleValue)
-                .max()
-                .orElse(0.0);
+        if (vmTasks == null || vmTasks.isEmpty()) {
+            return true;
+        }
 
-        if (newMakespan > oldMakespan + RULE2_EPSILON) {
-            System.out.println("    ✗ Makespan increased (Rule 2): " + oldMakespan + " -> " + newMakespan);
-            return false;
+        // Verifica che AFT non aumenti SOLO per task su questa VM
+        for (Integer taskId : vmTasks) {
+            if (taskId == null || taskId < 0) {
+                continue;
+            }
+
+            Double oldFT = oldAFT.get(taskId);
+            Double newFT = taskAFT.get(taskId);
+
+            if (oldFT != null && newFT != null) {
+                if (newFT > oldFT + RULE2_EPSILON) {
+                    System.out.println("    ✗ Rule 2 violated: t" + taskId +
+                            " AFT increased from " + String.format("%.4f", oldFT) +
+                            " to " + String.format("%.4f", newFT));
+                    return false;
+                }
+            }
         }
 
         return true;

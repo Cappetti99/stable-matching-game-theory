@@ -1,12 +1,18 @@
 #!/bin/bash
 
+set -euo pipefail
+
+# Esegui sempre dalla root del repo (indipendente dalla cwd)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$SCRIPT_DIR"
+
 echo "╔════════════════════════════════════════════════════════════════╗"
 echo "║     SM-CPTD PAPER EXPERIMENTS - Full Benchmark Suite          ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 
 # Vai nella directory degli algoritmi
-cd algorithms
+cd "$REPO_ROOT/algorithms"
 
 echo "📊 Generazione dati workflow con parametri del paper..."
 echo "   - Task sizes: [500, 700] distribuzione uniforme"
