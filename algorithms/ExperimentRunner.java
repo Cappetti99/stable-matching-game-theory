@@ -6,12 +6,12 @@ import java.util.*;
  * Usa workflow Pegasus pre-generati da WfCommons
  * 
  * Esperimento 1: Effetto del CCR (Figure 3-8)
- * - Small: 50, 100 task con 5 VM
- * - Medium: 500 task con 10 VM
- * - Large: 1000, 1500 task con 50 VM
+ * - Small: 50 task con 5 VM
+ * - Medium: 100 task con 10 VM
+ * - Large: 1000 task con 50 VM
  * 
  * Esperimento 2: Effetto del numero di VM (Figure 9-10)
- * - 1000 task con VM variabile: 10, 20, 30, 40, 50
+ * - 1000 task con VM variabile: 30, 35, 40, 45, 50, 55, 60, 65, 70
  * - CCR fisso a 1.0
  * 
  * Workflow Pegasus supportati:
@@ -22,7 +22,6 @@ import java.util.*;
  * 
  * Metriche: SLR, AVU, VF
  * 
- * @author Lorenzo Cappetti
  */
 public class ExperimentRunner {
     
@@ -31,8 +30,8 @@ public class ExperimentRunner {
     // ============================================================================
     
     // Numero di run multiple per stabilizzare i risultati
-    private static final int NUM_RUNS = 1;       // TEMPORANEO: 1 run per test veloce (poi riportare a 10)
-    private static final int WARMUP_RUNS = 0;    // TEMPORANEO: 0 warmup per test veloce (poi riportare a 1)
+    private static final int NUM_RUNS = 10;       // TEMPORANEO: 1 run per test veloce (poi riportare a 10)
+    private static final int WARMUP_RUNS = 1;    // TEMPORANEO: 0 warmup per test veloce (poi riportare a 1)
     
     // Workflow Pegasus XML reali dal paper (convertiti da XML a CSV)
     private static final String[] WORKFLOWS = {"cybershake", "epigenomics", "ligo", "montage"};
@@ -42,12 +41,12 @@ public class ExperimentRunner {
     
     // Experiment 1: CCR effect configurations (basato sui workflow Pegasus XML reali)
     // Configurazioni disponibili: 30-50-100-1000 task
-    private static final int[][] SMALL_CONFIGS = {{30, 5}, {50, 5}};  
+    private static final int[][] SMALL_CONFIGS = {{50, 5}};  
     private static final int[][] MEDIUM_CONFIGS = {{100, 10}};
     private static final int[][] LARGE_CONFIGS = {{1000, 50}};
     
     // Experiment 2: VM effect configurations
-    private static final int[] VM_COUNTS = {10, 20, 30, 40, 50};
+    private static final int[] VM_COUNTS = {30, 35, 40, 45, 50, 55, 60, 65, 70};
     private static final int FIXED_TASKS = 1000;
     private static final double FIXED_CCR = 1.0;
     
@@ -740,7 +739,7 @@ public class ExperimentRunner {
     }
     
     /**
-     * Test singolo per debug - CyberShake Small con CCR variabili
+     * Test singolo per debug - CyberShake Small con CCR variabili   RIMOVIBILE INUTILE!!! SOLO PER DEBUG VELOCE
      */
     private static void runTestSingle() {
         System.out.println("╔════════════════════════════════════════════════════════════════╗");

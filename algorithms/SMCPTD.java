@@ -596,18 +596,7 @@ public class SMCPTD {
 
     // ==================== UTILITY METHODS ====================
 
-    /**
-     * Trova il task di uscita (senza successori)
-     */
-    private task findExitTask(List<task> tasks) {
-        // Cerca task senza successori
-        for (task t : tasks) {
-            if (t.getSucc().isEmpty()) {
-                return t;
-            }
-        }
-        return tasks.get(tasks.size() - 1); // Fallback: ultimo task
-    }
+  
 
     /**
      * Calcola il makespan basato sugli assegnamenti CON correzione per CCR

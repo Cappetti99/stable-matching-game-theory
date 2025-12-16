@@ -10,7 +10,7 @@ public class DCP {
      * in funzione dell'algoritmo DCP
      */
 
-    // Original method kept for backward compatibility
+    
     public static Set<Integer> executeDCP(List<task> tasks, Map<Integer, List<Integer>> taskLevels,
             task exitTask, Map<String, Double> communicationCosts,
             Map<Integer, VM> vmMapping) {
@@ -86,9 +86,11 @@ public class DCP {
 
     // Calculate task weight W_i (average computation time for t_i across all VMs)
     private static double calculateTaskWeight(task t, Map<Integer, VM> vmMapping) {
+
         if (vmMapping == null || vmMapping.isEmpty()) {
-            // If no VM mapping, use task size as computation time
-            return t.getSize();
+        throw new IllegalArgumentException(
+            "Cannot compute Wi (average computation time): vmMapping is null or empty."
+            );
         }
 
         double totalComputationTime = 0.0;
@@ -109,35 +111,6 @@ public class DCP {
         return vmCount > 0 ? totalComputationTime / vmCount : t.getSize();
     }
 
-    /**
-     * Calculate MINIMUM execution time for a task across all VMs
-     * Kept for potential future use, but getAverageExecutionTime is preferred
-     */
-
-    /**
-     * Calculate AVERAGE execution time for a task across all VMs
-     * Used for realistic estimation of non-CP task completion times
-     * (as specified in paper Section 3.2.1)
-     */
-    private static double getAverageExecutionTime(task t, Map<Integer, VM> vmMapping) {
-        if (vmMapping == null || vmMapping.isEmpty()) {
-            return t.getSize();
-        }
-
-        double sumET = 0.0;
-        int count = 0;
-
-        for (VM vm : vmMapping.values()) {
-            double processingCapacity = vm.getCapability("processingCapacity");
-            if (processingCapacity > 0) {
-                double et = t.getSize() / processingCapacity;
-                sumET += et;
-                count++;
-            }
-        }
-
-        return count > 0 ? (sumET / count) : t.getSize();
-    }
 
     // Select task with maximum rank in a given level
     private static int selectMaxRankTask(List<Integer> tasksInLevel, Map<Integer, Double> taskRanks) {
@@ -157,117 +130,6 @@ public class DCP {
         }
 
         return maxRankTask;
-    }
-
-    // Utility method to organize tasks by levels using BFS (topological levels)
-    public static Map<Integer, List<Integer>> organizeTasksByLevels(List<task> tasks) {
-        Map<Integer, List<Integer>> levels = new HashMap<>();
-        Map<Integer, Integer> taskLevels = new HashMap<>();
-        Map<Integer, Set<Integer>> taskPredecessors = new HashMap<>();
-        Map<Integer, Integer> inDegree = new HashMap<>();
-
-        // Initialize data structures
-        for (task t : tasks) {
-            int taskId = t.getID();
-            taskPredecessors.put(taskId, new HashSet<>());
-            inDegree.put(taskId, 0);
-        }
-
-        // Build predecessor relationships and calculate in-degrees
-        for (task t : tasks) {
-            List<Integer> predecessors = t.getPre();
-            if (predecessors != null) {
-                for (int predId : predecessors) {
-                    taskPredecessors.get(t.getID()).add(predId);
-                    inDegree.put(t.getID(), inDegree.get(t.getID()) + 1);
-                }
-            }
-        }
-
-        // BFS approach for level calculation
-        Queue<Integer> queue = new LinkedList<>();
-
-        // Start with entry tasks (tasks with no predecessors)
-        for (task t : tasks) {
-            if (inDegree.get(t.getID()) == 0) {
-                queue.offer(t.getID());
-                taskLevels.put(t.getID(), 0);
-            }
-        }
-
-        // Process tasks level by level using BFS
-        while (!queue.isEmpty()) {
-            int currentTask = queue.poll();
-            int currentLevel = taskLevels.get(currentTask);
-
-            // Find all tasks that have this task as predecessor
-            for (task t : tasks) {
-                if (taskPredecessors.get(t.getID()).contains(currentTask)) {
-                    // Decrease in-degree
-                    inDegree.put(t.getID(), inDegree.get(t.getID()) - 1);
-
-                    // Update level (maximum of all predecessor levels + 1)
-                    int newLevel = currentLevel + 1;
-                    if (!taskLevels.containsKey(t.getID()) || taskLevels.get(t.getID()) < newLevel) {
-                        taskLevels.put(t.getID(), newLevel);
-                    }
-
-                    // If all predecessors processed, add to queue
-                    if (inDegree.get(t.getID()) == 0) {
-                        queue.offer(t.getID());
-                    }
-                }
-            }
-        }
-
-        // Group tasks by their levels
-        for (Map.Entry<Integer, Integer> entry : taskLevels.entrySet()) {
-            int taskId = entry.getKey();
-            int level = entry.getValue();
-
-            if (!levels.containsKey(level)) {
-                levels.put(level, new ArrayList<>());
-            }
-            levels.get(level).add(taskId);
-        }
-
-        return levels;
-    }
-
-    // Result class to hold DCP algorithm results
-    public static class DCPResult {
-        private Set<Integer> criticalPath;
-        private Map<Integer, Double> taskRanks;
-        private Map<Integer, List<Integer>> taskLevels;
-
-        public DCPResult(Set<Integer> criticalPath, Map<Integer, Double> taskRanks,
-                Map<Integer, List<Integer>> taskLevels) {
-            this.criticalPath = criticalPath;
-            this.taskRanks = taskRanks;
-            this.taskLevels = taskLevels;
-        }
-
-        // Getters
-        public Set<Integer> getCriticalPath() {
-            return criticalPath;
-        }
-
-        public Map<Integer, Double> getTaskRanks() {
-            return taskRanks;
-        }
-
-        public Map<Integer, List<Integer>> getTaskLevels() {
-            return taskLevels;
-        }
-
-        @Override
-        public String toString() {
-            return "DCPResult{" +
-                    "criticalPath=" + criticalPath +
-                    ", taskRanks=" + taskRanks +
-                    ", taskLevels=" + taskLevels +
-                    '}';
-        }
     }
 
     // Calculate rank iteratively following topological order (from exit to entry
@@ -325,4 +187,41 @@ public class DCP {
         double rank = Wi + maxSuccessorValue;
         taskRanks.put(taskId, rank);
     }
-}
+
+    // Result class to hold DCP algorithm results
+    public static class DCPResult {
+        private Set<Integer> criticalPath;
+        private Map<Integer, Double> taskRanks;
+        private Map<Integer, List<Integer>> taskLevels;
+
+        public DCPResult(Set<Integer> criticalPath, Map<Integer, Double> taskRanks,
+                Map<Integer, List<Integer>> taskLevels) {
+            this.criticalPath = criticalPath;
+            this.taskRanks = taskRanks;
+            this.taskLevels = taskLevels;
+        }
+
+        // Getters
+        public Set<Integer> getCriticalPath() {
+            return criticalPath;
+        }
+
+        public Map<Integer, Double> getTaskRanks() {
+            return taskRanks;
+        }
+
+        public Map<Integer, List<Integer>> getTaskLevels() {
+            return taskLevels;
+        }
+
+        @Override
+        public String toString() {
+            return "DCPResult{" +
+                    "criticalPath=" + criticalPath +
+                    ", taskRanks=" + taskRanks +
+                    ", taskLevels=" + taskLevels +
+                    '}';
+        }
+    }
+
+}    

@@ -9,7 +9,7 @@ import java.util.Random;
  */
 public final class SeededRandom {
 
-    private static volatile long seed = 42L;
+    private static volatile long seed = 4L;
 
     private SeededRandom() {
     }
