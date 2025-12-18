@@ -1,93 +1,274 @@
-
 import java.util.*;
 
+/**
+ * DCP: Dynamic Critical Path Algorithm
+ * 
+ * Algoritmo ricorsivo per calcolare i rank dei task e identificare il Critical
+ * Path.
+ * 
+ * Funzionamento:
+ * 1. Calcola ricorsivamente i rank di tutti i task (bottom-up dall'exit task)
+ * 2. Per ogni livello del DAG, seleziona il task con rank massimo
+ * 3. Restituisce il Critical Path come insieme di task ID
+ * 
+ * Formula del rank (ricorsiva):
+ * - rank(t_exit) = W_exit (peso computazionale dell'exit task)
+ * - rank(t_i) = W_i + max_{t_j ∈ succ(t_i)}(c_{i,j} + rank(t_j))
+ * 
+ * Dove:
+ * - W_i = average computation time del task su tutte le VM
+ * - c_{i,j} = costo di comunicazione tra task i e j
+ * 
+ * @author Lorenzo Cappetti
+ * @version 3.0 - Recursive Rank Calculation
+ */
 public class DCP {
 
     /**
-     * Backward compatibility: alcuni componenti usano ancora
-     * DCP.organizeTasksByLevels(...).
-     * La logica vive in Utility.
+     * METODO PRINCIPALE: Esegue l'algoritmo DCP completo
+     * 
+     * @param tasks              Lista completa dei task del DAG
+     * @param taskLevels         Mappa livello -> lista di task ID
+     * @param exitTask           Task di uscita del DAG
+     * @param communicationCosts Costi di comunicazione tra task (key:
+     *                           "taskId_succId")
+     * @param vmMapping          Mappa ID VM -> oggetto VM
+     * @return Set contenente i task ID del Critical Path
      */
-    public static Map<Integer, List<Integer>> organizeTasksByLevels(List<task> tasks) {
-        return Utility.organizeTasksByLevels(tasks);
-    }
-
-    /**
-     * Result class to hold complete DCP results including CP scheduling
-     * utilizzimo delle classi annidate perchè DCP deve restituire tante info, sono
-     * tutte qui dentro perchè esistono
-     * in funzione dell'algoritmo DCP
-     */
-
-    public static Set<Integer> executeDCP(List<task> tasks, Map<Integer, List<Integer>> taskLevels,
-            task exitTask, Map<String, Double> communicationCosts,
-            Map<Integer, VM> vmMapping) {
-
-        // Step 1: Initialize CP with an empty set
-        Set<Integer> CP = new HashSet<>();
-
-        // Step 2 & 3: Calculate ranks (Reuse logic)
-        Map<Integer, Double> taskRanks = calculateTaskRanks(tasks, exitTask, communicationCosts, vmMapping);
-
-        // Step 4: For each level l in the DAG do
-        // Select the task with the maximum rank in level l and add the task into CP
-        for (Map.Entry<Integer, List<Integer>> levelEntry : taskLevels.entrySet()) {
-            List<Integer> tasksInLevel = levelEntry.getValue();
-
-            // Find task with maximum rank in this level
-            int maxRankTask = selectMaxRankTask(tasksInLevel, taskRanks);
-            if (maxRankTask != -1) {
-                CP.add(maxRankTask);
-            }
-        }
-
-        return CP;
-    }
-
-    // Calculate rank for all tasks following the pseudocode approach
-    public static Map<Integer, Double> calculateTaskRanks(List<task> tasks, task exitTask,
+    public static Set<Integer> executeDCP(
+            List<task> tasks,
+            Map<Integer, List<Integer>> taskLevels,
+            task exitTask,
             Map<String, Double> communicationCosts,
             Map<Integer, VM> vmMapping) {
 
-        Map<Integer, Double> ranks = new HashMap<>();
-        Map<Integer, task> taskMap = new HashMap<>();
+        System.out.println("   🔍 DCP: Starting recursive rank calculation...");
 
-        // Create task lookup map
+        // STEP 1: Crea mappa task lookup per accesso rapido
+        Map<Integer, task> taskMap = new HashMap<>();
         for (task t : tasks) {
             taskMap.put(t.getID(), t);
         }
 
-        // Step 1: Calculate the rank of t_exit
-        double exitRank = calculateTaskWeight(exitTask, vmMapping); // W_exit (no successors)
+        // STEP 2: Calcola ricorsivamente i rank di tutti i task
+        Map<Integer, Double> taskRanks = calculateTaskRanksRecursive(
+                taskMap,
+                exitTask,
+                communicationCosts,
+                vmMapping);
+
+        System.out.println("   ✓ Ranks calculated for " + taskRanks.size() + " tasks");
+
+        // Debug: mostra alcuni rank
+        if (taskRanks.size() <= 10) {
+            System.out.println("   📊 Task ranks:");
+            taskRanks.entrySet().stream()
+                    .sorted(Map.Entry.<Integer, Double>comparingByValue().reversed())
+                    .forEach(e -> System.out.printf("      t%d: %.3f%n", e.getKey(), e.getValue()));
+        }
+
+        // STEP 3: Per ogni livello, seleziona il task con rank massimo
+        Set<Integer> criticalPath = buildCriticalPath(taskLevels, taskRanks);
+
+        System.out.println("   ✓ Critical Path constructed: " + criticalPath.size() + " tasks");
+
+        return criticalPath;
+    }
+
+    /**
+     * STEP 2: Calcola ricorsivamente i rank di tutti i task
+     * 
+     * Usa memoization per evitare ricalcoli:
+     * - Se il rank è già stato calcolato, lo ritorna subito
+     * - Altrimenti, calcola ricorsivamente partendo dai successori
+     * 
+     * @param taskMap            Mappa ID -> task object
+     * @param exitTask           Task di uscita (punto di partenza)
+     * @param communicationCosts Costi di comunicazione
+     * @param vmMapping          Mappa delle VM
+     * @return Mappa taskId -> rank
+     */
+    private static Map<Integer, Double> calculateTaskRanksRecursive(
+            Map<Integer, task> taskMap,
+            task exitTask,
+            Map<String, Double> communicationCosts,
+            Map<Integer, VM> vmMapping) {
+
+        Map<Integer, Double> ranks = new HashMap<>();
+
+        // CASO BASE: Calcola rank dell'exit task
+        double exitRank = calculateTaskWeight(exitTask, vmMapping);
         ranks.put(exitTask.getID(), exitRank);
 
-        // Step 2: For each task t_i in the DAG except the exit task do
-        // Calculate the rank of t_i by rank(t_i) = W_i + max_{t_j ∈ succ(t_i)}(c_{i,j}
-        // + rank(t_j))
-        for (task t : tasks) {
+        System.out.println("   📍 Exit task t" + exitTask.getID() +
+                " rank: " + String.format("%.3f", exitRank));
+
+        // RICORSIONE: Calcola rank di tutti gli altri task
+        for (task t : taskMap.values()) {
             if (t.getID() != exitTask.getID()) {
-                calculateRankRecursive(t.getID(), taskMap, ranks, communicationCosts, vmMapping);
+                calculateRankRecursive(
+                        t.getID(),
+                        taskMap,
+                        ranks,
+                        communicationCosts,
+                        vmMapping);
             }
         }
 
         return ranks;
     }
 
-    // Calculate task weight W_i (average computation time for t_i across all VMs)
+    /**
+     * Funzione ricorsiva per calcolare il rank di un singolo task
+     * 
+     * Formula: rank(t_i) = W_i + max_{t_j ∈ succ(t_i)}(c_{i,j} + rank(t_j))
+     * 
+     * @param taskId             ID del task da calcolare
+     * @param taskMap            Mappa completa dei task
+     * @param ranks              Mappa dei rank (memoization)
+     * @param communicationCosts Costi di comunicazione
+     * @param vmMapping          Mappa delle VM
+     */
+    private static void calculateRankRecursive(
+            int taskId,
+            Map<Integer, task> taskMap,
+            Map<Integer, Double> ranks,
+            Map<String, Double> communicationCosts,
+            Map<Integer, VM> vmMapping) {
+
+        // MEMOIZATION: Se già calcolato, ritorna subito
+        if (ranks.containsKey(taskId)) {
+            return;
+        }
+
+        task currentTask = taskMap.get(taskId);
+        if (currentTask == null) {
+            ranks.put(taskId, 0.0);
+            return;
+        }
+
+        // Calcola peso computazionale W_i
+        double Wi = calculateTaskWeight(currentTask, vmMapping);
+
+        // Ottieni lista successori
+        List<Integer> successors = currentTask.getSucc();
+
+        // CASO BASE: Nessun successore (questo dovrebbe essere solo l'exit task)
+        if (successors == null || successors.isEmpty()) {
+            ranks.put(taskId, Wi);
+            return;
+        }
+
+        // RICORSIONE: Calcola max_{t_j ∈ succ}(c_{i,j} + rank(t_j))
+        double maxSuccessorValue = 0.0;
+
+        for (int successorId : successors) {
+            // RICORSIONE: Assicurati che il rank del successore sia calcolato
+            if (!ranks.containsKey(successorId)) {
+                calculateRankRecursive(
+                        successorId,
+                        taskMap,
+                        ranks,
+                        communicationCosts,
+                        vmMapping);
+            }
+
+            // Ottieni costo comunicazione c_{i,j}
+            String commKey = taskId + "_" + successorId;
+            double communicationCost = communicationCosts.getOrDefault(commKey, 0.0);
+
+            // Ottieni rank del successore
+            double successorRank = ranks.getOrDefault(successorId, 0.0);
+
+            // Calcola c_{i,j} + rank(t_j)
+            double totalValue = communicationCost + successorRank;
+            maxSuccessorValue = Math.max(maxSuccessorValue, totalValue);
+        }
+
+        // FORMULA FINALE: rank(t_i) = W_i + max_{successor}(...)
+        double rank = Wi + maxSuccessorValue;
+        ranks.put(taskId, rank);
+    }
+
+    /**
+     * STEP 3: Costruisce il Critical Path selezionando il task con rank massimo
+     * per ogni livello del DAG
+     * 
+     * @param taskLevels Mappa livello -> lista di task ID
+     * @param taskRanks  Mappa taskId -> rank
+     * @return Set contenente i task ID del Critical Path
+     */
+    private static Set<Integer> buildCriticalPath(
+            Map<Integer, List<Integer>> taskLevels,
+            Map<Integer, Double> taskRanks) {
+
+        Set<Integer> criticalPath = new HashSet<>();
+
+        // Ordina i livelli (0, 1, 2, ...)
+        List<Integer> sortedLevels = new ArrayList<>(taskLevels.keySet());
+        Collections.sort(sortedLevels);
+
+        System.out.println("   🔍 Building Critical Path from " + sortedLevels.size() + " levels...");
+
+        // Per ogni livello, seleziona il task con rank massimo
+        for (Integer level : sortedLevels) {
+            List<Integer> tasksInLevel = taskLevels.get(level);
+
+            if (tasksInLevel == null || tasksInLevel.isEmpty()) {
+                continue;
+            }
+
+            // Trova task con rank massimo in questo livello
+            int maxRankTask = -1;
+            double maxRank = Double.NEGATIVE_INFINITY;
+
+            for (int taskId : tasksInLevel) {
+                double rank = taskRanks.getOrDefault(taskId, 0.0);
+                if (rank > maxRank) {
+                    maxRank = rank;
+                    maxRankTask = taskId;
+                }
+            }
+
+            // Aggiungi al Critical Path
+            if (maxRankTask != -1) {
+                criticalPath.add(maxRankTask);
+                System.out.println("      Level " + level + ": t" + maxRankTask +
+                        " (rank: " + String.format("%.3f", maxRank) + ")");
+            }
+        }
+
+        return criticalPath;
+    }
+
+    /**
+     * Calcola il peso computazionale W_i di un task
+     * 
+     * W_i = average(execution_time) su tutte le VM
+     * execution_time = task_size / vm_processing_capacity
+     * 
+     * @param t         Task da calcolare
+     * @param vmMapping Mappa delle VM
+     * @return Peso computazionale medio
+     */
     private static double calculateTaskWeight(task t, Map<Integer, VM> vmMapping) {
 
         if (vmMapping == null || vmMapping.isEmpty()) {
             throw new IllegalArgumentException(
-                    "Cannot compute Wi (average computation time): vmMapping is null or empty.");
+                    "Cannot compute task weight: vmMapping is null or empty");
         }
 
         double totalComputationTime = 0.0;
         int vmCount = 0;
 
-        // Calculate average computation time across all VMs
-        // W_i = average of (task_size / processing_capacity) for all VMs
+        // Calcola tempo medio di esecuzione su tutte le VM
         for (VM vm : vmMapping.values()) {
+            // Prova prima "processingCapacity", poi "processing"
             double processingCapacity = vm.getCapability("processingCapacity");
+            if (processingCapacity <= 0) {
+                processingCapacity = vm.getCapability("processing");
+            }
+
             if (processingCapacity > 0) {
                 double computationTime = t.getSize() / processingCapacity;
                 totalComputationTime += computationTime;
@@ -95,120 +276,8 @@ public class DCP {
             }
         }
 
-        // Return average computation time across all VMs
+        // Ritorna la media (o size del task se non ci sono VM valide)
         return vmCount > 0 ? totalComputationTime / vmCount : t.getSize();
-    }
-
-    // Select task with maximum rank in a given level
-    private static int selectMaxRankTask(List<Integer> tasksInLevel, Map<Integer, Double> taskRanks) {
-        if (tasksInLevel == null || tasksInLevel.isEmpty()) {
-            return -1;
-        }
-
-        int maxRankTask = -1;
-        double maxRank = Double.NEGATIVE_INFINITY;
-
-        for (int taskId : tasksInLevel) {
-            double rank = taskRanks.getOrDefault(taskId, 0.0);
-            if (rank > maxRank) {
-                maxRank = rank;
-                maxRankTask = taskId;
-            }
-        }
-
-        return maxRankTask;
-    }
-
-    // Calculate rank recursively following topological order (from exit to entry
-    // tasks)
-    private static void calculateRankRecursive(int taskId, Map<Integer, task> taskMap,
-            Map<Integer, Double> taskRanks,
-            Map<String, Double> communicationCosts,
-            Map<Integer, VM> vmMapping) {
-
-        // If already calculated, return
-        if (taskRanks.containsKey(taskId)) {
-            return;
-        }
-
-        task currentTask = taskMap.get(taskId);
-        if (currentTask == null) {
-            taskRanks.put(taskId, 0.0);
-            return;
-        }
-
-        // Get task weight W_i
-        double Wi = calculateTaskWeight(currentTask, vmMapping);
-
-        // Get successors
-        List<Integer> successors = currentTask.getSucc();
-
-        // If no successors, rank = W_i (this should only be exit task)
-        if (successors == null || successors.isEmpty()) {
-            taskRanks.put(taskId, Wi);
-            return;
-        }
-
-        // Calculate max_{t_j ∈ succ(t_i)}(c_{i,j} + rank(t_j))
-        double maxSuccessorValue = 0.0;
-
-        for (int successorId : successors) {
-            // Ensure successor rank is calculated first (recursive dependency)
-            if (!taskRanks.containsKey(successorId)) {
-                calculateRankRecursive(successorId, taskMap, taskRanks, communicationCosts, vmMapping);
-            }
-
-            // Get communication cost c_{i,j} (average communication time for edge (t_i,
-            // t_j))
-            String commKey = taskId + "_" + successorId;
-            double communicationCost = communicationCosts.getOrDefault(commKey, 0.0);
-
-            // Get rank of successor
-            double successorRank = taskRanks.getOrDefault(successorId, 0.0);
-
-            double totalValue = communicationCost + successorRank;
-            maxSuccessorValue = Math.max(maxSuccessorValue, totalValue);
-        }
-
-        // rank(t_i) = W_i + max_{t_j ∈ succ(t_i)}(c_{i,j} + rank(t_j))
-        double rank = Wi + maxSuccessorValue;
-        taskRanks.put(taskId, rank);
-    }
-
-    // Result class to hold DCP algorithm results
-    public static class DCPResult {
-        private Set<Integer> criticalPath;
-        private Map<Integer, Double> taskRanks;
-        private Map<Integer, List<Integer>> taskLevels;
-
-        public DCPResult(Set<Integer> criticalPath, Map<Integer, Double> taskRanks,
-                Map<Integer, List<Integer>> taskLevels) {
-            this.criticalPath = criticalPath;
-            this.taskRanks = taskRanks;
-            this.taskLevels = taskLevels;
-        }
-
-        // Getters
-        public Set<Integer> getCriticalPath() {
-            return criticalPath;
-        }
-
-        public Map<Integer, Double> getTaskRanks() {
-            return taskRanks;
-        }
-
-        public Map<Integer, List<Integer>> getTaskLevels() {
-            return taskLevels;
-        }
-
-        @Override
-        public String toString() {
-            return "DCPResult{" +
-                    "criticalPath=" + criticalPath +
-                    ", taskRanks=" + taskRanks +
-                    ", taskLevels=" + taskLevels +
-                    '}';
-        }
     }
 
 }
