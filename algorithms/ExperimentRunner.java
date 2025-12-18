@@ -30,8 +30,8 @@ public class ExperimentRunner {
     // ============================================================================
     
     // Numero di run multiple per stabilizzare i risultati
-    private static final int NUM_RUNS = 10;       // TEMPORANEO: 1 run per test veloce (poi riportare a 10)
-    private static final int WARMUP_RUNS = 1;    // TEMPORANEO: 0 warmup per test veloce (poi riportare a 1)
+    private static final int NUM_RUNS = 1;       // TEMPORANEO: 1 run per test veloce (poi riportare a 10)
+    private static final int WARMUP_RUNS = 0;    // TEMPORANEO: 0 warmup per test veloce (poi riportare a 1)
     
     // Workflow Pegasus XML reali dal paper (convertiti da XML a CSV)
     private static final String[] WORKFLOWS = {"cybershake", "epigenomics", "ligo", "montage"};
@@ -40,7 +40,7 @@ public class ExperimentRunner {
     private static final double[] CCR_VALUES = {0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0};
     
     // Experiment 1: CCR effect configurations (basato sui workflow Pegasus XML reali)
-    // Configurazioni disponibili: 30-50-100-1000 task
+    // Configurazioni disponibili: 50-100-1000 task
     private static final int[][] SMALL_CONFIGS = {{50, 5}};  
     private static final int[][] MEDIUM_CONFIGS = {{100, 10}};
     private static final int[][] LARGE_CONFIGS = {{1000, 50}};
@@ -120,7 +120,7 @@ public class ExperimentRunner {
                 runExp1 = false;
                 runExp2 = true;
             } else if (arg.startsWith("--workflow=")) {
-                singleWorkflow = arg.substring(11).toUpperCase();
+                singleWorkflow = arg.substring(11).trim().toLowerCase(Locale.ROOT);
             }
         }
         
@@ -204,7 +204,12 @@ public class ExperimentRunner {
                     ExperimentResult result = runSingleExperiment(
                         workflow, tasks, numVMs, FIXED_CCR, "EXP2_VM", NUM_RUNS, WARMUP_RUNS
                     );
+                    if (result == null) {
+                        System.out.println("⚠️  Skipped (workflow non trovato)");
+                        continue;
+                    }
                     results.add(result);
+                    checkpointSave();
                     System.out.printf("SLR=%.4f, AVU=%.4f, VF=%.6f (avg of %d runs)%n", 
                         result.slr, result.avu, result.vf, NUM_RUNS);
                 } catch (Exception e) {
@@ -228,7 +233,12 @@ public class ExperimentRunner {
                     ExperimentResult result = runSingleExperiment(
                         workflow, numTasks, numVMs, ccr, expName, NUM_RUNS, WARMUP_RUNS
                     );
+                    if (result == null) {
+                        System.out.println("⚠️  Skipped (workflow non trovato)");
+                        continue;
+                    }
                     results.add(result);
+                    checkpointSave();
                     System.out.printf("SLR=%.4f, AVU=%.4f, VF=%.6f (avg of %d runs)%n", 
                         result.slr, result.avu, result.vf, NUM_RUNS);
                 } catch (Exception e) {
@@ -236,6 +246,22 @@ public class ExperimentRunner {
                 }
             }
         }
+    }
+
+    private static File ensureResultsDir() {
+        File resultsDir = new File("../results");
+        if (!resultsDir.exists()) {
+            resultsDir.mkdirs();
+        }
+        return resultsDir;
+    }
+
+    /**
+     * Salvataggio incrementale: utile per non perdere dati se l'esecuzione si interrompe.
+     */
+    private static void checkpointSave() {
+        saveResultsToCSV(false);
+        saveResultsToJSON(false);
     }
     
     /**
@@ -303,19 +329,21 @@ public class ExperimentRunner {
             }
             
             // 2. Carica dati UNA SOLA VOLTA (DataLoader genera valori random)
-            SMCPTD smcptd = new SMCPTD();
-            smcptd.loadData(workflowDir + "/dag.csv", workflowDir + "/task.csv", workflowDir + "/processing_capacity.csv");
+            // ExperimentRunner è l'entry point: prepara task/VM e li passa a SMCPTD.
+            List<task> tasks = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
+            List<VM> vms = DataLoader.loadVMsFromCSV(workflowDir + "/processing_capacity.csv");
+            DataLoader.loadBandwidthFromCSV(workflowDir + "/bandwidth.csv", vms);
 
-            // Usa gli stessi task/VM dell'istanza SMCPTD per evitare incoerenze
+            SMCPTD smcptd = new SMCPTD();
+            smcptd.setInputData(tasks, vms);
             SMGT smgt = smcptd.getSMGT();
-            DataLoader.loadBandwidthFromCSV(workflowDir + "/bandwidth.csv", smgt.getVMs());
 
             // 3. Calcola costi di comunicazione con CCR specificato
             Map<String, Double> commCosts = calculateCommunicationCosts(smgt, ccr);
 
             // 4. Crea mapping VM
             Map<Integer, VM> vmMapping = new HashMap<>();
-            for (VM vm : smgt.getVMs()) {
+            for (VM vm : vms) {
                 vmMapping.put(vm.getID(), vm);
             }
 
@@ -354,8 +382,8 @@ public class ExperimentRunner {
         }
         
         // Usa il numero di task dalla prima run (sono sempre gli stessi)
-        List<task> tasks = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
-        int actualTasks = tasks.size();
+        List<task> tasksForCount = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
+        int actualTasks = tasksForCount.size();
         
         return new ExperimentResult(expName, workflow, actualTasks, numVMs, ccr, avgSLR, avgAVU, avgVF, avgMakespan);
     }
@@ -670,12 +698,21 @@ public class ExperimentRunner {
      * Salva risultati in CSV
      */
     private static void saveResultsToCSV() {
-        try (PrintWriter writer = new PrintWriter("../results/experiments_results.csv")) {
+        saveResultsToCSV(true);
+    }
+
+    private static void saveResultsToCSV(boolean verbose) {
+        File outFile = new File(ensureResultsDir(), "experiments_results.csv");
+        try (PrintWriter writer = new PrintWriter(outFile)) {
             writer.println("experiment,workflow,tasks,vms,ccr,slr,avu,vf,makespan");
             for (ExperimentResult r : results) {
-                writer.println(r.toString());
+                if (r != null) {
+                    writer.println(r.toString());
+                }
             }
-            System.out.println("\n✅ Risultati salvati: results/experiments_results.csv");
+            if (verbose) {
+                System.out.println("\n✅ Risultati salvati: results/experiments_results.csv");
+            }
         } catch (Exception e) {
             System.err.println("❌ Errore salvataggio CSV: " + e.getMessage());
         }
@@ -685,23 +722,41 @@ public class ExperimentRunner {
      * Salva risultati in JSON
      */
     private static void saveResultsToJSON() {
-        try (PrintWriter writer = new PrintWriter("../results/experiments_results.json")) {
+        saveResultsToJSON(true);
+    }
+
+    private static void saveResultsToJSON(boolean verbose) {
+        File outFile = new File(ensureResultsDir(), "experiments_results.json");
+        try (PrintWriter writer = new PrintWriter(outFile)) {
             writer.println("{");
             writer.println("  \"experiments\": [");
-            
-            for (int i = 0; i < results.size(); i++) {
-                ExperimentResult r = results.get(i);
+
+            int totalToWrite = 0;
+            for (ExperimentResult r : results) {
+                if (r != null) totalToWrite++;
+            }
+
+            int written = 0;
+            for (ExperimentResult r : results) {
+                if (r == null) continue;
                 writer.printf(Locale.US, "    {\"experiment\": \"%s\", \"workflow\": \"%s\", \"tasks\": %d, " +
                              "\"vms\": %d, \"ccr\": %.1f, \"slr\": %.4f, \"avu\": %.4f, " +
-                             "\"vf\": %.6f, \"makespan\": %.4f}%s%n",
+                             "\"vf\": %.6f, \"makespan\": %.4f}",
                     r.experiment, r.workflow, r.numTasks, r.numVMs, r.ccr,
-                    r.slr, r.avu, r.vf, r.makespan,
-                    i < results.size() - 1 ? "," : "");
+                    r.slr, r.avu, r.vf, r.makespan);
+                written++;
+                if (written < totalToWrite) {
+                    writer.println(",");
+                } else {
+                    writer.println();
+                }
             }
             
             writer.println("  ]");
             writer.println("}");
-            System.out.println("✅ Risultati salvati: results/experiments_results.json");
+            if (verbose) {
+                System.out.println("✅ Risultati salvati: results/experiments_results.json");
+            }
         } catch (Exception e) {
             System.err.println("❌ Errore salvataggio JSON: " + e.getMessage());
         }
@@ -764,6 +819,11 @@ public class ExperimentRunner {
                     NUM_RUNS,      // numRuns
                     WARMUP_RUNS    // warmupRuns
                 );
+
+                if (result == null) {
+                    System.out.println("⚠️  Skipped (workflow non trovato)");
+                    continue;
+                }
                 
                 System.out.printf(Locale.US, "%.1f\t%.3f\t%.1f%%\t%.6f\t%.2f%n",
                     result.ccr,

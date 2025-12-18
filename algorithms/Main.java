@@ -28,6 +28,18 @@ public class Main {
                 return;
             }
 
+            // Check Python deps (avoid running the script just to crash with a traceback)
+            pb = new ProcessBuilder("python3", "-c", "import pandas as pd");
+            pb.redirectErrorStream(true);
+            process = pb.start();
+            exitCode = process.waitFor();
+            if (exitCode != 0) {
+                System.out.println("Python deps not found (missing 'pandas'). Skipping figure generation.");
+                System.out.println("To enable figures: pip3 install pandas");
+                System.out.println("Then rerun: cd generators && python3 generate_paper_figures.py --auto");
+                return;
+            }
+
             pb = new ProcessBuilder("python3", "generate_paper_figures.py", "--auto");
             pb.directory(new File("../generators"));
             pb.redirectErrorStream(true);

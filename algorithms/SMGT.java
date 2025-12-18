@@ -34,7 +34,8 @@ public class SMGT {
      * - `level` è il livello $l$ del paper (1-indexed).
      * - I livelli del DAG in questa implementazione sono 0-indexed.
      *
-     * Formula (pseudocodice): threshold(VM_k, l) = ⌊(Σ_{v=0}^{l-1} n_v / Σp_i) × p_k⌋
+     * Formula (pseudocodice): threshold(VM_k, l) = ⌊(Σ_{v=0}^{l-1} n_v / Σp_i) ×
+     * p_k⌋
      */
     public int calculateInitialThreshold(int vmIndex, int level) {
         if (vmIndex >= vms.size() || level < 0) {
@@ -105,9 +106,6 @@ public class SMGT {
     /**
      * Loads VM data from processing_capacity.csv
      */
-    /**
-     * Loads VM data from processing_capacity.csv
-     */
     public void loadVMsFromCSV(String filename) throws IOException {
         vms = DataLoader.loadVMsFromCSV(filename);
     }
@@ -119,13 +117,13 @@ public class SMGT {
     public void loadBandwidthFromCSV(String filename) throws IOException {
         DataLoader.loadBandwidthFromCSV(filename, vms);
     }
-    
+
     /**
      * Loads task data and builds the DAG structure
      */
     public void loadTasksFromCSV(String dagFilename, String taskFilename) throws IOException {
         tasks = DataLoader.loadTasksFromCSV(dagFilename, taskFilename);
-        
+
         // Calculate levels for all tasks
         calculateTaskLevels();
     }
@@ -339,7 +337,37 @@ public class SMGT {
 
         // Processa ogni livello
         for (Integer level : levels) {
-            processLevel(level, criticalPath, finalAssignments);
+            processLevel(level, criticalPath, null, finalAssignments);
+        }
+
+        return finalAssignments;
+    }
+
+    /**
+     * Variante di SMGT che integra uno scheduling pre-calcolato per i task del Critical Path.
+     * 
+     * Nota: la mappa cpSchedule deve usare gli stessi identificativi VM usati in SMGT
+     * (in questa implementazione, gli indici 0..|VM|-1).
+     */
+    public Map<Integer, List<Integer>> runSMGT(Set<Integer> criticalPath, Map<Integer, Integer> cpSchedule) {
+        Map<Integer, List<Integer>> finalAssignments = new HashMap<>();
+
+        // Inizializza schedule vuoto
+        for (int i = 0; i < vms.size(); i++) {
+            finalAssignments.put(i, new ArrayList<>());
+        }
+
+        // Ottieni livelli ordinati
+        List<Integer> levels = new ArrayList<>(levelTasks.keySet());
+        Collections.sort(levels);
+
+        System.out.println("=== SMGT Algorithm Start ===");
+        System.out.println("Critical Path: " + criticalPath);
+        System.out.println("CP schedule provided: " + (cpSchedule != null));
+
+        // Processa ogni livello
+        for (Integer level : levels) {
+            processLevel(level, criticalPath, cpSchedule, finalAssignments);
         }
 
         return finalAssignments;
@@ -348,7 +376,7 @@ public class SMGT {
     /**
      * Processa un singolo livello secondo pseudocodice
      */
-    private void processLevel(int level, Set<Integer> criticalPath,
+        private void processLevel(int level, Set<Integer> criticalPath, Map<Integer, Integer> cpSchedule,
             Map<Integer, List<Integer>> finalAssignments) {
 
         System.out.println("\n--- Processing Level " + level + " ---");
@@ -369,25 +397,48 @@ public class SMGT {
 
         int fastestVM = getFastestVM();
 
+        // Assegna i task CP usando lo schedule fornito, altrimenti fallback alla VM più veloce.
+        Map<Integer, Integer> cpCountPerVm = new HashMap<>();
         for (Integer t : cpTasks) {
-            finalAssignments.get(fastestVM).add(t);
-            System.out.println("✓ CP task t" + t + " assigned to VM" + fastestVM);
+            int targetVm = fastestVM;
+            if (cpSchedule != null) {
+                Integer mapped = cpSchedule.get(t);
+                if (mapped != null) {
+                    targetVm = mapped;
+                }
+            }
+            finalAssignments.get(targetVm).add(t);
+            cpCountPerVm.put(targetVm, cpCountPerVm.getOrDefault(targetVm, 0) + 1);
+            System.out.println("✓ CP task t" + t + " assigned to VM" + targetVm);
         }
 
         System.out.println("Tasks to assign: " + unassigned);
 
         // Linee 7-11: Calcola threshold e inizializza waiting lists
         Map<Integer, VMThreshold> vmThresholds = new HashMap<>();
+        int totalThreshold = 0;
         for (int vmIndex = 0; vmIndex < vms.size(); vmIndex++) {
             int threshold = calculateInitialThreshold(vmIndex, level + 1);
-            if (vmIndex == fastestVM) {
-                threshold -= cpTasks.size();
-                threshold = Math.max(0, threshold);
-            }
+
+            // Riduci la capacità del livello per i task CP già allocati su questa VM.
+            int cpOnThisVm = cpCountPerVm.getOrDefault(vmIndex, 0);
+            threshold -= cpOnThisVm;
+            threshold = Math.max(0, threshold);
 
             vmThresholds.put(vmIndex, new VMThreshold(threshold));
 
+            totalThreshold += threshold;
+
             System.out.println("VM" + vmIndex + " threshold: " + threshold);
+        }
+
+        // Se per arrotondamento (floor) la capacità totale del livello è insufficiente,
+        // garantisci comunque che tutti i task del livello possano essere assegnati.
+        int deficit = unassigned.size() - totalThreshold;
+        if (deficit > 0) {
+            VMThreshold fastest = vmThresholds.get(fastestVM);
+            fastest.remaining += deficit;
+            System.out.println("⚠️ Threshold deficit " + deficit + " -> added to VM" + fastestVM);
         }
 
         // Linee 14-19: Genera preference list per task (DINAMICA)
@@ -407,10 +458,24 @@ public class SMGT {
 
             // Linea 33: prima VM in preference(ti)
             List<Integer> tiPrefs = taskPreferences.get(ti);
+            
             if (tiPrefs.isEmpty()) {
-                System.out.println("Task t" + ti + " has no more VM preferences!");
+                int bestVM = -1;
+                double bestFT = Double.MAX_VALUE;
+
+                for (int vm = 0; vm < vms.size(); vm++) {
+                    double ft = calculateFinishTime(ti, vm);
+                    if (ft < bestFT) {
+                        bestFT = ft;
+                        bestVM = vm;
+                    }
+                }
+
+                finalAssignments.get(bestVM).add(ti);
+                System.out.println("⚠️ Forced best-FT assignment of t" + ti + " to VM" + bestVM);
                 continue;
             }
+
 
             Integer vmk = tiPrefs.get(0);
             VMThreshold vmThreshold = vmThresholds.get(vmk);
@@ -513,6 +578,30 @@ public class SMGT {
         return bestVm;
     }
 
-    
+        /**
+     * Wrapper per generare pre-schedule senza critical path
+     * Necessario per LOTD
+     */
+    public Map<Integer, List<Integer>> runSMGTAlgorithmCorrect() {
+        return runSMGT(new HashSet<>()); // CP vuoto
+    }
+
+        /**
+     * Restituisce i task in ordine topologico (livelli del DAG)
+     */
+    public List<task> getTasksTopologicallySorted() {
+        List<task> sorted = new ArrayList<>();
+        List<Integer> levels = new ArrayList<>(levelTasks.keySet());
+        Collections.sort(levels);
+        for (int l : levels) {
+            for (int taskId : levelTasks.get(l)) {
+                task t = getTaskById(taskId);
+                if (t != null) sorted.add(t);
+            }
+        }
+        return sorted;
+    }
+
+
 
 }

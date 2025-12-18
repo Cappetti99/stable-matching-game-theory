@@ -16,7 +16,7 @@ cd "$REPO_ROOT/algorithms"
 
 echo "📊 Generazione dati workflow con parametri del paper..."
 echo "   - Task sizes: [500, 700] distribuzione uniforme"
-echo "   - VM capacities: [20, 30] distribuzione uniforme"
+echo "   - VM capacities: [10, 20] distribuzione uniforme"
 echo "   - Bandwidth: [20, 30] distribuzione uniforme"
 echo ""
 
@@ -44,8 +44,14 @@ echo ""
 echo "🚀 Avvio esperimenti..."
 echo ""
 
-# Esegui il Main
-java Main
+# Entry point: Main -> ExperimentRunner
+# Puoi passare parametri, ad es:
+#   ./run.sh --exp1
+#   ./run.sh --exp2
+#   ./run.sh --workflow=cybershake
+#   ./run.sh test_single
+#   ./run.sh --seed 123
+java Main "$@"
 
 exit_code=$?
 
@@ -56,7 +62,7 @@ if [ $exit_code -eq 0 ]; then
     echo "📁 Risultati salvati in:"
     echo "   - results/experiments_results.csv"
     echo "   - results/experiments_results.json"
-    echo "   - results/figures/ (grafici)"
+    echo "   - results/figures/ (grafici, opzionale: richiede dipendenze Python)"
 else
     echo "⚠️  Esecuzione completata con codice $exit_code"
 fi

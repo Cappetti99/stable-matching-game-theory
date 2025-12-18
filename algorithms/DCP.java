@@ -4,13 +4,21 @@ import java.util.*;
 public class DCP {
 
     /**
+     * Backward compatibility: alcuni componenti usano ancora
+     * DCP.organizeTasksByLevels(...).
+     * La logica vive in Utility.
+     */
+    public static Map<Integer, List<Integer>> organizeTasksByLevels(List<task> tasks) {
+        return Utility.organizeTasksByLevels(tasks);
+    }
+
+    /**
      * Result class to hold complete DCP results including CP scheduling
      * utilizzimo delle classi annidate perchè DCP deve restituire tante info, sono
      * tutte qui dentro perchè esistono
      * in funzione dell'algoritmo DCP
      */
 
-    
     public static Set<Integer> executeDCP(List<task> tasks, Map<Integer, List<Integer>> taskLevels,
             task exitTask, Map<String, Double> communicationCosts,
             Map<Integer, VM> vmMapping) {
@@ -18,27 +26,8 @@ public class DCP {
         // Step 1: Initialize CP with an empty set
         Set<Integer> CP = new HashSet<>();
 
-        // Step 2: Calculate the rank of t_exit
-        Map<Integer, Double> taskRanks = new HashMap<>();
-        Map<Integer, task> taskMap = new HashMap<>();
-
-        // Create task lookup map
-        for (task t : tasks) {
-            taskMap.put(t.getID(), t);
-        }
-
-        // Calculate rank of exit task first
-        double exitRank = calculateTaskWeight(exitTask, vmMapping); // W_exit (no successors)
-        taskRanks.put(exitTask.getID(), exitRank);
-
-        // Step 3: For each task t_i in the DAG except the exit task do
-        // Calculate the rank of t_i by rank(t_i) = W_i + max_{t_j ∈ succ(t_i)}(c_{i,j}
-        // + rank(t_j))
-        for (task t : tasks) {
-            if (t.getID() != exitTask.getID()) {
-                calculateRankIterative(t.getID(), taskMap, taskRanks, communicationCosts, vmMapping);
-            }
-        }
+        // Step 2 & 3: Calculate ranks (Reuse logic)
+        Map<Integer, Double> taskRanks = calculateTaskRanks(tasks, exitTask, communicationCosts, vmMapping);
 
         // Step 4: For each level l in the DAG do
         // Select the task with the maximum rank in level l and add the task into CP
@@ -77,7 +66,7 @@ public class DCP {
         // + rank(t_j))
         for (task t : tasks) {
             if (t.getID() != exitTask.getID()) {
-                calculateRankIterative(t.getID(), taskMap, ranks, communicationCosts, vmMapping);
+                calculateRankRecursive(t.getID(), taskMap, ranks, communicationCosts, vmMapping);
             }
         }
 
@@ -88,9 +77,8 @@ public class DCP {
     private static double calculateTaskWeight(task t, Map<Integer, VM> vmMapping) {
 
         if (vmMapping == null || vmMapping.isEmpty()) {
-        throw new IllegalArgumentException(
-            "Cannot compute Wi (average computation time): vmMapping is null or empty."
-            );
+            throw new IllegalArgumentException(
+                    "Cannot compute Wi (average computation time): vmMapping is null or empty.");
         }
 
         double totalComputationTime = 0.0;
@@ -110,7 +98,6 @@ public class DCP {
         // Return average computation time across all VMs
         return vmCount > 0 ? totalComputationTime / vmCount : t.getSize();
     }
-
 
     // Select task with maximum rank in a given level
     private static int selectMaxRankTask(List<Integer> tasksInLevel, Map<Integer, Double> taskRanks) {
@@ -132,9 +119,9 @@ public class DCP {
         return maxRankTask;
     }
 
-    // Calculate rank iteratively following topological order (from exit to entry
+    // Calculate rank recursively following topological order (from exit to entry
     // tasks)
-    private static void calculateRankIterative(int taskId, Map<Integer, task> taskMap,
+    private static void calculateRankRecursive(int taskId, Map<Integer, task> taskMap,
             Map<Integer, Double> taskRanks,
             Map<String, Double> communicationCosts,
             Map<Integer, VM> vmMapping) {
@@ -168,7 +155,7 @@ public class DCP {
         for (int successorId : successors) {
             // Ensure successor rank is calculated first (recursive dependency)
             if (!taskRanks.containsKey(successorId)) {
-                calculateRankIterative(successorId, taskMap, taskRanks, communicationCosts, vmMapping);
+                calculateRankRecursive(successorId, taskMap, taskRanks, communicationCosts, vmMapping);
             }
 
             // Get communication cost c_{i,j} (average communication time for edge (t_i,
@@ -224,4 +211,4 @@ public class DCP {
         }
     }
 
-}    
+}

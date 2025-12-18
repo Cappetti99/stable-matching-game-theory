@@ -193,12 +193,12 @@ public class PegasusXMLParser {
         }
         
         // Scrivi processing_capacity.csv
-        // Paper: VM processing capacities uniformly distributed in [20, 30]
+        // VM processing capacities uniformly distributed in [10, 20]
         Random vmRand = SeededRandom.forScope("PegasusXMLParser.vmCapacity:" + xmlFile + ":" + numVMs);
         try (PrintWriter writer = new PrintWriter(new FileWriter(outputDir + "/processing_capacity.csv"))) {
             writer.println("vm_id,processing_capacity");
             for (int i = 0; i < numVMs; i++) {
-                double capacity = 20.0 + vmRand.nextDouble() * 10.0; // [20, 30]
+                double capacity = 10.0 + vmRand.nextDouble() * 10.0; // [10, 20]
                 writer.printf(Locale.US, "%d,%.2f\n", i, capacity);
             }
         }
@@ -225,7 +225,7 @@ public class PegasusXMLParser {
         System.out.println("  ✓ Output saved to: " + outputDir);
         System.out.println("    - Tasks: " + jobs.size() + " (sizes: [500, 700] uniform)");
         System.out.println("    - Edges: " + edgeSet.size());
-        System.out.println("    - VMs: " + numVMs + " (capacity: [20, 30] uniform, bandwidth: [20, 30] uniform)");
+        System.out.println("    - VMs: " + numVMs + " (capacity: [10, 20] uniform, bandwidth: [20, 30] uniform)");
     }
     
     public static void main(String[] args) {
@@ -313,7 +313,7 @@ public class PegasusXMLParser {
             System.out.println("════════════════════════════════════════════════════════════");
             System.out.println("Output directory: ../data_pegasus_xml/");
             System.out.println("\nWorkflows ready:");
-            System.out.println("  - CyberShake: 30, 50, 100, 1000 tasks");
+            System.out.println("  - CyberShake: 50, 100, 1000 tasks");
             System.out.println("  - Epigenomics: 47, 100, 997 tasks");
             System.out.println("  - LIGO: 50, 100, 1000 tasks");
             System.out.println("  - Montage: 50, 100, 1000 tasks");

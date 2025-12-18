@@ -1,639 +1,198 @@
+import java.util.*;
+
+/**
+ * Utility class for workflow scheduling metrics.
+ */
 public class Metrics {
-    
+
+    /** Default Communication-to-Computation Ratio */
+    public static final double DEFAULT_CCR = 0.4;
+
     /**
-     * Calculates the transmission time between two tasks.
-     * Formula: Ttrans(ti, tj) = TTi,j / B(VMk, VMl)
-     * where TTi,j = si * CCR (si = size of source task, CCR = Communication-to-Computation Ratio)
-     * 
-     * Special cases:
-     * - Ttrans(ti, tj) = 0 if the two tasks are executed on the same VM
-     * - B(VMk, VMl) = 0 if k = l (bandwidth to itself is 0)
-     * 
-     * @param ti The source task
-     * @param tj The destination task
-     * @param vmK The VM hosting task ti
-     * @param vmL The VM hosting task tj
-     * @param CCR The Communication-to-Computation Ratio (default 0.4)
-     * @return The transmission time
+     * Transmission time between two tasks.
      */
     public static double Ttrans(task ti, task tj, VM vmK, VM vmL, double CCR) {
-        // Special case: If both tasks are on the same VM, no transmission needed
-        if (vmK.getID() == vmL.getID()) {
-            return 0.0;
-        }
-        
-        // Calculate TTi,j = si * CCR (data size to transmit)
+        if (vmK.getID() == vmL.getID()) return 0.0;
         double dataSize = ti.getSize() * CCR;
-        
-        // Get the bandwidth between VM k and VM l
         double bandwidth = vmK.getBandwidthToVM(vmL.getID());
-        
-        // Special case: B(VMk, VMl) = 0 if k = l (should already be handled above, but safety check)
-        if (vmK.getID() == vmL.getID()) {
-            bandwidth = 0.0;
-        }
-        
-        // If there's no bandwidth configured or bandwidth is 0, return infinity
-        if (bandwidth <= 0) {
-            return Double.POSITIVE_INFINITY;
-        }
-        
-        // Calculate transmission time: TTi,j / B(VMk, VMl)
+        if (bandwidth <= 0) return Double.POSITIVE_INFINITY;
         return dataSize / bandwidth;
     }
-    
-    /**
-     * Overloaded method that uses default CCR = 0.4
-     * 
-     * @param ti The source task
-     * @param tj The destination task
-     * @param vmK The VM hosting task ti
-     * @param vmL The VM hosting task tj
-     * @return The transmission time using CCR = 0.4
-     */
+
     public static double Ttrans(task ti, task tj, VM vmK, VM vmL) {
-        return Ttrans(ti, tj, vmK, vmL, 0.4);
+        return Ttrans(ti, tj, vmK, vmL, DEFAULT_CCR);
     }
-    
+
     /**
-     * Calculates the start time of a task on a VM.
-     * Formula: ST(ti, VMk) = {
-     *   0                                    if ti = tentry
-     *   max{FTj + Ttrans(tj, ti)}           if ti ≠ tentry, for all tj ∈ pre(ti)
-     * }
-     * 
-     * @param ti The task for which to calculate start time
-     * @param vmK The VM hosting the task
-     * @param taskFinishTimes Map of task IDs to their finish times
-     * @param taskVMAssignments Map of task IDs to their hosting VMs
-     * @param allTasks Map of task IDs to task objects
-     * @param CCR Communication-to-Computation Ratio
-     * @return The start time of the task on the VM
+     * Start time of a task on a VM.
      */
     public static double ST(task ti, VM vmK,
-                           java.util.Map<Integer, Double> taskFinishTimes,
-                           java.util.Map<Integer, VM> taskVMAssignments,
-                           java.util.Map<Integer, task> allTasks,
-                           double CCR) {
-        
-        // If this is an entry task (tentry), start time is 0
-        if (ti.getPre() == null || ti.getPre().isEmpty()) {
-            return 0.0;
-        }
-        
+                            Map<Integer, Double> taskFinishTimes,
+                            Map<Integer, VM> taskVMAssignments,
+                            Map<Integer, task> allTasks,
+                            double CCR) {
+
+        if (ti.getPre() == null || ti.getPre().isEmpty()) return 0.0;
+
         double maxStartTime = 0.0;
-        
-        // For each predecessor task tj in pre(ti)
-        for (Integer tjId : ti.getPre()) {
-            // Get finish time of predecessor task tj
-            Double ftj = taskFinishTimes.get(tjId);
-            if (ftj == null) {
-                continue; // Skip if finish time not available
-            }
-            
-            // Get predecessor task object
-            task tj = allTasks.get(tjId);
-            if (tj == null) {
-                continue; // Skip if task object not available
-            }
-            
-            // Get VM hosting predecessor task tj
-            VM vmL = taskVMAssignments.get(tjId);
-            if (vmL == null) {
-                continue; // Skip if VM not available
-            }
-            
-            // Calculate transmission time from tj to ti
-            double ttrans = Ttrans(tj, ti, vmL, vmK, CCR);
-            
-            // Calculate potential start time: FTj + Ttrans(tj, ti)
-            double potentialStartTime = ftj + ttrans;
-            
-            // Keep track of maximum
-            maxStartTime = Math.max(maxStartTime, potentialStartTime);
+
+        for (Integer predId : ti.getPre()) {
+            Double ftj = taskFinishTimes.get(predId);
+            task tj = allTasks.get(predId);
+            VM vmL = taskVMAssignments.get(predId);
+            if (ftj == null || tj == null || vmL == null) continue;
+
+            double potentialStart = ftj + Ttrans(tj, ti, vmL, vmK, CCR);
+            maxStartTime = Math.max(maxStartTime, potentialStart);
         }
-        
         return maxStartTime;
     }
-    
-    /**
-     * Simplified version of ST calculation for entry tasks
-     * 
-     * @param ti The task
-     * @param vmK The VM hosting the task
-     * @return 0.0 for entry tasks
-     */
+
     public static double ST(task ti, VM vmK) {
-        // Assume this is an entry task if no other parameters provided
         return 0.0;
     }
-    
+
     /**
-     * @deprecated Use ST(task, VM, Map<Integer,Double>, Map<Integer,VM>, Map<Integer,task>, double) instead
-     * Legacy version for backward compatibility
-     */
-    @Deprecated
-    public static double ST(task ti, VM vmK, boolean isEntryTask, 
-                           java.util.Map<Integer, Double> predecessorFinishTimes,
-                           java.util.Map<Integer, task> predecessorTasks,
-                           java.util.Map<Integer, VM> predecessorVMs,
-                           java.util.Map<Integer, Double> dataTransferSizes) {
-        // Convert to new signature
-        return ST(ti, vmK, predecessorFinishTimes, predecessorVMs, predecessorTasks, 0.4);
-    }
-    
-    /**
-     * Calculates the execution time of a task on a VM.
-     * Formula: ET(ti, VMk) = si / pk
-     * where si is the size of the task and pk is the processing capacity of VMk
-     * 
-     * @param ti The task to execute
-     * @param vmK The VM hosting the task
-     * @param capabilityType The type of capability required by the task
-     * @return The execution time of the task on the VM
+     * Execution time of a task on a VM.
      */
     public static double ET(task ti, VM vmK, String capabilityType) {
-        // Get the size of the task (si)
-        double taskSize = ti.getSize();
-        
-        // Get the processing capacity of VMk for the required capability (pk)
-        double processingCapacity = vmK.getCapability(capabilityType);
-        
-        // If processing capacity is 0 or VM doesn't have the capability, return infinity
-        if (processingCapacity <= 0) {
-            return Double.POSITIVE_INFINITY;
-        }
-        
-        // Calculate execution time: si / pk
-        return taskSize / processingCapacity;
+        double pk = vmK.getCapability(capabilityType);
+        if (pk <= 0) return Double.POSITIVE_INFINITY;
+        return ti.getSize() / pk;
     }
-    
-    /**
-     * Overloaded method that uses a default capability type
-     * 
-     * @param ti The task to execute
-     * @param vmK The VM hosting the task
-     * @return The execution time assuming a default processing capability
-     */
+
     public static double ET(task ti, VM vmK) {
-        // Get the size of the task (si)
-        double taskSize = ti.getSize();
-        
-        // Get the first available processing capability as default
-        var capabilities = vmK.getProcessingCapabilities();
-        if (capabilities.isEmpty()) {
-            return Double.POSITIVE_INFINITY;
-        }
-        
-        // Use the first available capability
-        double processingCapacity = capabilities.values().iterator().next();
-        
-        // If processing capacity is 0, return infinity
-        if (processingCapacity <= 0) {
-            return Double.POSITIVE_INFINITY;
-        }
-        
-        // Calculate execution time: si / pk
-        return taskSize / processingCapacity;
+        Map<String, Double> caps = vmK.getProcessingCapabilities();
+        if (caps.isEmpty()) return Double.POSITIVE_INFINITY;
+        double pk = caps.values().iterator().next();
+        return ti.getSize() / pk;
     }
-    
+
     /**
-     * Calculates the finish time of a task on a VM.
-     * Formula: FT(ti, VMk) = ST(ti, VMk) + ET(ti, VMk)
-     * 
-     * @param ti The task
-     * @param vmK The VM hosting the task
-     * @param capabilityType The type of capability required by the task
-     * @param taskFinishTimes Map of task IDs to their finish times
-     * @param taskVMAssignments Map of task IDs to their hosting VMs
-     * @param allTasks Map of task IDs to task objects
-     * @param CCR Communication-to-Computation Ratio
-     * @return The finish time of the task on the VM
+     * Finish time of a task on a VM.
      */
     public static double FT(task ti, VM vmK, String capabilityType,
-                           java.util.Map<Integer, Double> taskFinishTimes,
-                           java.util.Map<Integer, VM> taskVMAssignments,
-                           java.util.Map<Integer, task> allTasks,
-                           double CCR) {
-        
-        // Calculate start time ST(ti, VMk)
-        double startTime = ST(ti, vmK, taskFinishTimes, taskVMAssignments, allTasks, CCR);
-        
-        // Calculate execution time ET(ti, VMk)
-        double executionTime = ET(ti, vmK, capabilityType);
-        
-        // Calculate finish time: FT(ti, VMk) = ST(ti, VMk) + ET(ti, VMk)
-        return startTime + executionTime;
+                            Map<Integer, Double> taskFinishTimes,
+                            Map<Integer, VM> taskVMAssignments,
+                            Map<Integer, task> allTasks,
+                            double CCR) {
+        return ST(ti, vmK, taskFinishTimes, taskVMAssignments, allTasks, CCR)
+                + ET(ti, vmK, capabilityType);
     }
-    
-    /**
-     * @deprecated Use FT(task, VM, String, Map, Map, Map, double) instead
-     */
-    @Deprecated
-    public static double FT(task ti, VM vmK, String capabilityType, boolean isEntryTask,
-                           java.util.Map<Integer, Double> predecessorFinishTimes,
-                           java.util.Map<Integer, task> predecessorTasks,
-                           java.util.Map<Integer, VM> predecessorVMs,
-                           java.util.Map<Integer, Double> dataTransferSizes) {
-        return FT(ti, vmK, capabilityType, predecessorFinishTimes, predecessorVMs, predecessorTasks, 0.4);
-    }
-    
-    /**
-     * Simplified version of FT calculation - automatically detects if task is entry or has predecessors
-     * 
-     * @param ti The task
-     * @param vmK The VM hosting the task
-     * @return The finish time
-     */
+
     public static double FT(task ti, VM vmK) {
-        // Check if this is an entry task (no predecessors)
-        if (ti.getPre() == null || ti.getPre().isEmpty()) {
-            // For entry tasks, start time is 0
-            double startTime = 0.0;
-            
-            // Calculate execution time with default capability
-            double executionTime = ET(ti, vmK);
-            
-            // Calculate finish time: FT(ti, VMk) = ST(ti, VMk) + ET(ti, VMk)
-            return startTime + executionTime;
-        } else {
-            // Task has predecessors - cannot calculate FT without predecessor information
-            System.err.println("Warning: Cannot calculate FT for task " + ti.getID() + 
-                             " with predecessors " + ti.getPre() + " without predecessor finish times and VM assignments.");
-            return Double.POSITIVE_INFINITY;
-        }
+        return (ti.getPre() == null || ti.getPre().isEmpty())
+                ? ET(ti, vmK)
+                : Double.POSITIVE_INFINITY;
     }
-    
-    /**
-     * Calculates finish time with specified capability type - automatically detects if task is entry or has predecessors
-     * 
-     * @param ti The task
-     * @param vmK The VM hosting the task
-     * @param capabilityType The type of capability required by the task
-     * @return The finish time
-     */
+
     public static double FT(task ti, VM vmK, String capabilityType) {
-        // Check if this is an entry task (no predecessors)
-        if (ti.getPre() == null || ti.getPre().isEmpty()) {
-            // For entry tasks, start time is 0
-            double startTime = 0.0;
-            
-            // Calculate execution time with specified capability
-            double executionTime = ET(ti, vmK, capabilityType);
-            
-            // Calculate finish time: FT(ti, VMk) = ST(ti, VMk) + ET(ti, VMk)
-            return startTime + executionTime;
-        } else {
-            // Task has predecessors - cannot calculate FT without predecessor information
-            System.err.println("Warning: Cannot calculate FT for task " + ti.getID() + 
-                             " with predecessors " + ti.getPre() + " without predecessor finish times and VM assignments.");
-            return Double.POSITIVE_INFINITY;
-        }
+        return (ti.getPre() == null || ti.getPre().isEmpty())
+                ? ET(ti, vmK, capabilityType)
+                : Double.POSITIVE_INFINITY;
     }
-    
+
     /**
-     * Utility method to calculate FT for a task with predecessors using simulated predecessor data
-     * This is useful for testing or when you have limited predecessor information
-     * 
-     * @param ti The task
-     * @param vmK The VM hosting the task
-     * @param capabilityType The type of capability required by the task
-     * @param defaultPredecessorFT Default finish time to assume for all predecessors
-     * @param defaultPredecessorVM Default VM to assume for all predecessors
-     * @return The finish time
+     * Makespan of a VM.
      */
-    public static double FT_withSimulatedPredecessors(task ti, VM vmK, String capabilityType, 
-                                                     double defaultPredecessorFT, VM defaultPredecessorVM) {
-        // Check if this is an entry task
-        if (ti.getPre() == null || ti.getPre().isEmpty()) {
-            return FT(ti, vmK, capabilityType);
-        }
-        
-        // Create simulated maps for predecessors
-        java.util.Map<Integer, Double> taskFinishTimes = new java.util.HashMap<>();
-        java.util.Map<Integer, task> allTasks = new java.util.HashMap<>();
-        java.util.Map<Integer, VM> taskVMAssignments = new java.util.HashMap<>();
-        
-        // Simulate data for all predecessors
-        for (Integer predId : ti.getPre()) {
-            taskFinishTimes.put(predId, defaultPredecessorFT);
-            // Create a dummy task for the predecessor
-            task dummyPredTask = new task(predId);
-            dummyPredTask.setSize(40.0); // Default size
-            allTasks.put(predId, dummyPredTask);
-            taskVMAssignments.put(predId, defaultPredecessorVM);
-        }
-        
-        // Use the complete FT method
-        return FT(ti, vmK, capabilityType, taskFinishTimes, taskVMAssignments, allTasks, 0.4);
-    }
-    
-    /**
-     * Calculates the makespan of a VM, which is the maximum completion time of all tasks assigned to that VM.
-     * 
-     * @param vmK The VM for which to calculate the makespan
-     * @param assignedTasks List of tasks assigned to this VM
-     * @param taskFinishTimes Map of task IDs to their finish times on this VM
-     * @return The makespan of the VM (MS(VMk))
-     */
-    public static double MS(VM vmK, java.util.List<task> assignedTasks, 
-                           java.util.Map<Integer, Double> taskFinishTimes) {
+    public static double MS(VM vmK, List<task> assignedTasks, Map<Integer, Double> taskFinishTimes) {
         double maxFinishTime = 0.0;
-        
-        // Find the maximum finish time among all tasks assigned to this VM
         for (task t : assignedTasks) {
-            Double finishTime = taskFinishTimes.get(t.getID());
-            if (finishTime != null) {
-                maxFinishTime = Math.max(maxFinishTime, finishTime);
-            }
+            Double ft = taskFinishTimes.get(t.getID());
+            if (ft != null) maxFinishTime = Math.max(maxFinishTime, ft);
         }
-        
         return maxFinishTime;
     }
-    
+
     /**
-     * Calculates the makespan of the entire workflow.
-     * The makespan equals the maximum completion time of all tasks in the workflow.
-     * Formula: makespan = max(MS(VMk)), 0 ≤ k ≤ m-1
-     * where MS(VMk) denotes the makespan of VMk
-     * 
-     * @param vms Map of all VMs in the system
-     * @param vmTaskAssignments Map of VM IDs to lists of tasks assigned to each VM
-     * @param taskFinishTimes Map of task IDs to their finish times
-     * @return The makespan of the workflow
+     * Makespan of the entire workflow.
      */
-    public static double makespan(java.util.Map<Integer, VM> vms,
-                                 java.util.Map<Integer, java.util.List<task>> vmTaskAssignments,
-                                 java.util.Map<Integer, Double> taskFinishTimes) {
-        double workflowMakespan = 0.0;
-        
-        // Calculate makespan for each VM and find the maximum
+    public static double makespan(Map<Integer, VM> vms,
+                                  Map<Integer, List<task>> vmTaskAssignments,
+                                  Map<Integer, Double> taskFinishTimes) {
+        double max = 0.0;
         for (VM vm : vms.values()) {
-            java.util.List<task> assignedTasks = vmTaskAssignments.getOrDefault(vm.getID(), new java.util.ArrayList<>());
-            double vmMakespan = MS(vm, assignedTasks, taskFinishTimes);
-            workflowMakespan = Math.max(workflowMakespan, vmMakespan);
+            List<task> tasks = vmTaskAssignments.getOrDefault(vm.getID(), new ArrayList<>());
+            max = Math.max(max, MS(vm, tasks, taskFinishTimes));
         }
-        
-        return workflowMakespan;
+        return max;
     }
-    
+
     /**
-     * Calculates the Scheduling Length Ratio (SLR).
-     * SLR normalizes the makespan to avoid large differences caused by different parameters.
-     * Formula: SLR = makespan / ∑|CP|−1 i=0 (min∑m−1 k=0 ET(ti, VMk))
-     * 
-     * @param makespan The makespan of the workflow
-     * @param criticalPathTasks List of tasks in the critical path
-     * @param vms Map of all available VMs
-     * @return The Scheduling Length Ratio
+     * Scheduling Length Ratio.
      */
-    public static double SLR(double makespan, 
-                            java.util.List<task> criticalPathTasks,
-                            java.util.Map<Integer, VM> vms) {
-        
-        if (criticalPathTasks == null || criticalPathTasks.isEmpty()) {
-            return Double.POSITIVE_INFINITY; // Invalid critical path
-        }
-        
-        // Calculate sum of minimum execution times for tasks in critical path
-        double sumMinExecutionTimes = 0.0;
-        
-        for (task cpTask : criticalPathTasks) {
+    public static double SLR(double makespan, List<task> criticalPathTasks, Map<Integer, VM> vms) {
+        double sumMinET = 0.0;
+        for (task t : criticalPathTasks) {
             double minET = Double.POSITIVE_INFINITY;
-            
-            // Find minimum execution time across all VMs for this task
-            for (VM vm : vms.values()) {
-                double et = ET(cpTask, vm);
-                minET = Math.min(minET, et);
-            }
-            
-            // Add to sum (handle edge case where no valid ET found)
-            if (minET != Double.POSITIVE_INFINITY) {
-                sumMinExecutionTimes += minET;
-            }
+            for (VM vm : vms.values()) minET = Math.min(minET, ET(t, vm));
+            if (minET != Double.POSITIVE_INFINITY) sumMinET += minET;
         }
-        
-        // Avoid division by zero
-        if (sumMinExecutionTimes == 0.0) {
-            return Double.POSITIVE_INFINITY;
-        }
-        
-        return makespan / sumMinExecutionTimes;
+        return (sumMinET > 0) ? makespan / sumMinET : Double.POSITIVE_INFINITY;
     }
-    
+
     /**
-     * @deprecated Use SLR(double, List<task>, Map<Integer,VM>) instead
-     * Legacy version for backward compatibility with Set<Integer> task IDs
+     * VM Utilization.
      */
-    @Deprecated
-    public static double SLR(double makespan, 
-                            java.util.Set<Integer> criticalPathTaskIds, 
-                            java.util.Map<String, task> allTasks,
-                            java.util.Map<Integer, VM> vms, 
-                            String capabilityName) {
-        
-        if (criticalPathTaskIds == null || criticalPathTaskIds.isEmpty()) {
-            return Double.POSITIVE_INFINITY;
-        }
-        
-        // Convert task IDs to task objects
-        java.util.List<task> criticalPathTasks = new java.util.ArrayList<>();
-        for (Integer taskId : criticalPathTaskIds) {
-            task cpTask = allTasks.get("t" + taskId);
-            if (cpTask != null) {
-                criticalPathTasks.add(cpTask);
-            }
-        }
-        
-        // Use new signature
-        return SLR(makespan, criticalPathTasks, vms);
-    }
-    
-    /**
-     * Calculates the VM Utilization (VU) for a specific VM.
-     * Formula: VU(VMk) = ∑ET(ti,VMk) / makespan, i ∈ VMk.waiting
-     * where VMk.waiting represents the tasks assigned to VMk
-     * 
-     * @param vmK The VM for which to calculate utilization
-     * @param assignedTasks List of tasks assigned to this VM
-     * @param makespan The makespan of the workflow
-     * @param capabilityName The name of the capability to use for execution time calculation
-     * @return The utilization rate of VMk (between 0.0 and 1.0)
-     */
-    public static double VU(VM vmK, 
-                           java.util.List<task> assignedTasks, 
-                           double makespan, 
-                           String capabilityName) {
-        
-        if (makespan <= 0.0 || assignedTasks == null || assignedTasks.isEmpty()) {
-            return 0.0; // No utilization if no makespan or no tasks
-        }
-        
-        // Calculate sum of execution times for all tasks assigned to this VM
-        double sumExecutionTimes = 0.0;
-        
+    public static double VU(VM vmK, List<task> assignedTasks, double makespan, String capabilityName) {
+        if (makespan <= 0 || assignedTasks == null || assignedTasks.isEmpty()) return 0.0;
+        double sumET = 0.0;
         for (task t : assignedTasks) {
             double et = ET(t, vmK, capabilityName);
-            if (et != Double.POSITIVE_INFINITY) {
-                sumExecutionTimes += et;
-            }
+            if (et != Double.POSITIVE_INFINITY) sumET += et;
         }
-        
-        // VU(VMk) = ∑ET(ti,VMk) / makespan
-        return sumExecutionTimes / makespan;
+        return sumET / makespan;
     }
-    
+
     /**
-     * Calculates the Average VM Utilization (AVU) across all VMs in the system.
-     * AVU is the average of VU(VMk) for all VMs.
-     * 
-     * @param vms Map of all VMs in the system
-     * @param vmTaskAssignments Map of VM IDs to lists of tasks assigned to each VM
-     * @param makespan The makespan of the workflow
-     * @param capabilityName The name of the capability to use for execution time calculation
-     * @return The Average VM Utilization (between 0.0 and 1.0)
+     * Average VM Utilization.
      */
-    public static double AVU(java.util.Map<Integer, VM> vms,
-                            java.util.Map<Integer, java.util.List<task>> vmTaskAssignments,
-                            double makespan,
-                            String capabilityName) {
-        
-        if (vms == null || vms.isEmpty() || makespan <= 0.0) {
-            return 0.0; // No utilization if no VMs or invalid makespan
-        }
-        
-        double sumUtilizations = 0.0;
-        int vmCount = 0;
-        
-        // Calculate VU for each VM and sum them
+    public static double AVU(Map<Integer, VM> vms, Map<Integer, List<task>> vmTaskAssignments,
+                             double makespan, String capabilityName) {
+        if (vms == null || vms.isEmpty() || makespan <= 0) return 0.0;
+        double sumVU = 0.0;
+        int count = 0;
         for (VM vm : vms.values()) {
-            java.util.List<task> assignedTasks = vmTaskAssignments.getOrDefault(vm.getID(), new java.util.ArrayList<>());
-            double vu = VU(vm, assignedTasks, makespan, capabilityName);
-            sumUtilizations += vu;
-            vmCount++;
+            List<task> tasks = vmTaskAssignments.getOrDefault(vm.getID(), new ArrayList<>());
+            sumVU += VU(vm, tasks, makespan, capabilityName);
+            count++;
         }
-        
-        // AVU = (∑VU(VMk)) / m, where m is the number of VMs
-        return vmCount > 0 ? sumUtilizations / vmCount : 0.0;
+        return count > 0 ? sumVU / count : 0.0;
     }
-    
+
     /**
-     * Calculates the Variance of Fairness (VF) metric.
-     * VF measures the fairness between tasks based on their satisfaction.
-     * 
-     * The satisfaction of each task Si is calculated as: Si = AETi / EETi
-     * where:
-     * - AETi is the actual execution time of task i
-     * - EETi is the expected execution time of task i on the fastest VM
-     * 
-     * VF is formulated as: VF = (1/n) * ∑(M - Si)²
-     * where:
-     * - n is the number of tasks
-     * - M is the average of all task satisfaction values
-     * - Si is the satisfaction of task i
-     * 
-     * @param tasks List of all tasks in the workflow
-     * @param vms Map of all VMs in the system
-     * @param vmTaskAssignments Map of VM IDs to lists of tasks assigned to each VM
-     * @param taskFinishTimes Map of task IDs to their actual finish times
-     * @param capabilityName The name of the capability to use for execution time calculation
-     * @return The Variance of Fairness value (lower values indicate better fairness)
+     * Variance of Fairness.
      */
-    public static double VF(java.util.List<task> tasks,
-                           java.util.Map<Integer, VM> vms,
-                           java.util.Map<Integer, java.util.List<task>> vmTaskAssignments,
-                           java.util.Map<Integer, Double> taskFinishTimes,
-                           String capabilityName) {
-        
-        if (tasks == null || tasks.isEmpty() || vms == null || vms.isEmpty()) {
-            return 0.0; // No variance if no tasks or VMs
-        }
-        
-        java.util.List<Double> satisfactions = new java.util.ArrayList<>();
-        
-        // Calculate satisfaction for each task
+    public static double VF(List<task> tasks, Map<Integer, VM> vms,
+                            Map<Integer, List<task>> vmTaskAssignments,
+                            Map<Integer, Double> taskFinishTimes,
+                            String capabilityName) {
+
+        List<Double> satisfactions = new ArrayList<>();
         for (task t : tasks) {
-            // Find the VM this task was assigned to
             VM assignedVM = null;
-            for (java.util.Map.Entry<Integer, java.util.List<task>> entry : vmTaskAssignments.entrySet()) {
+            for (Map.Entry<Integer, List<task>> entry : vmTaskAssignments.entrySet()) {
                 if (entry.getValue().contains(t)) {
                     assignedVM = vms.get(entry.getKey());
                     break;
                 }
             }
-            
-            if (assignedVM == null) {
-                continue; // Skip tasks that are not assigned to any VM
-            }
-            
-            // Calculate AETi (Actual Execution Time)
+            if (assignedVM == null) continue;
+
             double actualET = ET(t, assignedVM, capabilityName);
-            
-            // Calculate EETi (Expected Execution Time on fastest VM)
             double fastestET = Double.POSITIVE_INFINITY;
-            for (VM vm : vms.values()) {
-                double et = ET(t, vm, capabilityName);
-                if (et < fastestET) {
-                    fastestET = et;
-                }
-            }
-            
-            // Calculate satisfaction Si = AETi / EETi
-            if (fastestET > 0.0 && fastestET != Double.POSITIVE_INFINITY) {
-                double satisfaction = actualET / fastestET;
-                satisfactions.add(satisfaction);
-            }
+            for (VM vm : vms.values()) fastestET = Math.min(fastestET, ET(t, vm, capabilityName));
+
+            if (fastestET > 0 && fastestET != Double.POSITIVE_INFINITY)
+                satisfactions.add(actualET / fastestET);
         }
-        
-        if (satisfactions.isEmpty()) {
-            return 0.0; // No valid satisfactions calculated
-        }
-        
-        // Calculate average satisfaction M
-        double sumSatisfactions = satisfactions.stream().mapToDouble(Double::doubleValue).sum();
-        double averageSatisfaction = sumSatisfactions / satisfactions.size();
-        
-        // Calculate VF = (1/n) * ∑(M - Si)²
-        double sumSquaredDeviations = 0.0;
-        for (double satisfaction : satisfactions) {
-            double deviation = averageSatisfaction - satisfaction;
-            sumSquaredDeviations += deviation * deviation;
-        }
-        
-        return sumSquaredDeviations / satisfactions.size();
+
+        if (satisfactions.isEmpty()) return 0.0;
+
+        double avg = satisfactions.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        double sumSq = 0.0;
+        for (double s : satisfactions) sumSq += (avg - s) * (avg - s);
+        return sumSq / satisfactions.size();
     }
-    
-    /**
-     * Helper method to calculate task satisfaction.
-     * Si = AETi / EETi
-     * 
-     * @param task The task to calculate satisfaction for
-     * @param assignedVM The VM the task is assigned to
-     * @param vms Map of all VMs to find the fastest one
-     * @param capabilityName The capability name for execution time calculation
-     * @return The satisfaction value for the task
-     */
-    public static double taskSatisfaction(task task, VM assignedVM, 
-                                        java.util.Map<Integer, VM> vms, 
-                                        String capabilityName) {
-        
-        // Calculate AETi (Actual Execution Time on assigned VM)
-        double actualET = ET(task, assignedVM, capabilityName);
-        
-        // Calculate EETi (Expected Execution Time on fastest VM)
-        double fastestET = Double.POSITIVE_INFINITY;
-        for (VM vm : vms.values()) {
-            double et = ET(task, vm, capabilityName);
-            if (et < fastestET) {
-                fastestET = et;
-            }
-        }
-        
-        // Return satisfaction Si = AETi / EETi
-        if (fastestET > 0.0 && fastestET != Double.POSITIVE_INFINITY) {
-            return actualET / fastestET;
-        }
-        
-        return 1.0; // Default satisfaction if calculation fails
-    }
+
 }

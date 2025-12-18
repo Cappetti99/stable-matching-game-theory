@@ -1,57 +1,67 @@
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
-import java.util.Set;
+import java.util.*;
 
+/**
+ * Utility class per operazioni comuni su task e VM
+ */
 public class Utility {
-      /**
-     * Trova il task di uscita (senza successori)
+
+    /** HA SENSO METTERLI?
+     * Trova tutti i task di uscita (senza successori).
+     * Sono ammessi più exit task.
      */
-    private task findExitTask(List<task> tasks) {
-        // Cerca task senza successori
+    public static List<task> findExitTasks(List<task> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
+            throw new IllegalArgumentException("tasks must not be null or empty");
+        }
+
+        List<task> exits = new ArrayList<>();
         for (task t : tasks) {
-            if (t.getSucc().isEmpty()) {
-                return t;
+            if (t != null && (t.getSucc() == null || t.getSucc().isEmpty())) {
+                exits.add(t);
             }
         }
-        return tasks.get(tasks.size() - 1); // Fallback: ultimo task
+
+        if (exits.isEmpty()) {
+            throw new NoSuchElementException("No exit task found (no task with empty successors list).");
+        }
+
+        return exits;
     }
 
-    // CALCOLA LEVEL TASK 
+    /**
+     * Trova tutti i task di ingresso (senza predecessori)
+     */
+    public static List<task> findEntryTasks(List<task> tasks) {
+        List<task> entryTasks = new ArrayList<>();
+        for (task t : tasks) {
+            if (t.getPre() == null || t.getPre().isEmpty()) {
+                entryTasks.add(t);
+            }
+        }
+        return entryTasks;
+    }
 
-    // Utility method to organize tasks by levels using BFS (topological levels)
+    /**
+     * Organizza i task in livelli topologici usando BFS
+     * 
+     * @param tasks lista dei task
+     * @return mappa livello -> lista di task ID
+     */
     public static Map<Integer, List<Integer>> organizeTasksByLevels(List<task> tasks) {
         Map<Integer, List<Integer>> levels = new HashMap<>();
         Map<Integer, Integer> taskLevels = new HashMap<>();
-        Map<Integer, Set<Integer>> taskPredecessors = new HashMap<>();
         Map<Integer, Integer> inDegree = new HashMap<>();
+        Map<Integer, Set<Integer>> successors = new HashMap<>();
 
-        // Initialize data structures
+        // Inizializza in-degree e successori
         for (task t : tasks) {
-            int taskId = t.getID();
-            taskPredecessors.put(taskId, new HashSet<>());
-            inDegree.put(taskId, 0);
+            int id = t.getID();
+            inDegree.put(id, t.getPre() == null ? 0 : t.getPre().size());
+            successors.put(id, new HashSet<>(t.getSucc() != null ? t.getSucc() : new ArrayList<>()));
         }
 
-        // Build predecessor relationships and calculate in-degrees
-        for (task t : tasks) {
-            List<Integer> predecessors = t.getPre();
-            if (predecessors != null) {
-                for (int predId : predecessors) {
-                    taskPredecessors.get(t.getID()).add(predId);
-                    inDegree.put(t.getID(), inDegree.get(t.getID()) + 1);
-                }
-            }
-        }
-
-        // BFS approach for level calculation
+        // Queue per BFS
         Queue<Integer> queue = new LinkedList<>();
-
-        // Start with entry tasks (tasks with no predecessors)
         for (task t : tasks) {
             if (inDegree.get(t.getID()) == 0) {
                 queue.offer(t.getID());
@@ -59,53 +69,65 @@ public class Utility {
             }
         }
 
-        // Process tasks level by level using BFS
         while (!queue.isEmpty()) {
-            int currentTask = queue.poll();
-            int currentLevel = taskLevels.get(currentTask);
+            int current = queue.poll();
+            int currentLevel = taskLevels.get(current);
 
-            // Find all tasks that have this task as predecessor
             for (task t : tasks) {
-                if (taskPredecessors.get(t.getID()).contains(currentTask)) {
-                    // Decrease in-degree
-                    inDegree.put(t.getID(), inDegree.get(t.getID()) - 1);
-
-                    // Update level (maximum of all predecessor levels + 1)
+                if (t.getPre() != null && t.getPre().contains(current)) {
+                    int id = t.getID();
+                    inDegree.put(id, inDegree.get(id) - 1);
                     int newLevel = currentLevel + 1;
-                    if (!taskLevels.containsKey(t.getID()) || taskLevels.get(t.getID()) < newLevel) {
-                        taskLevels.put(t.getID(), newLevel);
-                    }
+                    taskLevels.put(id, Math.max(taskLevels.getOrDefault(id, 0), newLevel));
 
-                    // If all predecessors processed, add to queue
-                    if (inDegree.get(t.getID()) == 0) {
-                        queue.offer(t.getID());
+                    if (inDegree.get(id) == 0) {
+                        queue.offer(id);
                     }
                 }
             }
         }
 
-        // Group tasks by their levels
+        // Raggruppa task per livello
         for (Map.Entry<Integer, Integer> entry : taskLevels.entrySet()) {
             int taskId = entry.getKey();
             int level = entry.getValue();
-
-            if (!levels.containsKey(level)) {
-                levels.put(level, new ArrayList<>());
-            }
-            levels.get(level).add(taskId);
+            levels.computeIfAbsent(level, k -> new ArrayList<>()).add(taskId);
         }
 
         return levels;
     }
 
+    /**
+     * Somma delle dimensioni di una lista di task
+     * 
+     * @param tasks lista dei task
+     * @return somma delle dimensioni
+     */
+    public static double sumTaskSizes(List<task> tasks) {
+        double sum = 0.0;
+        for (task t : tasks) {
+            sum += t.getSize();
+        }
+        return sum;
+    }
 
-    // CALCOLA ENTRY E EXIT TASKS
-
-    // CALCOLA SOMMA DELLE DIMENSIONI DEI TASK
-
-    // CALCOLA SOMMA DELLE CAPACITA' DELLE VM
-
-    
-
+    /**
+     * Somma della capacità di una lista di VM
+     * 
+     * @param vms lista delle VM
+     * @return somma delle capacità
+     */
+    public static double sumVMCapacities(List<VM> vms) {
+        double sum = 0.0;
+        for (VM vm : vms) {
+            Map<String, Double> caps = vm.getProcessingCapabilities();
+            if (!caps.isEmpty()) {
+                sum += caps.values().iterator().next(); // prende la prima capacità disponibile
+            } else {
+                sum += 1.0; // default capacity
+            }
+        }
+        return sum;
+    }
 
 }
