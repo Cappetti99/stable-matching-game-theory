@@ -463,4 +463,8 @@ public class SMCPTD {
     public SMGT getSMGT() {
         return smgt;
     }
+
+    public LOTD getLOTD() {
+        return lotd;
+    }
 }

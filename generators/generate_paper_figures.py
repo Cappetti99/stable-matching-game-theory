@@ -316,6 +316,284 @@ def plot_vf_vs_ccr(data, scale='large', output_filename='figure_vf_large.png'):
     plt.close()
 
 # ============================================================================
+# FUNZIONI DI PLOTTING - FIGURA 9, 10 (VM Effect - Experiment 2)
+# ============================================================================
+
+def prepare_exp2_data(algorithm='SM-CPTD'):
+    """
+    Prepara dati Esperimento 2 (VM Effect) per plotting
+    
+    Returns:
+        dict strutturato come:
+        {
+            'montage': {
+                'SM-CPTD': {'VMs': [...], 'SLR': [...], 'AVU': [...]},
+                'info': {'tasks': 1000, 'ccr': 1.0}
+            },
+            ...
+        }
+    """
+    # Carica dati principali
+    df = load_experiments_data()
+    
+    # Filtra per EXP2_VM
+    df_filtered = df[df['experiment'] == 'EXP2_VM'].copy()
+    
+    # Organizza per workflow
+    results = {}
+    
+    for workflow in WORKFLOW_ORDER:
+        workflow_data = df_filtered[df_filtered['workflow'] == workflow]
+        
+        if len(workflow_data) == 0:
+            print(f"Warning: No EXP2 data for {workflow}")
+            continue
+        
+        # Ordina per numero di VM
+        workflow_data = workflow_data.sort_values('vms')
+        
+        # Estrai info su tasks e CCR (primo record, sono costanti per workflow in EXP2)
+        tasks = int(workflow_data['tasks'].iloc[0])
+        ccr = float(workflow_data['ccr'].iloc[0])
+        
+        results[workflow] = {
+            algorithm: {
+                'VMs': workflow_data['vms'].tolist(),
+                'SLR': workflow_data['slr'].tolist(),
+                'AVU': workflow_data['avu'].tolist(),
+                'VF': workflow_data['vf'].tolist(),
+                'MAKESPAN': workflow_data['makespan'].tolist()
+            },
+            'info': {'tasks': tasks, 'ccr': ccr}
+        }
+    
+    return results
+
+def plot_slr_vs_vms(data, output_filename='figure9_slr_vs_vms.png'):
+    """
+    Genera Figura 9: SLR vs VM Count (Experiment 2)
+    
+    Args:
+        data: dict con struttura {workflow: {algorithm: {'VMs': [...], 'SLR': [...]}}}
+        output_filename: nome file output
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    fig.suptitle('Comparison of SLR with different VM counts (CCR=1.0)', 
+                 fontsize=14, fontweight='bold')
+    
+    for idx, (ax, workflow) in enumerate(zip(axes.flat, WORKFLOW_ORDER)):
+        if workflow not in data:
+            print(f"Warning: {workflow} not in data")
+            continue
+            
+        workflow_results = data[workflow]
+        
+        # Estrai info su tasks e CCR
+        info = workflow_results.get('info', {})
+        tasks = info.get('tasks', '?')
+        ccr = info.get('ccr', '?')
+        
+        # Plot per ogni algoritmo
+        for algo_name, algo_data in workflow_results.items():
+            if algo_name == 'info':  # Salta il campo info
+                continue
+            
+            style = ALGO_STYLES.get(algo_name, {})
+            
+            vms_vals = algo_data['VMs']
+            slr_vals = algo_data['SLR']
+            
+            ax.plot(vms_vals, slr_vals, 
+                   label=style.get('label', algo_name),
+                   color=style.get('color', None),
+                   marker=style.get('marker', 'o'),
+                   linewidth=style.get('linewidth', 1.5),
+                   markersize=style.get('markersize', 7),
+                   linestyle=style.get('linestyle', '-'),
+                   zorder=style.get('zorder', 3))
+        
+        # Configurazione assi
+        ax.set_xlabel('Number of VMs', fontsize=11)
+        ax.set_ylabel('SLR', fontsize=11)
+        ax.set_title(f'{WORKFLOW_TITLES[workflow]} ({tasks} tasks, CCR={ccr})', 
+                    fontsize=12, fontweight='bold')
+        
+        # Grid
+        ax.grid(True, linestyle='--', alpha=0.3, color='gray', linewidth=0.5)
+        
+        # Legenda
+        ax.legend(loc='best', fontsize=9, framealpha=0.9, 
+                 edgecolor='black', fancybox=False)
+        
+        # Limiti assi
+        if len(vms_vals) > 0:
+            vm_min = min(vms_vals)
+            vm_max = max(vms_vals)
+            ax.set_xlim(vm_min - 2, vm_max + 2)
+            ax.set_xticks(vms_vals)
+            
+            # Auto-scale Y ma con margine
+            y_min = min([min(algo_data['SLR']) for key, algo_data in workflow_results.items() if key != 'info'])
+            y_max = max([max(algo_data['SLR']) for key, algo_data in workflow_results.items() if key != 'info'])
+            margin = (y_max - y_min) * 0.1
+            ax.set_ylim(y_min - margin, y_max + margin)
+    
+    plt.tight_layout()
+    output_path = Path('../results/figures') / output_filename
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
+    print(f"Saved: {output_path}")
+    plt.close()
+
+def plot_vf_vs_vms(data, output_filename='figure_vf_vs_vms.png'):
+    """
+    Genera grafico VF vs VM Count (Experiment 2)
+    
+    Args:
+        data: dict con struttura {workflow: {algorithm: {'VMs': [...], 'VF': [...]}}}
+        output_filename: nome file output
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    fig.suptitle('Comparison of VF with different VM counts (CCR=1.0)', 
+                 fontsize=14, fontweight='bold')
+    
+    for idx, (ax, workflow) in enumerate(zip(axes.flat, WORKFLOW_ORDER)):
+        if workflow not in data:
+            continue
+            
+        workflow_results = data[workflow]
+        
+        # Estrai info su tasks e CCR
+        info = workflow_results.get('info', {})
+        tasks = info.get('tasks', '?')
+        ccr = info.get('ccr', '?')
+        
+        # Plot per ogni algoritmo
+        for algo_name, algo_data in workflow_results.items():
+            if algo_name == 'info':  # Salta il campo info
+                continue
+            
+            style = ALGO_STYLES.get(algo_name, {})
+            
+            vms_vals = algo_data['VMs']
+            vf_vals = algo_data['VF']
+            
+            ax.plot(vms_vals, vf_vals, 
+                   label=style.get('label', algo_name),
+                   color=style.get('color', None),
+                   marker=style.get('marker', 'o'),
+                   linewidth=style.get('linewidth', 1.5),
+                   markersize=style.get('markersize', 7),
+                   linestyle=style.get('linestyle', '-'),
+                   zorder=style.get('zorder', 3))
+        
+        # Configurazione assi
+        ax.set_xlabel('Number of VMs', fontsize=11)
+        ax.set_ylabel('VF', fontsize=11)
+        ax.set_title(f'{WORKFLOW_TITLES[workflow]} ({tasks} tasks, CCR={ccr})', 
+                    fontsize=12, fontweight='bold')
+        
+        # Grid
+        ax.grid(True, linestyle='--', alpha=0.3, color='gray', linewidth=0.5)
+        
+        # Legenda
+        ax.legend(loc='best', fontsize=9, framealpha=0.9, 
+                 edgecolor='black', fancybox=False)
+        
+        # Limiti assi
+        if len(vms_vals) > 0:
+            vm_min = min(vms_vals)
+            vm_max = max(vms_vals)
+            ax.set_xlim(vm_min - 2, vm_max + 2)
+            ax.set_xticks(vms_vals)
+    
+    plt.tight_layout()
+    output_path = Path('../results/figures') / output_filename
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
+    print(f"Saved: {output_path}")
+    plt.close()
+
+def plot_avu_vs_vms(data, output_filename='figure10_avu_vs_vms.png'):
+    """
+    Genera Figura 10: AVU vs VM Count (Experiment 2)
+    
+    Args:
+        data: dict con struttura {workflow: {algorithm: {'VMs': [...], 'AVU': [...]}}}
+        output_filename: nome file output
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    fig.suptitle('Comparison of AVU with different VM counts (CCR=1.0)', 
+                 fontsize=14, fontweight='bold')
+    
+    for idx, (ax, workflow) in enumerate(zip(axes.flat, WORKFLOW_ORDER)):
+        if workflow not in data:
+            continue
+            
+        workflow_results = data[workflow]
+        
+        # Estrai info su tasks e CCR
+        info = workflow_results.get('info', {})
+        tasks = info.get('tasks', '?')
+        ccr = info.get('ccr', '?')
+        
+        # Plot per ogni algoritmo
+        for algo_name, algo_data in workflow_results.items():
+            if algo_name == 'info':  # Salta il campo info
+                continue
+            
+            style = ALGO_STYLES.get(algo_name, {})
+            
+            vms_vals = algo_data['VMs']
+            avu_vals = [v * 100 for v in algo_data['AVU']]  # Converti in percentuale
+            
+            ax.plot(vms_vals, avu_vals, 
+                   label=style.get('label', algo_name),
+                   color=style.get('color', None),
+                   marker=style.get('marker', 'o'),
+                   linewidth=style.get('linewidth', 1.5),
+                   markersize=style.get('markersize', 7),
+                   linestyle=style.get('linestyle', '-'),
+                   zorder=style.get('zorder', 3))
+        
+        # Configurazione assi
+        ax.set_xlabel('Number of VMs', fontsize=11)
+        ax.set_ylabel('AVU (%)', fontsize=11)
+        ax.set_title(f'{WORKFLOW_TITLES[workflow]} ({tasks} tasks, CCR={ccr})', 
+                    fontsize=12, fontweight='bold')
+        
+        # Grid
+        ax.grid(True, linestyle='--', alpha=0.3, color='gray', linewidth=0.5)
+        
+        # Legenda
+        ax.legend(loc='best', fontsize=9, framealpha=0.9, 
+                 edgecolor='black', fancybox=False)
+        
+        # Limiti assi
+        if len(vms_vals) > 0:
+            vm_min = min(vms_vals)
+            vm_max = max(vms_vals)
+            ax.set_xlim(vm_min - 2, vm_max + 2)
+            ax.set_xticks(vms_vals)
+            
+            # AVU sempre 0-100% ma con auto-scale più preciso
+            if len(avu_vals) > 0:
+                y_max = max([max([v * 100 for v in algo_data['AVU']]) 
+                            for key, algo_data in workflow_results.items() if key != 'info'])
+                # Usa range dinamico ma almeno fino a 10%
+                ax.set_ylim(0, max(y_max * 1.2, 10))
+    
+    plt.tight_layout()
+    output_path = Path('../results/figures') / output_filename
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
+    print(f"Saved: {output_path}")
+    plt.close()
+
+# ============================================================================
 # FUNZIONE COMPARATIVA - SLR, AVU, VF per diversi metodi
 # ============================================================================
 
@@ -441,7 +719,7 @@ def generate_all_figures():
     """Genera tutte le figure (3-8) dal paper"""
     
     print("="*70)
-    print("GENERAZIONE FIGURE 3-8: SLR e AVU vs CCR")
+    print("GENERAZIONE FIGURE 3-10: SLR, AVU vs CCR e VM Count")
     print("="*70)
     
     # SMALL WORKFLOWS (Figure 3 e 6)
@@ -488,6 +766,22 @@ def generate_all_figures():
     plot_metrics_comparison(data_large, scale='large', 
                            output_filename='figure_metrics_comparison_large.png')
     
+    # EXPERIMENT 2: VM Effect (Figures 9-10)
+    print("\n[4/4] Processing EXPERIMENT 2 (VM Effect)...")
+    data_exp2 = prepare_exp2_data('SM-CPTD')
+    
+    if data_exp2:
+        print("  → Generating Figure 9 (SLR vs VM Count)...")
+        plot_slr_vs_vms(data_exp2, output_filename='figure9_slr_vs_vms.png')
+        
+        print("  → Generating Figure 10 (AVU vs VM Count)...")
+        plot_avu_vs_vms(data_exp2, output_filename='figure10_avu_vs_vms.png')
+        
+        print("  → Generating VF vs VM Count...")
+        plot_vf_vs_vms(data_exp2, output_filename='figure_vf_vs_vms.png')
+    else:
+        print("  ⚠️  No EXP2_VM data found, skipping Figures 9-10")
+    
     print("\n" + "="*70)
     print("✅ COMPLETATO! Tutti i grafici sono stati generati.")
     print("="*70)
@@ -498,6 +792,9 @@ def generate_all_figures():
     print("  - figure6_avu_vs_ccr_small.png (+ PDF)")
     print("  - figure7_avu_vs_ccr_medium.png (+ PDF)")
     print("  - figure8_avu_vs_ccr_large.png (+ PDF)")
+    print("  - figure9_slr_vs_vms.png (+ PDF)")
+    print("  - figure10_avu_vs_vms.png (+ PDF)")
+    print("  - figure_vf_vs_vms.png (+ PDF)")
     print("  - figure_vf_large.png (+ PDF)")
     print("  - figure_metrics_comparison_large.png (+ PDF)")
 

@@ -286,9 +286,10 @@ public class LOTD {
         // 1. Calculate when duplicate would finish
         double duplicateET = calculateExecutionTime(entryTask, targetVM);
 
-        // Entry tasks have no predecessors, so they start at time 0
-        // But VM might be busy with other tasks
-        double vmReadyTime = getVMReadyTime(targetVM, -1); // -1 = new task (not yet in schedule)
+        // Entry tasks have no predecessors, so they CAN start at time 0
+        // They execute "in parallel" with other tasks as phantom duplicates
+        // The key is: can they finish BEFORE the successor needs them?
+        double vmReadyTime = 0.0; // Entry tasks can always start immediately!
         double duplicateFinish = vmReadyTime + duplicateET;
 
         // 2. Calculate when data would arrive from original VM
