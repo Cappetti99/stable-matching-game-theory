@@ -75,11 +75,6 @@ public class task {
             pre.add(taskID);
         }
     }
-
-    // Alias for older tests
-    public void addPre(int taskID) {
-        addPredecessor(taskID);
-    }
     
     public void addSuccessor(int taskID) {
         if (!succ.contains(taskID)) {
@@ -98,11 +93,6 @@ public class task {
 
     public double getSuccCommunicationCost(int succTaskId) {
         return succCommCost.getOrDefault(succTaskId, -1.0);
-    }
-
-    // Alias for older tests
-    public void addSucc(int taskID) {
-        addSuccessor(taskID);
     }
     
     public void removePredecessor(int taskID) {

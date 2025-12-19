@@ -73,11 +73,6 @@ public class VM {
     public void addCapability(String capabilityType, double processingPower) {
         processingCapabilities.put(capabilityType, processingPower);
     }
-
-    // Alias for older code/tests
-    public void addProcessingCapability(String capabilityType, double processingPower) {
-        addCapability(capabilityType, processingPower);
-    }
     
     public void removeCapability(String capabilityType) {
         processingCapabilities.remove(capabilityType);

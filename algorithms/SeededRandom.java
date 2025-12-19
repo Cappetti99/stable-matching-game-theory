@@ -77,6 +77,21 @@ public final class SeededRandom {
         return new Random(mixed);
     }
 
+    /**
+     * Returns a deterministic Random instance scoped by a string and run index.
+     * Used for multiple runs with different random values each time.
+     *
+     * @param scope  Scope identifier (e.g., "data-loader")
+     * @param runIdx Run index (0, 1, 2, ...)
+     * @return Random instance with seed varied by run index
+     */
+    public static Random forScopeAndRun(String scope, int runIdx) {
+        long scopeHash = fnv1a64(scope == null ? "" : scope);
+        long runSeed = seed ^ scopeHash ^ ((long) runIdx * 0x9e3779b97f4a7c15L);
+        long mixed = mix64(runSeed);
+        return new Random(mixed);
+    }
+
     private static long fnv1a64(String s) {
         long hash = 0xcbf29ce484222325L;
         for (int i = 0; i < s.length(); i++) {

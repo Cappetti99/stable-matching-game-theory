@@ -406,7 +406,23 @@ public class CCRAnalyzer {
             writer.printf(Locale.US, "      \"elasticity_coeff\": %.4f%n", report.metricsElasticity.makespanElasticityCoeff);
             writer.println("    },");
             writer.printf("    \"sensitivity_class\": \"%s\"%n", report.metricsElasticity.sensitivityClass);
-            writer.println("  }");
+            writer.println("  },");
+            
+            // NEW: Per-CCR metric values for normalized plotting
+            writer.println("  \"metrics_per_ccr\": [");
+            for (int i = 0; i < snapshots.size(); i++) {
+                CCRSnapshot snap = snapshots.get(i);
+                writer.print("    {");
+                writer.printf(Locale.US, "\"ccr\": %.1f, ", snap.ccr);
+                writer.printf(Locale.US, "\"slr\": %.6f, ", snap.slr);
+                writer.printf(Locale.US, "\"avu\": %.6f, ", snap.avu);
+                writer.printf(Locale.US, "\"vf\": %.6f, ", snap.vf);
+                writer.printf(Locale.US, "\"makespan\": %.6f", snap.makespan);
+                writer.print("}");
+                if (i < snapshots.size() - 1) writer.print(",");
+                writer.println();
+            }
+            writer.println("  ]");
             
             writer.println("}");
             writer.close();

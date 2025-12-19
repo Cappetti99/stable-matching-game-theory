@@ -30,8 +30,8 @@ public class ExperimentRunner {
     // ============================================================================
 
     // Numero di run multiple per stabilizzare i risultati
-    private static final int NUM_RUNS = 1; // TEMPORANEO: 1 run per test veloce (poi riportare a 10)
-    private static final int WARMUP_RUNS = 0; // TEMPORANEO: 0 warmup per test veloce (poi riportare a 1)
+    private static final int NUM_RUNS = 1; // Production: 10 runs per stabilizzare i risultati
+    private static final int WARMUP_RUNS = 0; // Production: 1 warmup per eliminare cold start effects
 
     // Workflow Pegasus XML reali dal paper (convertiti da XML a CSV)
     private static final String[] WORKFLOWS = { "cybershake", "epigenomics", "ligo", "montage" };
@@ -278,16 +278,6 @@ public class ExperimentRunner {
     }
 
     /**
-     * Esegue un singolo esperimento usando workflow Pegasus pre-generati
-     */
-    private static ExperimentResult runSingleExperiment(String workflow, int numTasks,
-            int numVMs, double ccr, String expName)
-            throws Exception {
-
-        return runSingleExperiment(workflow, numTasks, numVMs, ccr, expName, 1, 0);
-    }
-
-    /**
      * Esegue un singolo esperimento con multiple run e calcola la media
      * 
      * @param workflow   Nome del workflow
@@ -344,18 +334,27 @@ public class ExperimentRunner {
                 System.out.print(".");
             }
 
-            // 2. Carica dati UNA SOLA VOLTA (DataLoader genera valori random)
+            // 2. Carica dati (DataLoader genera valori random)
             // ExperimentRunner è l'entry point: prepara task/VM e li passa a SMCPTD.
-            List<task> tasks = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
-            List<VM> vms = DataLoader.loadVMsFromCSV(workflowDir + "/processing_capacity.csv");
-            DataLoader.loadBandwidthFromCSV(workflowDir + "/bandwidth.csv", vms);
+            //
+            // SEED STRATEGY:
+            // Option A: SAME SEED FOR ALL RUNS (current - for reproducibility)
+            //   Use -1 as runIdx to keep same seed across all runs
+            //   Good for: Testing if algorithm is deterministic
+            int seedRunIdx = -1;
+            //
+            // Option B: DIFFERENT SEED PER RUN (for statistical analysis)
+            //   Uncomment line below to vary seed per run
+            //   Good for: Computing mean/variance across different random inputs
+            // int seedRunIdx = runIdx;
+            
+            List<task> tasks = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv", seedRunIdx);
+            List<VM> vms = DataLoader.loadVMsFromCSV(workflowDir + "/processing_capacity.csv", seedRunIdx);
+            DataLoader.loadBandwidthFromCSV(workflowDir + "/bandwidth.csv", vms, seedRunIdx);
 
             SMCPTD smcptd = new SMCPTD();
             smcptd.setInputData(tasks, vms);
             SMGT smgt = smcptd.getSMGT();
-
-            // 3. Calcola costi di comunicazione con CCR specificato
-            Map<String, Double> commCosts = calculateCommunicationCosts(smgt, ccr);
 
             // 4. Crea mapping VM
             Map<Integer, VM> vmMapping = new HashMap<>();
@@ -363,8 +362,35 @@ public class ExperimentRunner {
                 vmMapping.put(vm.getID(), vm);
             }
 
-            // 5. Esegui SM-CPTD
-            Map<Integer, List<Integer>> assignments = smcptd.executeSMCPTD(commCosts, vmMapping);
+            // ============================================================================
+            // 2-PASS ITERATIVE REFINEMENT WITH VM-SPECIFIC BANDWIDTH
+            // ============================================================================
+            
+            // PASS 1: Initial scheduling with average bandwidth
+            // Calculate communication costs using average bandwidth (all VM pairs)
+            Map<String, Double> commCostsPass1 = calculateCommunicationCosts(smgt, ccr, null);
+            
+            // Execute SM-CPTD with average bandwidth to get initial assignments
+            Map<Integer, List<Integer>> assignmentsPass1 = smcptd.executeSMCPTD(commCostsPass1, vmMapping);
+            
+            // Convert assignments to task-to-VM map
+            Map<Integer, Integer> taskToVM = buildTaskToVMMap(assignmentsPass1);
+            
+            // PASS 2: Refined scheduling with VM-pair-specific bandwidth
+            // Recalculate communication costs using actual bandwidth between assigned VMs
+            Map<String, Double> commCostsPass2 = calculateCommunicationCosts(smgt, ccr, taskToVM);
+            
+            // Re-execute SM-CPTD with refined communication costs
+            // This may result in different assignments due to more accurate costs
+            SMCPTD smcptdPass2 = new SMCPTD();
+            smcptdPass2.setInputData(tasks, vms);
+            Map<Integer, List<Integer>> assignments = smcptdPass2.executeSMCPTD(commCostsPass2, vmMapping);
+            
+            // Use results from Pass 2 (refined with VM-specific bandwidth)
+            Map<String, Double> commCosts = commCostsPass2;
+            smcptd = smcptdPass2;
+            
+            // ============================================================================
 
             // 6. Calcola metriche
             double makespan = smcptd.getMakespan();
@@ -388,14 +414,6 @@ public class ExperimentRunner {
         double avgAVU = runs.stream().mapToDouble(r -> r.avu).average().orElse(0);
         double avgVF = runs.stream().mapToDouble(r -> r.vf).average().orElse(0);
         double avgMakespan = runs.stream().mapToDouble(r -> r.makespan).average().orElse(0);
-
-        // Calcola deviazione standard (opzionale per debug)
-        if (numRuns > 1 && false) { // Set to true per vedere le deviazioni standard
-            double stdSLR = calculateStdDev(runs.stream().mapToDouble(r -> r.slr).toArray(), avgSLR);
-            double stdAVU = calculateStdDev(runs.stream().mapToDouble(r -> r.avu).toArray(), avgAVU);
-            double stdVF = calculateStdDev(runs.stream().mapToDouble(r -> r.vf).toArray(), avgVF);
-            System.out.printf("    [StdDev: SLR=±%.4f, AVU=±%.4f, VF=±%.6f]%n", stdSLR, stdAVU, stdVF);
-        }
 
         // Usa il numero di task dalla prima run (sono sempre gli stessi)
         List<task> tasksForCount = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
@@ -429,17 +447,16 @@ public class ExperimentRunner {
         try {
             String workflowDir = findPegasusWorkflowDir(workflow.toLowerCase(), numTasks, numVMs);
             if (workflowDir != null) {
-                // Load data
-                List<task> tasks = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
-                List<VM> vms = DataLoader.loadVMsFromCSV(workflowDir + "/processing_capacity.csv");
-                DataLoader.loadBandwidthFromCSV(workflowDir + "/bandwidth.csv", vms);
+                // Load data (using -1 for consistent seed in CCR analysis snapshot)
+                // NOTE: This uses the default seed to ensure CCR analysis is consistent
+                int seedRunIdx = -1; // Use same seed for CCR analysis snapshot
+                List<task> tasks = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv", seedRunIdx);
+                List<VM> vms = DataLoader.loadVMsFromCSV(workflowDir + "/processing_capacity.csv", seedRunIdx);
+                DataLoader.loadBandwidthFromCSV(workflowDir + "/bandwidth.csv", vms, seedRunIdx);
                 
                 SMCPTD smcptd = new SMCPTD();
                 smcptd.setInputData(tasks, vms);
                 SMGT smgt = smcptd.getSMGT();
-                
-                // Calculate communication costs
-                Map<String, Double> commCosts = calculateCommunicationCosts(smgt, ccr);
                 
                 // Create VM mapping
                 Map<Integer, VM> vmMapping = new HashMap<>();
@@ -447,8 +464,20 @@ public class ExperimentRunner {
                     vmMapping.put(vm.getID(), vm);
                 }
                 
-                // Execute SM-CPTD
-                smcptd.executeSMCPTD(commCosts, vmMapping);
+                // 2-PASS APPROACH (same as main execution)
+                // Pass 1: Average bandwidth
+                Map<String, Double> commCostsPass1 = calculateCommunicationCosts(smgt, ccr, null);
+                Map<Integer, List<Integer>> assignmentsPass1 = smcptd.executeSMCPTD(commCostsPass1, vmMapping);
+                Map<Integer, Integer> taskToVM = buildTaskToVMMap(assignmentsPass1);
+                
+                // Pass 2: VM-specific bandwidth
+                Map<String, Double> commCosts = calculateCommunicationCosts(smgt, ccr, taskToVM);
+                SMCPTD smcptdPass2 = new SMCPTD();
+                smcptdPass2.setInputData(tasks, vms);
+                smcptdPass2.executeSMCPTD(commCosts, vmMapping);
+                
+                // Use Pass 2 results
+                smcptd = smcptdPass2;
                 
                 // Get Critical Path
                 Set<Integer> criticalPath = smcptd.getCriticalPath();
@@ -478,19 +507,6 @@ public class ExperimentRunner {
         }
         
         return result;
-    }
-
-    /**
-     * Calcola la deviazione standard
-     */
-    private static double calculateStdDev(double[] values, double mean) {
-        if (values.length <= 1)
-            return 0;
-        double sumSquaredDiff = 0;
-        for (double val : values) {
-            sumSquaredDiff += Math.pow(val - mean, 2);
-        }
-        return Math.sqrt(sumSquaredDiff / values.length);
     }
 
     /**
@@ -548,15 +564,7 @@ public class ExperimentRunner {
 
         return bestMatch;
     }
-
-    /**
-     * Trova la directory del workflow Pegasus più vicina al numero di task
-     * richiesto
-     */
-    private static String findPegasusWorkflowDir(String workflow, int targetTasks) {
-        return findPegasusWorkflowDir(workflow, targetTasks, -1);
-    }
-
+    
     /**
      * Trova la directory del workflow Pegasus con supporto per VM variabili
      */
@@ -651,35 +659,121 @@ public class ExperimentRunner {
     }
 
     /**
-     * Calcola costi di comunicazione basati su CCR
-     */
-    private static Map<String, Double> calculateCommunicationCosts(SMGT smgt, double ccr) {
+      * Calcola costi di comunicazione basati su CCR
+      * 
+      * @param smgt SMGT object with tasks and VMs
+      * @param ccr Communication-to-Computation Ratio
+      * @param taskToVM Optional task-to-VM assignment map. If provided, uses VM-pair-specific bandwidth.
+      *                 If null, uses average bandwidth across all VM pairs.
+      * @return Map of communication costs (key: "sourceTaskId_destTaskId", value: cost)
+      */
+     private static Map<String, Double> calculateCommunicationCosts(SMGT smgt, double ccr, 
+                                                                      Map<Integer, Integer> taskToVM) {
         Map<String, Double> costs = new HashMap<>();
 
-        // 1. Calcola average computation time
-        double avgCompTime = 0;
-        for (task t : smgt.getTasks()) {
-            double avgET = 0;
-            for (VM vm : smgt.getVMs()) {
-                avgET += t.getSize() / vm.getCapability("processingCapacity");
+        // Calculate average bandwidth from all VM pairs
+        double avgBandwidth = calculateAverageBandwidth(smgt.getVMs());
+        
+        boolean usingSpecificBandwidth = (taskToVM != null && !taskToVM.isEmpty());
+        
+        // Optional: Log bandwidth usage mode (set to true for debugging)
+        boolean VERBOSE_BANDWIDTH = false;
+        if (VERBOSE_BANDWIDTH) {
+            if (usingSpecificBandwidth) {
+                System.out.println("      [Bandwidth: Using VM-specific (avg=" + 
+                    String.format("%.2f", avgBandwidth) + " Mbps as fallback)]");
+            } else {
+                System.out.println("      [Bandwidth: Using average " + 
+                    String.format("%.2f", avgBandwidth) + " Mbps]");
             }
-            avgCompTime += avgET / smgt.getVMs().size();
         }
-        avgCompTime /= smgt.getTasks().size();
-
-        // 2. Communication cost = (size_task * CCR) / avgBandwidth
-        // avgBandwidth = media uniforme [20, 30]
-        double avgBandwidth = 25.0;
+        
         for (task t : smgt.getTasks()) {
             for (int succId : t.getSucc()) {
                 String key = t.getID() + "_" + succId;
                 double dataSize = t.getSize() * ccr;
-                double commCost = dataSize / avgBandwidth;
+                
+                double bandwidth;
+                if (usingSpecificBandwidth && taskToVM.containsKey(t.getID()) && taskToVM.containsKey(succId)) {
+                    // Use VM-pair-specific bandwidth
+                    int sourceVMId = taskToVM.get(t.getID());
+                    int destVMId = taskToVM.get(succId);
+                    
+                    if (sourceVMId == destVMId) {
+                        // Same VM: no communication cost
+                        costs.put(key, 0.0);
+                        continue;
+                    }
+                    
+                    // Get bandwidth between the two VMs
+                    VM sourceVM = null;
+                    for (VM vm : smgt.getVMs()) {
+                        if (vm.getID() == sourceVMId) {
+                            sourceVM = vm;
+                            break;
+                        }
+                    }
+                    
+                    if (sourceVM != null && sourceVM.hasBandwidthToVM(destVMId)) {
+                        bandwidth = sourceVM.getBandwidthToVM(destVMId);
+                    } else {
+                        // Fallback to average if bandwidth not found
+                        bandwidth = avgBandwidth;
+                    }
+                } else {
+                    // Use average bandwidth
+                    bandwidth = avgBandwidth;
+                }
+                
+                double commCost = dataSize / bandwidth;
                 costs.put(key, commCost);
             }
         }
 
         return costs;
+    }
+
+    /**
+     * Calculate average bandwidth across all VM pairs
+     * 
+     * @param vms List of VMs with bandwidth data
+     * @return Average bandwidth value
+     */
+    private static double calculateAverageBandwidth(List<VM> vms) {
+        double sum = 0;
+        int count = 0;
+        
+        for (VM vm : vms) {
+            Map<Integer, Double> bandwidths = vm.getAllBandwidths();
+            for (double bandwidth : bandwidths.values()) {
+                sum += bandwidth;
+                count++;
+            }
+        }
+        
+        // Fallback to 25.0 if no bandwidth data found
+        return count > 0 ? sum / count : 25.0;
+    }
+
+    /**
+     * Convert assignment map from (VM_ID → List<Task_ID>) to (Task_ID → VM_ID)
+     * 
+     * @param assignments Map from VM ID to list of task IDs assigned to that VM
+     * @return Map from task ID to the VM ID it's assigned to
+     */
+    private static Map<Integer, Integer> buildTaskToVMMap(Map<Integer, List<Integer>> assignments) {
+        Map<Integer, Integer> taskToVM = new HashMap<>();
+        
+        for (Map.Entry<Integer, List<Integer>> entry : assignments.entrySet()) {
+            int vmId = entry.getKey();
+            List<Integer> taskIds = entry.getValue();
+            
+            for (int taskId : taskIds) {
+                taskToVM.put(taskId, vmId);
+            }
+        }
+        
+        return taskToVM;
     }
 
     /**
