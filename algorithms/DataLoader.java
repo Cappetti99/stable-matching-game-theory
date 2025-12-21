@@ -22,11 +22,23 @@ public class DataLoader {
      * @return List of VM objects with random capacities
      */
     public static List<VM> loadVMsFromCSV(String filename) throws IOException {
+        return loadVMsFromCSV(filename, -1);
+    }
+
+    /**
+     * Loads VM data from processing_capacity.csv with run-specific seed
+     * @param filename Path to processing_capacity.csv
+     * @param runIdx Run index for seed variation (-1 for default behavior)
+     * @return List of VM objects with random capacities
+     */
+    public static List<VM> loadVMsFromCSV(String filename, int runIdx) throws IOException {
         List<VM> vms = new ArrayList<>();
         BufferedReader reader = new BufferedReader(new FileReader(filename));
         String line;
         boolean firstLine = true;
-        Random rand = SeededRandom.forScope("DataLoader.loadVMsFromCSV:" + filename);
+        Random rand = (runIdx >= 0) 
+            ? SeededRandom.forScopeAndRun("DataLoader.loadVMsFromCSV:" + filename, runIdx)
+            : SeededRandom.forScope("DataLoader.loadVMsFromCSV:" + filename);
 
         while ((line = reader.readLine()) != null) {
             // Skip header, comments and empty lines
@@ -73,7 +85,19 @@ public class DataLoader {
      * @param vms List of VMs to apply bandwidth to
      */
     public static void loadBandwidthFromCSV(String filename, List<VM> vms) throws IOException {
-        Random rand = SeededRandom.forScope("DataLoader.loadBandwidthFromCSV:" + filename);
+        loadBandwidthFromCSV(filename, vms, -1);
+    }
+
+    /**
+     * Generates random bandwidth between all VM pairs with run-specific seed
+     * @param filename Path to bandwidth.csv (not used, kept for compatibility)
+     * @param vms List of VMs to apply bandwidth to
+     * @param runIdx Run index for seed variation (-1 for default behavior)
+     */
+    public static void loadBandwidthFromCSV(String filename, List<VM> vms, int runIdx) throws IOException {
+        Random rand = (runIdx >= 0)
+            ? SeededRandom.forScopeAndRun("DataLoader.loadBandwidthFromCSV:" + filename, runIdx)
+            : SeededRandom.forScope("DataLoader.loadBandwidthFromCSV:" + filename);
         
         // Generate random bandwidth for all VM pairs: [20, 30] Mbps
         for (VM vmI : vms) {
@@ -95,11 +119,23 @@ public class DataLoader {
      * @return List of task objects with random sizes
      */
     public static List<task> loadTaskBasicInfo(String filename) throws IOException {
+        return loadTaskBasicInfo(filename, -1);
+    }
+
+    /**
+     * Loads task basic info from task.csv with run-specific seed
+     * @param filename Path to task.csv
+     * @param runIdx Run index for seed variation (-1 for default behavior)
+     * @return List of task objects with random sizes
+     */
+    public static List<task> loadTaskBasicInfo(String filename, int runIdx) throws IOException {
         List<task> tasks = new ArrayList<>();
         BufferedReader reader = new BufferedReader(new FileReader(filename));
         String line;
         boolean firstLine = true;
-        Random rand = SeededRandom.forScope("DataLoader.loadTaskBasicInfo:" + filename);
+        Random rand = (runIdx >= 0)
+            ? SeededRandom.forScopeAndRun("DataLoader.loadTaskBasicInfo:" + filename, runIdx)
+            : SeededRandom.forScope("DataLoader.loadTaskBasicInfo:" + filename);
 
         while ((line = reader.readLine()) != null) {
             // Skip header, comments and empty lines
@@ -206,15 +242,26 @@ public class DataLoader {
      * @return List of tasks with complete structure
      */
     public static List<task> loadTasksFromCSV(String dagFilename, String taskFilename) throws IOException {
+        return loadTasksFromCSV(dagFilename, taskFilename, -1);
+    }
+
+    /**
+     * Complete data loading: tasks + DAG structure with run-specific seed
+     * @param dagFilename Path to dag.csv
+     * @param taskFilename Path to task.csv
+     * @param runIdx Run index for seed variation (-1 for default behavior)
+     * @return List of tasks with complete structure
+     */
+    public static List<task> loadTasksFromCSV(String dagFilename, String taskFilename, int runIdx) throws IOException {
         List<task> tasks = new ArrayList<>();
         
         // First load task basic info if task.csv exists
         File taskFile = new File(taskFilename);
         if (taskFile.exists()) {
-            tasks = loadTaskBasicInfo(taskFilename);
+            tasks = loadTaskBasicInfo(taskFilename, runIdx);
         }
 
-        // Load DAG structure
+        // Load DAG structure (structure doesn't change, no runIdx needed)
         loadDAGStructure(dagFilename, tasks);
 
         return tasks;

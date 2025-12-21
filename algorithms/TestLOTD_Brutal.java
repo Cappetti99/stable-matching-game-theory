@@ -646,24 +646,26 @@ public class TestLOTD_Brutal {
     
     private static double calculateMakespan(Map<Integer, List<Integer>> schedule, 
                                            List<task> tasks, List<VM> vms) {
-        // Simplified makespan calculation
+        // Use Metrics for makespan calculation
         double maxMakespan = 0;
         
         for (Map.Entry<Integer, List<Integer>> entry : schedule.entrySet()) {
             int vmId = entry.getKey();
-            List<Integer> vmTasks = entry.getValue();
+            List<Integer> vmTaskIds = entry.getValue();
             
-            if (vmTasks == null || vmTasks.isEmpty()) continue;
+            if (vmTaskIds == null || vmTaskIds.isEmpty()) continue;
             
             double vmMakespan = 0;
             VM vm = vms.get(vmId);
-            double processingSpeed = vm.getCapability("processing");
-            if (processingSpeed == 0.0) processingSpeed = 1.0;
             
-            for (int taskId : vmTasks) {
+            // Convert task IDs to task objects and calculate using Metrics.ET
+            for (int taskId : vmTaskIds) {
                 if (taskId < tasks.size()) {
-                    double taskTime = tasks.get(taskId).getSize() / processingSpeed;
-                    vmMakespan += taskTime;
+                    task t = tasks.get(taskId);
+                    double taskTime = Metrics.ET(t, vm, "processing");
+                    if (taskTime != Double.POSITIVE_INFINITY) {
+                        vmMakespan += taskTime;
+                    }
                 }
             }
             

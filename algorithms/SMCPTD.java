@@ -292,6 +292,11 @@ public class SMCPTD {
      * STEP 4: Calcolo metriche finali
      * - Makespan: tempo totale di esecuzione
      * - SLR: Schedule Length Ratio (Paper Eq. 7)
+     * 
+     * Includes validation and logging:
+     * - Validates makespan is valid (> 0 and not NaN)
+     * - Logs the source of makespan calculation (LOTD vs fallback)
+     * - Warns if fallback is used (may affect AVU accuracy)
      */
     private void calculateFinalMetrics(
             Map<String, Double> communicationCosts,
@@ -299,6 +304,8 @@ public class SMCPTD {
 
         System.out.println("   📈 Calculating makespan...");
 
+        boolean usedFallback = false;
+        
         // Calcola makespan usando AFT da LOTD
         if (lotd != null && lotd.getTaskAFT() != null && !lotd.getTaskAFT().isEmpty()) {
             Map<Integer, Double> taskAFT = lotd.getTaskAFT();
@@ -307,49 +314,63 @@ public class SMCPTD {
                 .max()
                 .orElse(0.0);
 
-            System.out.println("   ✓ Makespan calculated from LOTD AFT: " + 
+            // INFO level log - LOTD AFT used (preferred method)
+            System.out.println("   ✅ Makespan calculated from LOTD AFT: " + 
                 String.format("%.3f", makespan));
+            System.out.println("   ℹ️  Source: LOTD Actual Finish Times (accurate for AVU/VF calculation)");
+            
         } else {
             // Fallback: calcolo semplificato
-            System.out.println("   ⚠️  LOTD AFT not available, using fallback");
+            System.out.println("   ⚠️  LOTD AFT not available, using fallback calculation");
             makespan = calculateMakespanFallback();
+            usedFallback = true;
+            
+            // WARNING level log - fallback used (may be inaccurate)
+            System.out.println("   ⚠️  Using fallback makespan (may affect AVU accuracy): " + 
+                String.format("%.3f", makespan));
+            System.out.println("   ⚠️  Source: Simplified calculation without communication costs");
+            System.out.println("   ⚠️  Note: AVU and VF metrics may be less accurate with fallback makespan");
         }
+        
+        // VALIDATION 1: Check if makespan is NaN
+        if (Double.isNaN(makespan)) {
+            throw new IllegalStateException(
+                "Invalid makespan calculation: result is NaN. " +
+                "Source: " + (usedFallback ? "fallback" : "LOTD AFT") + ". " +
+                "Check task sizes and VM capabilities.");
+        }
+        
+        // VALIDATION 2: Check if makespan is <= 0
+        if (makespan <= 0) {
+            throw new IllegalStateException(
+                String.format("Invalid makespan calculation: result is %.6f (must be > 0). ", makespan) +
+                "Source: " + (usedFallback ? "fallback" : "LOTD AFT") + ". " +
+                "Check schedule validity and task assignments.");
+        }
+        
+        // DEBUG log - validation passed
+        System.out.println("   ✓ Makespan validation passed: " + 
+            String.format("%.3f > 0 and not NaN", makespan));
 
-        // Calcola SLR (Paper Equation 7)
-        // SLR = makespan / Σ(min_ET(task_i) for task_i in CP)
+        // Calcola SLR (Paper Equation 7) usando Metrics.SLR
         System.out.println("   📈 Calculating SLR...");
         
         if (!criticalPath.isEmpty()) {
-            double sumMinET = 0.0;
-            
+            // Converti criticalPath in lista di task objects
+            List<task> criticalPathTasks = new ArrayList<>();
             for (Integer taskId : criticalPath) {
                 task cpTask = smgt.getTaskById(taskId);
                 if (cpTask != null) {
-                    // Trova minimum execution time tra tutte le VM
-                    double minET = Double.POSITIVE_INFINITY;
-                    for (VM vm : vmMapping.values()) {
-                        double capacity = vm.getCapability("processingCapacity");
-                        if (capacity <= 0) {
-                            capacity = vm.getCapability("processing");
-                        }
-                        if (capacity > 0) {
-                            double et = cpTask.getSize() / capacity;
-                            minET = Math.min(minET, et);
-                        }
-                    }
-                    
-                    if (minET != Double.POSITIVE_INFINITY) {
-                        sumMinET += minET;
-                    }
+                    criticalPathTasks.add(cpTask);
                 }
             }
-
-            if (sumMinET > 0) {
-                slr = makespan / sumMinET;
+            
+            if (!criticalPathTasks.isEmpty()) {
+                slr = Metrics.SLR(makespan, criticalPathTasks, vmMapping);
                 System.out.println("   ✓ SLR calculated: " + String.format("%.3f", slr));
             } else {
                 slr = Double.POSITIVE_INFINITY;
-                System.out.println("   ⚠️  Invalid SLR calculation (sumMinET = 0)");
+                System.out.println("   ⚠️  Invalid SLR calculation (no valid CP tasks)");
             }
         } else {
             System.out.println("   ⚠️  Empty critical path, cannot calculate SLR");
@@ -359,6 +380,7 @@ public class SMCPTD {
 
     /**
      * Fallback per calcolo makespan quando LOTD AFT non è disponibile
+     * Usa Metrics.ET per calcolare i tempi di esecuzione
      */
     private double calculateMakespanFallback() {
         double maxFinishTime = 0.0;
@@ -380,16 +402,14 @@ public class SMCPTD {
             if (vm == null) continue;
 
             double vmFinishTime = 0.0;
-            double capacity = vm.getCapability("processingCapacity");
-            if (capacity <= 0) {
-                capacity = vm.getCapability("processing");
-            }
-
             for (Integer taskId : assignedTasks) {
                 task t = smgt.getTaskById(taskId);
-                if (t != null && capacity > 0) {
-                    double execTime = t.getSize() / capacity;
-                    vmFinishTime += execTime;
+                if (t != null) {
+                    // Usa Metrics.ET invece del calcolo manuale
+                    double execTime = Metrics.ET(t, vm, "processingCapacity");
+                    if (execTime != Double.POSITIVE_INFINITY) {
+                        vmFinishTime += execTime;
+                    }
                 }
             }
 

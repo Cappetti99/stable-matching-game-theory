@@ -512,7 +512,7 @@ public class SMGT {
     }
 
     /**
-     * Calcola finish time di un task su una VM
+     * Calcola finish time di un task su una VM usando Metrics.ET
      */
     private double calculateFinishTime(int taskId, int vmIdx) {
         task t = getTaskById(taskId);
@@ -521,13 +521,9 @@ public class SMGT {
         }
 
         VM vm = vms.get(vmIdx);
-        double capacity = getVMProcessingCapacity(vm);
-
-        if (capacity == 0) {
-            return Double.MAX_VALUE;
-        }
-
-        return t.getSize() / capacity;
+        
+        // Usa Metrics.ET invece del calcolo manuale
+        return Metrics.ET(t, vm, "processingCapacity");
     }
 
     /**

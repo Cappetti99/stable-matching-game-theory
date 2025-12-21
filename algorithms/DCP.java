@@ -312,10 +312,9 @@ public class DCP {
     }
 
     /**
-     * Calcola il peso computazionale W_i di un task
+     * Calcola il peso computazionale W_i di un task usando Metrics.ET
      * 
      * W_i = average(execution_time) su tutte le VM
-     * execution_time = task_size / vm_processing_capacity
      * 
      * @param t         Task da calcolare
      * @param vmMapping Mappa delle VM
@@ -331,16 +330,11 @@ public class DCP {
         double totalComputationTime = 0.0;
         int vmCount = 0;
 
-        // Calcola tempo medio di esecuzione su tutte le VM
+        // Calcola tempo medio di esecuzione su tutte le VM usando Metrics.ET
         for (VM vm : vmMapping.values()) {
-            // Prova prima "processingCapacity", poi "processing"
-            double processingCapacity = vm.getCapability("processingCapacity");
-            if (processingCapacity <= 0) {
-                processingCapacity = vm.getCapability("processing");
-            }
-
-            if (processingCapacity > 0) {
-                double computationTime = t.getSize() / processingCapacity;
+            double computationTime = Metrics.ET(t, vm, "processingCapacity");
+            
+            if (computationTime != Double.POSITIVE_INFINITY) {
                 totalComputationTime += computationTime;
                 vmCount++;
             }

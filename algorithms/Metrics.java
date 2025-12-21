@@ -10,12 +10,22 @@ public class Metrics {
 
     /**
      * Transmission time between two tasks.
+     * 
+     * VALIDATED: Returns 0 if same VM, POSITIVE_INFINITY if invalid bandwidth
      */
     public static double Ttrans(task ti, task tj, VM vmK, VM vmL, double CCR) {
         if (vmK.getID() == vmL.getID()) return 0.0;
-        double dataSize = ti.getSize() * CCR;
+        
+        // VALIDATION: Check for zero/negative task size
+        double taskSize = ti.getSize();
+        if (taskSize <= 0) return 0.0;
+        
+        double dataSize = taskSize * CCR;
         double bandwidth = vmK.getBandwidthToVM(vmL.getID());
+        
+        // VALIDATION: Check for zero/negative bandwidth
         if (bandwidth <= 0) return Double.POSITIVE_INFINITY;
+        
         return dataSize / bandwidth;
     }
 
@@ -54,17 +64,40 @@ public class Metrics {
 
     /**
      * Execution time of a task on a VM.
+     * 
+     * VALIDATED: Returns POSITIVE_INFINITY if VM capacity ≤ 0 or task size ≤ 0
      */
     public static double ET(task ti, VM vmK, String capabilityType) {
+        // VALIDATION: Check task size
+        if (ti.getSize() <= 0) {
+            return Double.POSITIVE_INFINITY;
+        }
+        
+        // VALIDATION: Check VM capability
         double pk = vmK.getCapability(capabilityType);
-        if (pk <= 0) return Double.POSITIVE_INFINITY;
+        if (pk <= 0) {
+            return Double.POSITIVE_INFINITY;
+        }
+        
         return ti.getSize() / pk;
     }
 
     public static double ET(task ti, VM vmK) {
+        // VALIDATION: Check task size
+        if (ti.getSize() <= 0) {
+            return Double.POSITIVE_INFINITY;
+        }
+        
         Map<String, Double> caps = vmK.getProcessingCapabilities();
         if (caps.isEmpty()) return Double.POSITIVE_INFINITY;
+        
         double pk = caps.values().iterator().next();
+        
+        // VALIDATION: Check VM capability
+        if (pk <= 0) {
+            return Double.POSITIVE_INFINITY;
+        }
+        
         return ti.getSize() / pk;
     }
 
@@ -162,26 +195,58 @@ public class Metrics {
 
     /**
      * Variance of Fairness.
+     * 
+     * OPTIMIZED VERSION - O(n*m*k) → O(n*m)
+     * Pre-builds reverse lookup map for O(1) task-to-VM assignment lookup.
      */
     public static double VF(List<task> tasks, Map<Integer, VM> vms,
                             Map<Integer, List<task>> vmTaskAssignments,
                             Map<Integer, Double> taskFinishTimes,
                             String capabilityName) {
 
-        List<Double> satisfactions = new ArrayList<>();
-        for (task t : tasks) {
-            VM assignedVM = null;
-            for (Map.Entry<Integer, List<task>> entry : vmTaskAssignments.entrySet()) {
-                if (entry.getValue().contains(t)) {
-                    assignedVM = vms.get(entry.getKey());
-                    break;
+        // OPTIMIZATION: Pre-build reverse lookup map: task → VM
+        // OLD: For each task, search through all VM assignments O(n*m*k)
+        // NEW: Build map once O(m*k), then lookup in O(1) per task
+        Map<Integer, VM> taskToVM = new HashMap<>();
+        for (Map.Entry<Integer, List<task>> entry : vmTaskAssignments.entrySet()) {
+            VM vm = vms.get(entry.getKey());
+            if (vm != null) {
+                for (task t : entry.getValue()) {
+                    taskToVM.put(t.getID(), vm);
                 }
             }
+        }
+
+        List<Double> satisfactions = new ArrayList<>();
+        for (task t : tasks) {
+            // O(1) lookup instead of O(m*k) search
+            VM assignedVM = taskToVM.get(t.getID());
             if (assignedVM == null) continue;
 
+            // VALIDATION: Check for zero/negative VM capacity
+            double vmCapability = assignedVM.getCapability(capabilityName);
+            if (vmCapability <= 0) {
+                System.err.println("⚠️  Warning: VM " + assignedVM.getID() + 
+                                   " has invalid capacity: " + vmCapability);
+                continue;
+            }
+
             double actualET = ET(t, assignedVM, capabilityName);
+            
+            // VALIDATION: Check for invalid actualET
+            if (actualET == Double.POSITIVE_INFINITY || actualET <= 0) {
+                System.err.println("⚠️  Warning: Invalid actualET for task " + t.getID() + 
+                                   " on VM " + assignedVM.getID() + ": " + actualET);
+                continue;
+            }
+
             double fastestET = Double.POSITIVE_INFINITY;
-            for (VM vm : vms.values()) fastestET = Math.min(fastestET, ET(t, vm, capabilityName));
+            for (VM vm : vms.values()) {
+                double et = ET(t, vm, capabilityName);
+                if (et != Double.POSITIVE_INFINITY && et > 0) {
+                    fastestET = Math.min(fastestET, et);
+                }
+            }
 
             if (fastestET > 0 && fastestET != Double.POSITIVE_INFINITY)
                 satisfactions.add(actualET / fastestET);
