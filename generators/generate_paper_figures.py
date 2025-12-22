@@ -189,10 +189,11 @@ def plot_slr_vs_ccr(data, scale='small', output_filename='figure3_slr_vs_ccr.png
 def plot_avu_vs_ccr(data, scale='small', output_filename='figure6_avu_vs_ccr.png'):
     """
     Genera Figura 6 (small), 7 (medium), o 8 (large): AVU vs CCR
+    ENHANCED: Uses adaptive Y-axis scaling to highlight AVU decreasing trend
     """
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    fig.suptitle(f'Comparison of AVU in CCRs and {scale}-scale workflows', 
-                 fontsize=14, fontweight='bold')
+    fig.suptitle(f'AVU vs CCR for {scale}-scale workflows (decreasing trend with communication overhead)', 
+                 fontsize=13, fontweight='bold')
     
     for idx, (ax, workflow) in enumerate(zip(axes.flat, WORKFLOW_ORDER)):
         if workflow not in data:
@@ -205,6 +206,9 @@ def plot_avu_vs_ccr(data, scale='small', output_filename='figure6_avu_vs_ccr.png
         tasks = info.get('tasks', '?')
         vms = info.get('vms', '?')
         
+        # Collect all AVU values for this workflow to determine Y-axis range
+        all_avu_vals = []
+        
         # Plot per ogni algoritmo
         for algo_name, algo_data in workflow_results.items():
             if algo_name == 'info':  # Salta il campo info
@@ -214,6 +218,7 @@ def plot_avu_vs_ccr(data, scale='small', output_filename='figure6_avu_vs_ccr.png
             
             ccr_vals = algo_data['CCR']
             avu_vals = [v * 100 for v in algo_data['AVU']]  # Converti in percentuale
+            all_avu_vals.extend(avu_vals)
             
             ax.plot(ccr_vals, avu_vals, 
                    label=style.get('label', algo_name),
@@ -223,11 +228,31 @@ def plot_avu_vs_ccr(data, scale='small', output_filename='figure6_avu_vs_ccr.png
                    markersize=style.get('markersize', 7),
                    linestyle=style.get('linestyle', '-'),
                    zorder=style.get('zorder', 3))
+            
+            # Add trend annotation for SM-CPTD
+            if algo_name == 'SM-CPTD' and len(avu_vals) >= 2:
+                avu_start = avu_vals[0]
+                avu_end = avu_vals[-1]
+                decrease_pct = ((avu_end - avu_start) / avu_start) * 100
+                
+                # Add annotation showing the decrease
+                ax.annotate(f'{decrease_pct:.1f}%', 
+                           xy=(ccr_vals[-1], avu_end),
+                           xytext=(10, -5),
+                           textcoords='offset points',
+                           fontsize=9,
+                           color=style.get('color', 'black'),
+                           weight='bold',
+                           bbox=dict(boxstyle='round,pad=0.3', 
+                                   facecolor='white', 
+                                   edgecolor=style.get('color', 'black'),
+                                   alpha=0.8))
         
         # Configurazione assi
         ax.set_xlabel('CCR', fontsize=11)
         ax.set_ylabel('AVU (%)', fontsize=11)
-        ax.set_title(f'{WORKFLOW_TITLES[workflow]} ({tasks}×{vms})', fontsize=12, fontweight='bold')
+        ax.set_title(f'{WORKFLOW_TITLES[workflow]} ({tasks}×{vms})', 
+                    fontsize=12, fontweight='bold')
         
         # Grid
         ax.grid(True, linestyle='--', alpha=0.3, color='gray', linewidth=0.5)
@@ -236,10 +261,26 @@ def plot_avu_vs_ccr(data, scale='small', output_filename='figure6_avu_vs_ccr.png
         ax.legend(loc='upper right', fontsize=9, framealpha=0.9, 
                  edgecolor='black', fancybox=False)
         
-        # Limiti assi
+        # ADAPTIVE Y-axis scaling: show full range but with padding to highlight trend
+        if all_avu_vals:
+            min_avu = min(all_avu_vals)
+            max_avu = max(all_avu_vals)
+            avu_range = max_avu - min_avu
+            
+            # Add 20% padding above and below for clarity
+            y_margin = max(avu_range * 0.2, 1.0)  # At least 1% margin
+            y_min = max(0, min_avu - y_margin)
+            y_max = min(100, max_avu + y_margin)
+            
+            ax.set_ylim(y_min, y_max)
+            
+            # Add horizontal reference line at max AVU
+            ax.axhline(y=max_avu, color='gray', linestyle=':', alpha=0.3, linewidth=1)
+            ax.axhline(y=min_avu, color='gray', linestyle=':', alpha=0.3, linewidth=1)
+        
+        # X-axis configuration
         ax.set_xlim(0.35, 2.05)
         ax.set_xticks(CCR_VALUES)
-        ax.set_ylim(0, 100)  # AVU sempre 0-100%
     
     plt.tight_layout()
     output_path = Path('../results/figures') / output_filename
@@ -673,14 +714,30 @@ def plot_metrics_comparison(data, scale='large', output_filename='figure_metrics
         else:
             ax_slr.set_xticklabels([])
         
-        # Configurazione AVU
+        # Configurazione AVU - ADAPTIVE SCALING to show trend
         ax_avu.set_ylabel('AVU (%)', fontsize=11)
         ax_avu.grid(True, linestyle='--', alpha=0.3, color='gray', linewidth=0.5)
         ax_avu.set_xlim(0.35, 2.05)
         ax_avu.set_xticks(CCR_VALUES)
-        ax_avu.set_ylim(0, 100)
+        
+        # Collect all AVU values for this workflow
+        all_avu_percent = []
+        for algo_name, algo_data in workflow_results.items():
+            if algo_name != 'info':
+                all_avu_percent.extend([v * 100 for v in algo_data['AVU']])
+        
+        # Use adaptive Y-axis to highlight decreasing trend
+        if all_avu_percent:
+            min_avu = min(all_avu_percent)
+            max_avu = max(all_avu_percent)
+            avu_range = max_avu - min_avu
+            y_margin = max(avu_range * 0.2, 1.0)
+            y_min = max(0, min_avu - y_margin)
+            y_max = min(100, max_avu + y_margin)
+            ax_avu.set_ylim(y_min, y_max)
+        
         if row_idx == 0:
-            ax_avu.set_title('AVU', fontsize=12, fontweight='bold')
+            ax_avu.set_title('AVU (adaptive scale)', fontsize=12, fontweight='bold')
         if row_idx == 3:
             ax_avu.set_xlabel('CCR', fontsize=11)
         else:

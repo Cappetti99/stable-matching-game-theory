@@ -161,7 +161,6 @@ def plot_comm_cost_distribution(data_dict: Dict[str, Dict],
     output_path = Path('../results/figures') / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"✅ Saved: {output_path}")
     plt.close()
 
@@ -234,7 +233,6 @@ def plot_critical_path_stability(data_dict: Dict[str, Dict],
     output_path = Path('../results/figures') / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"✅ Saved: {output_path}")
     plt.close()
 
@@ -292,7 +290,6 @@ def plot_duplication_sensitivity(data_dict: Dict[str, Dict],
     output_path = Path('../results/figures') / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"✅ Saved: {output_path}")
     plt.close()
 
@@ -372,7 +369,6 @@ def plot_sensitivity_scorecard(data_dict: Dict[str, Dict],
     output_path = Path('../results/figures') / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"✅ Saved: {output_path}")
     plt.close()
 
@@ -384,131 +380,133 @@ def plot_normalized_performance(data_dict: Dict[str, Dict],
                                 output_filename: str = 'ccr_normalized_performance.png'):
     """
     Plot normalized performance metrics (SLR, Makespan, AVU) vs CCR
-    Shows relative performance degradation - normalized to CCR=0.4 baseline
+    Normalized to baseline CCR=0.4 (baseline = 1.0, not 100%)
     """
     fig, axes = plt.subplots(2, 2, figsize=(16, 11))
-    fig.suptitle('Normalized Performance Metrics vs CCR (Baseline: CCR=0.4)', 
+    fig.suptitle('Normalized Performance Metrics vs CCR (Baseline: CCR=0.4 = 1.0)', 
                  fontsize=16, fontweight='bold')
-    
-    # Collect data for all workflows
-    workflow_data = {}
-    for workflow, data in data_dict.items():
-        if 'communication_costs' not in data:
-            continue
-        
-        stats = data['communication_costs']['stats_per_ccr']
-        ccr_vals = [s['ccr'] for s in stats]
-        
-        # Extract metrics from JSON (we need to get actual values)
-        # For now, we'll compute from elasticity data
-        metrics = data.get('metrics_elasticity', {})
-        
-        workflow_data[workflow] = {
-            'ccr': ccr_vals,
-            'metrics': metrics
-        }
     
     # Plot 1: SLR normalized
     ax1 = axes[0, 0]
-    for workflow, wdata in workflow_data.items():
-        ccr_vals = wdata['ccr']
-        slr_data = wdata['metrics'].get('slr', {})
+    for workflow, data in data_dict.items():
+        if 'metrics_per_ccr' not in data:
+            continue
         
-        # Calculate normalized values (0.4 = 100%, 2.0 = 100 + percent_change)
-        percent_change = slr_data.get('percent_change', 0)
-        baseline = 100
-        final = 100 + percent_change
+        metrics_per_ccr = data['metrics_per_ccr']
+        ccr_vals = [m['ccr'] for m in metrics_per_ccr]
+        slr_vals = [m['slr'] for m in metrics_per_ccr]
         
-        # Linear interpolation between baseline and final
-        normalized = [baseline + (final - baseline) * (ccr - ccr_vals[0]) / (ccr_vals[-1] - ccr_vals[0]) 
-                     for ccr in ccr_vals]
+        # Normalize to baseline (first value = 1.0)
+        baseline_slr = slr_vals[0]
+        normalized_slr = [slr / baseline_slr for slr in slr_vals]
         
-        ax1.plot(ccr_vals, normalized, 'o-', label=WORKFLOW_TITLES.get(workflow, workflow.title()),
+        ax1.plot(ccr_vals, normalized_slr, 'o-', label=WORKFLOW_TITLES.get(workflow, workflow.title()),
                 linewidth=2.5, markersize=8, color=COLORS.get(workflow, 'blue'))
     
     ax1.set_xlabel('CCR', fontsize=12, fontweight='bold')
-    ax1.set_ylabel('Normalized SLR (%)', fontsize=12, fontweight='bold')
+    ax1.set_ylabel('Normalized SLR', fontsize=12, fontweight='bold')
     ax1.set_title('Schedule Length Ratio (SLR)', fontsize=13, fontweight='bold')
     ax1.legend(fontsize=10, loc='upper left')
     ax1.grid(True, alpha=0.3, linestyle='--')
-    ax1.axhline(y=100, color='gray', linestyle='--', alpha=0.5, linewidth=1)
+    ax1.axhline(y=1.0, color='gray', linestyle='--', alpha=0.5, linewidth=1)
     ax1.set_xlim(0.35, 2.05)
+    ax1.set_ylim(0.95, None)  # Start from 0.95 to better show the curves
     
     # Plot 2: Makespan normalized
     ax2 = axes[0, 1]
-    for workflow, wdata in workflow_data.items():
-        ccr_vals = wdata['ccr']
-        makespan_data = wdata['metrics'].get('makespan', {})
+    for workflow, data in data_dict.items():
+        if 'metrics_per_ccr' not in data:
+            continue
         
-        percent_change = makespan_data.get('percent_change', 0)
-        baseline = 100
-        final = 100 + percent_change
+        metrics_per_ccr = data['metrics_per_ccr']
+        ccr_vals = [m['ccr'] for m in metrics_per_ccr]
+        makespan_vals = [m['makespan'] for m in metrics_per_ccr]
         
-        normalized = [baseline + (final - baseline) * (ccr - ccr_vals[0]) / (ccr_vals[-1] - ccr_vals[0]) 
-                     for ccr in ccr_vals]
+        # Normalize to baseline (first value = 1.0)
+        baseline_makespan = makespan_vals[0]
+        normalized_makespan = [ms / baseline_makespan for ms in makespan_vals]
         
-        ax2.plot(ccr_vals, normalized, 'o-', label=WORKFLOW_TITLES.get(workflow, workflow.title()),
+        ax2.plot(ccr_vals, normalized_makespan, 'o-', label=WORKFLOW_TITLES.get(workflow, workflow.title()),
                 linewidth=2.5, markersize=8, color=COLORS.get(workflow, 'blue'))
     
     ax2.set_xlabel('CCR', fontsize=12, fontweight='bold')
-    ax2.set_ylabel('Normalized Makespan (%)', fontsize=12, fontweight='bold')
+    ax2.set_ylabel('Normalized Makespan', fontsize=12, fontweight='bold')
     ax2.set_title('Makespan', fontsize=13, fontweight='bold')
     ax2.legend(fontsize=10, loc='upper left')
     ax2.grid(True, alpha=0.3, linestyle='--')
-    ax2.axhline(y=100, color='gray', linestyle='--', alpha=0.5, linewidth=1)
+    ax2.axhline(y=1.0, color='gray', linestyle='--', alpha=0.5, linewidth=1)
     ax2.set_xlim(0.35, 2.05)
+    ax2.set_ylim(0.95, None)
     
     # Plot 3: AVU normalized
     ax3 = axes[1, 0]
-    for workflow, wdata in workflow_data.items():
-        ccr_vals = wdata['ccr']
-        avu_data = wdata['metrics'].get('avu', {})
+    for workflow, data in data_dict.items():
+        if 'metrics_per_ccr' not in data:
+            continue
         
-        percent_change = avu_data.get('percent_change', 0)
-        baseline = 100
-        final = 100 + percent_change
+        metrics_per_ccr = data['metrics_per_ccr']
+        ccr_vals = [m['ccr'] for m in metrics_per_ccr]
+        avu_vals = [m['avu'] for m in metrics_per_ccr]
         
-        normalized = [baseline + (final - baseline) * (ccr - ccr_vals[0]) / (ccr_vals[-1] - ccr_vals[0]) 
-                     for ccr in ccr_vals]
+        # Normalize to baseline (first value = 1.0)
+        baseline_avu = avu_vals[0]
+        normalized_avu = [avu / baseline_avu for avu in avu_vals]
         
-        ax3.plot(ccr_vals, normalized, 'o-', label=WORKFLOW_TITLES.get(workflow, workflow.title()),
+        ax3.plot(ccr_vals, normalized_avu, 'o-', label=WORKFLOW_TITLES.get(workflow, workflow.title()),
                 linewidth=2.5, markersize=8, color=COLORS.get(workflow, 'blue'))
     
     ax3.set_xlabel('CCR', fontsize=12, fontweight='bold')
-    ax3.set_ylabel('Normalized AVU (%)', fontsize=12, fontweight='bold')
+    ax3.set_ylabel('Normalized AVU', fontsize=12, fontweight='bold')
     ax3.set_title('Average VM Utilization (AVU)', fontsize=13, fontweight='bold')
     ax3.legend(fontsize=10, loc='lower left')
     ax3.grid(True, alpha=0.3, linestyle='--')
-    ax3.axhline(y=100, color='gray', linestyle='--', alpha=0.5, linewidth=1)
+    ax3.axhline(y=1.0, color='gray', linestyle='--', alpha=0.5, linewidth=1)
     ax3.set_xlim(0.35, 2.05)
+    ax3.set_ylim(None, 1.05)  # Cap at 1.05 since AVU decreases
     
-    # Plot 4: Combined summary (all metrics on one plot)
+    # Plot 4: Combined comparison (final normalized values)
     ax4 = axes[1, 1]
-    for workflow, wdata in workflow_data.items():
-        ccr_vals = wdata['ccr']
-        metrics = wdata['metrics']
-        
-        # Get percent changes
-        slr_change = metrics.get('slr', {}).get('percent_change', 0)
-        makespan_change = metrics.get('makespan', {}).get('percent_change', 0)
-        avu_change = abs(metrics.get('avu', {}).get('percent_change', 0))
-        
-        # Plot bars
-        workflow_title = WORKFLOW_TITLES.get(workflow, workflow.title())
-        x_pos = list(data_dict.keys()).index(workflow)
-        
-        ax4.bar(x_pos - 0.25, slr_change, 0.25, label='SLR' if x_pos == 0 else '', 
-               color='steelblue', alpha=0.8)
-        ax4.bar(x_pos, makespan_change, 0.25, label='Makespan' if x_pos == 0 else '', 
-               color='coral', alpha=0.8)
-        ax4.bar(x_pos + 0.25, avu_change, 0.25, label='AVU' if x_pos == 0 else '', 
-               color='lightgreen', alpha=0.8)
+    workflow_names = []
+    slr_final_vals = []
+    makespan_final_vals = []
+    avu_final_vals = []
     
-    ax4.set_ylabel('Performance Change (%)', fontsize=12, fontweight='bold')
-    ax4.set_title('Total Performance Impact (CCR: 0.4 → 2.0)', fontsize=13, fontweight='bold')
-    ax4.set_xticks(range(len(data_dict)))
-    ax4.set_xticklabels([WORKFLOW_TITLES.get(w, w.title()) for w in data_dict.keys()], 
-                        rotation=30, ha='right')
+    for workflow, data in data_dict.items():
+        if 'metrics_per_ccr' not in data:
+            continue
+        
+        metrics_per_ccr = data['metrics_per_ccr']
+        
+        # Get baseline and final values
+        slr_baseline = metrics_per_ccr[0]['slr']
+        slr_final = metrics_per_ccr[-1]['slr']
+        
+        makespan_baseline = metrics_per_ccr[0]['makespan']
+        makespan_final = metrics_per_ccr[-1]['makespan']
+        
+        avu_baseline = metrics_per_ccr[0]['avu']
+        avu_final = metrics_per_ccr[-1]['avu']
+        
+        workflow_names.append(WORKFLOW_TITLES.get(workflow, workflow.title()))
+        slr_final_vals.append(slr_final / slr_baseline)
+        makespan_final_vals.append(makespan_final / makespan_baseline)
+        avu_final_vals.append(avu_final / avu_baseline)
+    
+    x_pos = np.arange(len(workflow_names))
+    width = 0.25
+    
+    ax4.bar(x_pos - width, slr_final_vals, width, label='SLR', 
+           color='steelblue', alpha=0.8)
+    ax4.bar(x_pos, makespan_final_vals, width, label='Makespan', 
+           color='coral', alpha=0.8)
+    ax4.bar(x_pos + width, avu_final_vals, width, label='AVU', 
+           color='lightgreen', alpha=0.8)
+    
+    ax4.axhline(y=1.0, color='gray', linestyle='--', alpha=0.5, linewidth=1)
+    ax4.set_ylabel('Final Normalized Value', fontsize=12, fontweight='bold')
+    ax4.set_title('Final Normalized Metrics at CCR=2.0 (Baseline=1.0)', fontsize=13, fontweight='bold')
+    ax4.set_xticks(x_pos)
+    ax4.set_xticklabels(workflow_names, rotation=30, ha='right')
     ax4.legend(fontsize=10)
     ax4.grid(True, alpha=0.3, axis='y', linestyle='--')
     
@@ -516,7 +514,6 @@ def plot_normalized_performance(data_dict: Dict[str, Dict],
     output_path = Path('../results/figures') / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"✅ Saved: {output_path}")
     plt.close()
 
@@ -615,7 +612,6 @@ def plot_sensitivity_matrix(output_filename: str = 'ccr_sensitivity_matrix.png')
     output_path = Path('../results/figures') / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"✅ Saved: {output_path}")
     plt.close()
 
@@ -768,12 +764,12 @@ def main():
     print("="*70)
     print(f"\nGenerated figures saved to: results/figures/")
     print("Files created:")
-    print("  - ccr_comm_costs_distribution_*.png (+ PDF)")
-    print("  - ccr_critical_path_stability_*.png (+ PDF)")
-    print("  - ccr_duplication_analysis_*.png (+ PDF)")
-    print("  - ccr_sensitivity_scorecard_*.png (+ PDF)")
-    print("  - ccr_normalized_performance_*.png (+ PDF) [NEW]")
-    print("  - ccr_sensitivity_matrix.png (+ PDF) [NEW - Cross-scale]")
+    print("  - ccr_comm_costs_distribution_*.png")
+    print("  - ccr_critical_path_stability_*.png")
+    print("  - ccr_duplication_analysis_*.png")
+    print("  - ccr_sensitivity_scorecard_*.png")
+    print("  - ccr_normalized_performance_*.png [NEW]")
+    print("  - ccr_sensitivity_matrix.png [NEW - Cross-scale]")
 
 if __name__ == '__main__':
     main()
