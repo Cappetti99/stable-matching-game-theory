@@ -33,47 +33,48 @@ public class DataLoader {
      */
     public static List<VM> loadVMsFromCSV(String filename, int runIdx) throws IOException {
         List<VM> vms = new ArrayList<>();
-        BufferedReader reader = new BufferedReader(new FileReader(filename));
-        String line;
-        boolean firstLine = true;
         Random rand = (runIdx >= 0) 
             ? SeededRandom.forScopeAndRun("DataLoader.loadVMsFromCSV:" + filename, runIdx)
             : SeededRandom.forScope("DataLoader.loadVMsFromCSV:" + filename);
 
-        while ((line = reader.readLine()) != null) {
-            // Skip header, comments and empty lines
-            if (firstLine) {
-                firstLine = false;
-                if (line.contains("vm_id") || line.contains("processing"))
-                    continue; // Skip CSV header
-            }
-            if (line.startsWith("#") || line.trim().isEmpty()) {
-                continue;
-            }
+        try (BufferedReader reader = new BufferedReader(new FileReader(filename))) {
+            String line;
+            boolean firstLine = true;
 
-            // Support both CSV (comma) and whitespace separators
-            String[] parts;
-            if (line.contains(",")) {
-                parts = line.trim().split(",");
-            } else {
-                parts = line.trim().split("\\s+");
-            }
+            while ((line = reader.readLine()) != null) {
+                // Skip header, comments and empty lines
+                if (firstLine) {
+                    firstLine = false;
+                    if (line.contains("vm_id") || line.contains("processing"))
+                        continue; // Skip CSV header
+                }
+                if (line.startsWith("#") || line.trim().isEmpty()) {
+                    continue;
+                }
 
-            if (parts.length >= 1) {
-                // Parse various formats: vm0, 0, vm_0 -> 0
-                String vmIdStr = parts[0].trim().toLowerCase().replace("vm_", "").replace("vm", "");
-                int vmId = Integer.parseInt(vmIdStr);
-                
-                // Generate random capacity: [10, 20] MIPS
-                double capacity = 10.0 + rand.nextDouble() * 10.0;
+                // Support both CSV (comma) and whitespace separators
+                String[] parts;
+                if (line.contains(",")) {
+                    parts = line.trim().split(",");
+                } else {
+                    parts = line.trim().split("\\s+");
+                }
 
-                VM vm = new VM(vmId);
-                vm.addCapability("processing", capacity);
-                vm.addCapability("processingCapacity", capacity);
-                vms.add(vm);
+                if (parts.length >= 1) {
+                    // Parse various formats: vm0, 0, vm_0 -> 0
+                    String vmIdStr = parts[0].trim().toLowerCase().replace("vm_", "").replace("vm", "");
+                    int vmId = Integer.parseInt(vmIdStr);
+                    
+                    // Generate random capacity: [10, 20] MIPS
+                    double capacity = 10.0 + rand.nextDouble() * 10.0;
+
+                    VM vm = new VM(vmId);
+                    vm.addCapability("processing", capacity);
+                    vm.addCapability("processingCapacity", capacity);
+                    vms.add(vm);
+                }
             }
         }
-        reader.close();
         return vms;
     }
 
@@ -130,48 +131,49 @@ public class DataLoader {
      */
     public static List<task> loadTaskBasicInfo(String filename, int runIdx) throws IOException {
         List<task> tasks = new ArrayList<>();
-        BufferedReader reader = new BufferedReader(new FileReader(filename));
-        String line;
-        boolean firstLine = true;
         Random rand = (runIdx >= 0)
             ? SeededRandom.forScopeAndRun("DataLoader.loadTaskBasicInfo:" + filename, runIdx)
             : SeededRandom.forScope("DataLoader.loadTaskBasicInfo:" + filename);
 
-        while ((line = reader.readLine()) != null) {
-            // Skip header, comments and empty lines
-            if (firstLine) {
-                firstLine = false;
-                if (line.contains("id") || line.contains("size"))
-                    continue; // Skip CSV header
-            }
-            if (line.startsWith("#") || line.trim().isEmpty()) {
-                continue;
-            }
+        try (BufferedReader reader = new BufferedReader(new FileReader(filename))) {
+            String line;
+            boolean firstLine = true;
 
-            // Support both CSV (comma) and whitespace separators
-            String[] parts;
-            if (line.contains(",")) {
-                parts = line.trim().split(",");
-            } else {
-                parts = line.trim().split("\\s+");
-            }
+            while ((line = reader.readLine()) != null) {
+                // Skip header, comments and empty lines
+                if (firstLine) {
+                    firstLine = false;
+                    if (line.contains("id") || line.contains("size"))
+                        continue; // Skip CSV header
+                }
+                if (line.startsWith("#") || line.trim().isEmpty()) {
+                    continue;
+                }
 
-            if (parts.length >= 1) {
-                int taskId = Integer.parseInt(parts[0].replace("t", "").trim());
-                
-                // Generate random task size: [500, 700] MIPS
-                double size = 500.0 + rand.nextDouble() * 200.0;
-                
-                // Rank will be calculated by DCP, not loaded from CSV
-                double rank = 0.0;
+                // Support both CSV (comma) and whitespace separators
+                String[] parts;
+                if (line.contains(",")) {
+                    parts = line.trim().split(",");
+                } else {
+                    parts = line.trim().split("\\s+");
+                }
 
-                task t = new task(taskId);
-                t.setSize(size);
-                t.setRank(rank);
-                tasks.add(t);
+                if (parts.length >= 1) {
+                    int taskId = Integer.parseInt(parts[0].replace("t", "").trim());
+                    
+                    // Generate random task size: [500, 700] MIPS
+                    double size = 500.0 + rand.nextDouble() * 200.0;
+                    
+                    // Rank will be calculated by DCP, not loaded from CSV
+                    double rank = 0.0;
+
+                    task t = new task(taskId);
+                    t.setSize(size);
+                    t.setRank(rank);
+                    tasks.add(t);
+                }
             }
         }
-        reader.close();
         return tasks;
     }
 
@@ -181,47 +183,33 @@ public class DataLoader {
      * @param tasks List of tasks to build relationships for (will be modified)
      */
     public static void loadDAGStructure(String filename, List<task> tasks) throws IOException {
-        BufferedReader reader = new BufferedReader(new FileReader(filename));
-        String line;
-        boolean firstLine = true;
+        try (BufferedReader reader = new BufferedReader(new FileReader(filename))) {
+            String line;
+            boolean firstLine = true;
 
-        while ((line = reader.readLine()) != null) {
-            if (firstLine) {
-                firstLine = false;
-                continue; // Skip header
+            while ((line = reader.readLine()) != null) {
+                if (firstLine) {
+                    firstLine = false;
+                    continue; // Skip header
+                }
+
+                // Support both CSV (comma) and whitespace separators
+                String[] parts;
+                if (line.contains(",")) {
+                    parts = line.trim().split(",");
+                } else {
+                    parts = line.trim().split("\\s+");
+                }
+
+                if (parts.length >= 2) {
+                    int predId = Integer.parseInt(parts[0].replace("t", "").trim());
+                    int succId = Integer.parseInt(parts[1].replace("t", "").trim());
+
+                    // Add relationships
+                    getTaskById(predId, tasks).getSucc().add(succId);
+                    getTaskById(succId, tasks).getPre().add(predId);
+                }
             }
-
-            // Support both CSV (comma) and whitespace separators
-            String[] parts;
-            if (line.contains(",")) {
-                parts = line.trim().split(",");
-            } else {
-                parts = line.trim().split("\\s+");
-            }
-
-            if (parts.length >= 2) {
-                int predId = Integer.parseInt(parts[0].replace("t", "").trim());
-                int succId = Integer.parseInt(parts[1].replace("t", "").trim());
-
-                // Ensure tasks exist
-                ensureTaskExists(predId, tasks);
-                ensureTaskExists(succId, tasks);
-
-                // Add relationships
-                getTaskById(predId, tasks).getSucc().add(succId);
-                getTaskById(succId, tasks).getPre().add(predId);
-            }
-        }
-        reader.close();
-    }
-
-    /**
-     * Ensures a task with given ID exists in the list, creates it if not
-     */
-    private static void ensureTaskExists(int taskId, List<task> tasks) {
-        if (getTaskById(taskId, tasks) == null) {
-            task t = new task(taskId);
-            tasks.add(t);
         }
     }
 

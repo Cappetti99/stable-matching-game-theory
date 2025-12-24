@@ -18,81 +18,33 @@ public class VM {
         this.threshold = 1; // Default threshold
     }
     
-    // Constructor with initial capabilities
-    public VM(int ID, Map<String, Double> capabilities) {
-        this.ID = ID;
-        this.processingCapabilities = new HashMap<>(capabilities);
-        this.bandwidthToVMs = new HashMap<>();
-        this.isActive = true;
-        this.threshold = 1; // Default threshold
-    }
-    
-    // Constructor with threshold
-    public VM(int ID, int threshold) {
-        this.ID = ID;
-        this.processingCapabilities = new HashMap<>();
-        this.bandwidthToVMs = new HashMap<>();
-        this.isActive = true;
-        this.threshold = threshold;
-    }
-    
-    // Getters and Setters
+    // Getters
     public int getID() {
         return ID;
-    }
-    
-    public void setID(int ID) {
-        this.ID = ID;
     }
     
     public Map<String, Double> getProcessingCapabilities() {
         return processingCapabilities;
     }
     
-    public void setProcessingCapabilities(Map<String, Double> processingCapabilities) {
-        this.processingCapabilities = processingCapabilities;
-    }
-    
     public boolean isActive() {
         return isActive;
-    }
-    
-    public void setActive(boolean active) {
-        isActive = active;
     }
     
     public int getThreshold() {
         return threshold;
     }
     
-    public void setThreshold(int threshold) {
-        this.threshold = threshold;
-    }
-    
-    // Utility methods
+    // Capability management
     public void addCapability(String capabilityType, double processingPower) {
         processingCapabilities.put(capabilityType, processingPower);
-    }
-    
-    public void removeCapability(String capabilityType) {
-        processingCapabilities.remove(capabilityType);
     }
     
     public double getCapability(String capabilityType) {
         return processingCapabilities.getOrDefault(capabilityType, 0.0);
     }
     
-    public boolean hasCapability(String capabilityType) {
-        return processingCapabilities.containsKey(capabilityType);
-    }
-    
-    public void updateCapability(String capabilityType, double newProcessingPower) {
-        if (processingCapabilities.containsKey(capabilityType)) {
-            processingCapabilities.put(capabilityType, newProcessingPower);
-        }
-    }
-    
-    // Bandwidth management methods
+    // Bandwidth management
     public void setBandwidthToVM(int targetVMId, double bandwidth) {
         bandwidthToVMs.put(targetVMId, bandwidth);
     }
@@ -103,10 +55,6 @@ public class VM {
     
     public Map<Integer, Double> getAllBandwidths() {
         return new HashMap<>(bandwidthToVMs);
-    }
-    
-    public void setBandwidthMap(Map<Integer, Double> bandwidthMap) {
-        this.bandwidthToVMs = new HashMap<>(bandwidthMap);
     }
     
     public boolean hasBandwidthToVM(int targetVMId) {

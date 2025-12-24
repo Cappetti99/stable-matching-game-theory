@@ -29,105 +29,73 @@ public class Utility {
     }
 
     /**
-     * Trova tutti i task di ingresso (senza predecessori)
-     */
-    public static List<task> findEntryTasks(List<task> tasks) {
-        List<task> entryTasks = new ArrayList<>();
-        for (task t : tasks) {
-            if (t.getPre() == null || t.getPre().isEmpty()) {
-                entryTasks.add(t);
-            }
-        }
-        return entryTasks;
-    }
-
-    /**
      * Organizza i task in livelli topologici usando BFS
+     * 
+     * Algoritmo ottimizzato con complessità O(V+E) invece di O(V²):
+     * - Usa taskMap per lookup O(1)
+     * - Attraversa il grafo usando la lista dei successori (forward traversal)
      * 
      * @param tasks lista dei task
      * @return mappa livello -> lista di task ID
      */
     public static Map<Integer, List<Integer>> organizeTasksByLevels(List<task> tasks) {
-        Map<Integer, List<Integer>> levels = new HashMap<>();
-        Map<Integer, Integer> taskLevels = new HashMap<>();
-        Map<Integer, Integer> inDegree = new HashMap<>();
-        Map<Integer, Set<Integer>> successors = new HashMap<>();
-
-        // Inizializza in-degree e successori
+        Map<Integer, List<Integer>> levelMap = new HashMap<>();
+        
+        // Prima passa: calcola i livelli usando un algoritmo topologico
+        Map<Integer, Integer> taskToLevel = new HashMap<>();
+        Map<Integer, task> taskMap = new HashMap<>();
+        
+        // Crea mappa per accesso rapido
         for (task t : tasks) {
-            int id = t.getID();
-            inDegree.put(id, t.getPre() == null ? 0 : t.getPre().size());
-            successors.put(id, new HashSet<>(t.getSucc() != null ? t.getSucc() : new ArrayList<>()));
+            taskMap.put(t.getID(), t);
         }
-
-        // Queue per BFS
+        
+        // Trova i task senza predecessori (entry tasks) - livello 0
         Queue<Integer> queue = new LinkedList<>();
+        Map<Integer, Integer> inDegree = new HashMap<>();
+        
+        // Inizializza in-degree per tutti i task
         for (task t : tasks) {
-            if (inDegree.get(t.getID()) == 0) {
+            inDegree.put(t.getID(), t.getPre().size());
+            if (t.getPre().isEmpty()) {
                 queue.offer(t.getID());
-                taskLevels.put(t.getID(), 0);
+                taskToLevel.put(t.getID(), 0);
             }
         }
-
+        
+        // BFS per calcolare i livelli
         while (!queue.isEmpty()) {
-            int current = queue.poll();
-            int currentLevel = taskLevels.get(current);
-
-            for (task t : tasks) {
-                if (t.getPre() != null && t.getPre().contains(current)) {
-                    int id = t.getID();
-                    inDegree.put(id, inDegree.get(id) - 1);
-                    int newLevel = currentLevel + 1;
-                    taskLevels.put(id, Math.max(taskLevels.getOrDefault(id, 0), newLevel));
-
-                    if (inDegree.get(id) == 0) {
-                        queue.offer(id);
-                    }
+            int currentId = queue.poll();
+            int currentLevel = taskToLevel.get(currentId);
+            task current = taskMap.get(currentId);
+            
+            if (current == null) continue;
+            
+            // Processa tutti i successori
+            for (int succId : current.getSucc()) {
+                // Il livello del successore è almeno currentLevel + 1
+                int newLevel = currentLevel + 1;
+                taskToLevel.put(succId, Math.max(taskToLevel.getOrDefault(succId, 0), newLevel));
+                
+                // Decrementa in-degree
+                inDegree.put(succId, inDegree.get(succId) - 1);
+                
+                // Se tutti i predecessori sono stati processati, aggiungi alla coda
+                if (inDegree.get(succId) == 0) {
+                    queue.offer(succId);
                 }
             }
         }
-
-        // Raggruppa task per livello
-        for (Map.Entry<Integer, Integer> entry : taskLevels.entrySet()) {
+        
+        // Seconda passa: costruisci la mappa level -> [taskIds]
+        for (Map.Entry<Integer, Integer> entry : taskToLevel.entrySet()) {
             int taskId = entry.getKey();
             int level = entry.getValue();
-            levels.computeIfAbsent(level, k -> new ArrayList<>()).add(taskId);
+            
+            levelMap.computeIfAbsent(level, k -> new ArrayList<>()).add(taskId);
         }
-
-        return levels;
-    }
-
-    /**
-     * Somma delle dimensioni di una lista di task
-     * 
-     * @param tasks lista dei task
-     * @return somma delle dimensioni
-     */
-    public static double sumTaskSizes(List<task> tasks) {
-        double sum = 0.0;
-        for (task t : tasks) {
-            sum += t.getSize();
-        }
-        return sum;
-    }
-
-    /**
-     * Somma della capacità di una lista di VM
-     * 
-     * @param vms lista delle VM
-     * @return somma delle capacità
-     */
-    public static double sumVMCapacities(List<VM> vms) {
-        double sum = 0.0;
-        for (VM vm : vms) {
-            Map<String, Double> caps = vm.getProcessingCapabilities();
-            if (!caps.isEmpty()) {
-                sum += caps.values().iterator().next(); // prende la prima capacità disponibile
-            } else {
-                sum += 1.0; // default capacity
-            }
-        }
-        return sum;
+        
+        return levelMap;
     }
 
 }

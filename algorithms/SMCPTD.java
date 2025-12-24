@@ -222,7 +222,7 @@ public class SMCPTD {
         System.out.println("   ✓ Exit task: t" + exitTask.getID());
 
         System.out.println("   🔍 Organizing tasks by levels...");
-        taskLevels = DCP.organizeTasksByLevels(smgt.getTasks());
+        taskLevels = Utility.organizeTasksByLevels(smgt.getTasks());
         System.out.println("   ✓ DAG has " + taskLevels.size() + " levels");
 
         System.out.println("   🔍 Running DCP algorithm...");
@@ -443,6 +443,13 @@ public class SMCPTD {
         System.out.println("   🎯 Critical Path Size: " + criticalPath.size());
         System.out.println("   📊 Makespan: " + String.format("%.3f", makespan));
         System.out.println("   📈 SLR: " + String.format("%.3f", slr));
+        
+        // Display total LOTD duplications
+        if (lotd != null) {
+            int totalDups = lotd.getTotalDuplicationCount();
+            System.out.println("   📋 Total Task Duplications (LOTD): " + totalDups);
+        }
+        
         System.out.println("\n   🖥️  VM Assignments:");
 
         for (Map.Entry<Integer, List<Integer>> entry : finalSchedule.entrySet()) {

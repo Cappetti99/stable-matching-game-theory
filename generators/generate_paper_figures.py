@@ -178,7 +178,6 @@ def plot_slr_vs_ccr(data, scale='small', output_filename='figure3_slr_vs_ccr.png
     output_path = Path('../results/figures') / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"Saved: {output_path}")
     plt.close()
 
@@ -286,7 +285,6 @@ def plot_avu_vs_ccr(data, scale='small', output_filename='figure6_avu_vs_ccr.png
     output_path = Path('../results/figures') / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"Saved: {output_path}")
     plt.close()
 
@@ -352,7 +350,6 @@ def plot_vf_vs_ccr(data, scale='large', output_filename='figure_vf_large.png'):
     output_path = Path('../results/figures') / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"Saved: {output_path}")
     plt.close()
 
@@ -483,7 +480,6 @@ def plot_slr_vs_vms(data, output_filename='figure9_slr_vs_vms.png'):
     output_path = Path('../results/figures') / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"Saved: {output_path}")
     plt.close()
 
@@ -553,7 +549,6 @@ def plot_vf_vs_vms(data, output_filename='figure_vf_vs_vms.png'):
     output_path = Path('../results/figures') / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"Saved: {output_path}")
     plt.close()
 
@@ -630,7 +625,6 @@ def plot_avu_vs_vms(data, output_filename='figure10_avu_vs_vms.png'):
     output_path = Path('../results/figures') / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"Saved: {output_path}")
     plt.close()
 
@@ -764,7 +758,6 @@ def plot_metrics_comparison(data, scale='large', output_filename='figure_metrics
     output_path = Path('../results/figures') / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.savefig(str(output_path).replace('.png', '.pdf'), bbox_inches='tight')
     print(f"Saved: {output_path}")
     plt.close()
 
@@ -843,17 +836,17 @@ def generate_all_figures():
     print("✅ COMPLETATO! Tutti i grafici sono stati generati.")
     print("="*70)
     print("\nFile generati in results/figures/:")
-    print("  - figure3_slr_vs_ccr_small.png (+ PDF)")
-    print("  - figure4_slr_vs_ccr_medium.png (+ PDF)")
-    print("  - figure5_slr_vs_ccr_large.png (+ PDF)")
-    print("  - figure6_avu_vs_ccr_small.png (+ PDF)")
-    print("  - figure7_avu_vs_ccr_medium.png (+ PDF)")
-    print("  - figure8_avu_vs_ccr_large.png (+ PDF)")
-    print("  - figure9_slr_vs_vms.png (+ PDF)")
-    print("  - figure10_avu_vs_vms.png (+ PDF)")
-    print("  - figure_vf_vs_vms.png (+ PDF)")
-    print("  - figure_vf_large.png (+ PDF)")
-    print("  - figure_metrics_comparison_large.png (+ PDF)")
+    print("  - figure3_slr_vs_ccr_small.png")
+    print("  - figure4_slr_vs_ccr_medium.png")
+    print("  - figure5_slr_vs_ccr_large.png")
+    print("  - figure6_avu_vs_ccr_small.png")
+    print("  - figure7_avu_vs_ccr_medium.png")
+    print("  - figure8_avu_vs_ccr_large.png")
+    print("  - figure9_slr_vs_vms.png")
+    print("  - figure10_avu_vs_vms.png")
+    print("  - figure_vf_vs_vms.png")
+    print("  - figure_vf_large.png")
+    print("  - figure_metrics_comparison_large.png")
 
 # ============================================================================
 # FUNZIONI AGGIUNTIVE - STATISTICHE E VERIFICA

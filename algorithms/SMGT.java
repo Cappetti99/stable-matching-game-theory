@@ -60,14 +60,6 @@ public class SMGT {
         return tasks;
     }
 
-    public Map<Integer, Integer> getTaskLevels() {
-        return taskLevels;
-    }
-
-    public Map<Integer, List<Integer>> getLevelTasks() {
-        return levelTasks;
-    }
-
     public task getTaskById(int taskId) {
         return tasks.stream()
                 .filter(t -> t.getID() == taskId)
@@ -77,18 +69,7 @@ public class SMGT {
 
     // ==================== DATA LOADING ====================
 
-    public void loadVMsFromCSV(String filename) throws IOException {
-        vms = DataLoader.loadVMsFromCSV(filename);
-    }
-
-    public void loadBandwidthFromCSV(String filename) throws IOException {
-        DataLoader.loadBandwidthFromCSV(filename, vms);
-    }
-
-    public void loadTasksFromCSV(String dagFilename, String taskFilename) throws IOException {
-        tasks = DataLoader.loadTasksFromCSV(dagFilename, taskFilename);
-        calculateTaskLevels();
-    }
+    // Note: Load methods removed - use DataLoader directly instead
 
     // ==================== TASK LEVELS CALCULATION ====================
 
@@ -567,13 +548,6 @@ public class SMGT {
         return bestVM;
     }
 
-    /**
-     * Numero di task in un livello
-     */
-    private int getNumberOfTasksAtLevel(int level) {
-        return levelTasks.getOrDefault(level, new ArrayList<>()).size();
-    }
-
     // ==================== PREFERENCE GENERATION ====================
 
     /**
@@ -628,19 +602,6 @@ public class SMGT {
 
         for (int vmIdx = 0; vmIdx < vms.size(); vmIdx++) {
             allPreferences.put(vmIdx, generateVMPreferences(vmIdx));
-        }
-
-        return allPreferences;
-    }
-
-    /**
-     * Genera preference lists per tutti i task
-     */
-    public Map<Integer, List<Integer>> generateAllTaskPreferences() {
-        Map<Integer, List<Integer>> allPreferences = new HashMap<>();
-
-        for (task t : tasks) {
-            allPreferences.put(t.getID(), generateTaskPreferences(t.getID()));
         }
 
         return allPreferences;

@@ -123,6 +123,8 @@ java JavaCCRAnalysis epigenomics
 | **Makespan** | `max{FT(ti)}` | Total execution time |
 | **SLR** | `makespan / Σmin{ET(ti,VMk)}` | Schedule Length Ratio (lower = better) |
 | **Speedup** | `sequential_time / makespan` | Parallelization efficiency |
+| **AVU** | `Σ(busy_time/makespan) / num_VMs` | Average VM Utilization |
+| **VF** | `Variance(task_satisfaction)` | Variance of Fairness |
 
 ### Key Formulas
 
@@ -130,6 +132,59 @@ java JavaCCRAnalysis epigenomics
 - **Start Time**: `ST(ti, VMk) = max{FT(predecessor) + Ttrans}`
 - **Finish Time**: `FT(ti, VMk) = ST + ET`
 - **Transfer Time**: `Ttrans(ti, tj) = 0` if same VM, else `data_size / bandwidth`
+
+---
+
+## 🔍 NEW: CCR Sensitivity Analysis
+
+**Automatically analyze how CCR (Communication-to-Computation Ratio) affects algorithm behavior!**
+
+### What It Analyzes
+
+1. **Communication Costs** - How edge weights scale with CCR
+2. **Critical Path Stability** - Which tasks remain in CP across CCR values
+3. **Task Duplication Decisions** - LOTD duplication patterns
+4. **Metrics Elasticity** - SLR, AVU, Makespan sensitivity
+
+### Quick Start
+
+```bash
+# Step 1: Run experiments (CCR analysis auto-enabled)
+cd algorithms
+./run.sh
+
+# Step 2: Generate visualizations
+cd ../generators
+python3 analyze_ccr_sensitivity.py
+```
+
+### Output
+
+The system generates **4 types of visualizations**:
+
+1. **Communication Cost Distribution** - Shows min/max/mean costs vs CCR
+2. **Critical Path Stability Heatmap** - Reveals which tasks stay in CP
+3. **Duplication Sensitivity Plot** - Tracks duplication decisions
+4. **Sensitivity Scorecard** - Comprehensive metrics comparison
+
+**Example Output:**
+```
+📊 CYBERSHAKE (50 tasks, 5 VMs)
+   CP Stability: 100.0% ✅ (CP never changes)
+   SLR Change: 6.44% (CCR 0.4→2.0)
+   Duplication Increase: 0 tasks
+   Sensitivity Class: LOW
+```
+
+### Generated Files
+
+- `results/ccr_sensitivity/*.json` - Analysis data
+- `results/figures/ccr_comm_costs_distribution_*.png` - Cost plots
+- `results/figures/ccr_critical_path_stability_*.png` - CP heatmaps
+- `results/figures/ccr_duplication_analysis_*.png` - Duplication plots
+- `results/figures/ccr_sensitivity_scorecard_*.png` - Scorecards
+
+**📖 Full Documentation**: See [`docs/CCR_SENSITIVITY_ANALYSIS.md`](docs/CCR_SENSITIVITY_ANALYSIS.md)
 
 ---
 

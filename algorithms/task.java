@@ -22,19 +22,9 @@ public class task {
         this.succCommCost = new HashMap<>();
     }
 
-    // Convenience constructor (backward compatibility)
-    public task(int ID, double size) {
-        this(ID);
-        this.size = size;
-    }
-    
-    // Getters and Setters
+    // Getters
     public int getID() {
         return ID;
-    }
-    
-    public void setID(int ID) {
-        this.ID = ID;
     }
     
     public double getSize() {
@@ -57,19 +47,11 @@ public class task {
         return pre;
     }
     
-    public void setPre(List<Integer> pre) {
-        this.pre = pre;
-    }
-    
     public List<Integer> getSucc() {
         return succ;
     }
     
-    public void setSucc(List<Integer> succ) {
-        this.succ = succ;
-    }
-    
-    // Utility methods
+    // Relationship management methods
     public void addPredecessor(int taskID) {
         if (!pre.contains(taskID)) {
             pre.add(taskID);
@@ -94,16 +76,8 @@ public class task {
     public double getSuccCommunicationCost(int succTaskId) {
         return succCommCost.getOrDefault(succTaskId, -1.0);
     }
-    
-    public void removePredecessor(int taskID) {
-        pre.remove(Integer.valueOf(taskID));
-    }
-    
-    public void removeSuccessor(int taskID) {
-        succ.remove(Integer.valueOf(taskID));
-    }
-    
-        @Override
+
+    @Override
     public String toString() {
         return "Task{" +
                 "ID=" + ID +

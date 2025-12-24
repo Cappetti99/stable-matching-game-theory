@@ -7,9 +7,12 @@ echo "🧹 Pulizia file compilati e temporanei..."
 echo "  - Rimozione file .class..."
 find . -name "*.class" -type f -delete
 
-# Rimuovi directory temporanee data_temp_*
-echo "  - Rimozione directory data_temp_*..."
-rm -rf ../data/data_temp_*
+# Rimuovi directory CSV generate da XML (mantieni solo data/ vuoto)
+echo "  - Rimozione CSV generati..."
+rm -rf ../data/cybershake_*
+rm -rf ../data/epigenomics_*
+rm -rf ../data/ligo_*
+rm -rf ../data/montage_*
 
 # Rimuovi file temporanei Python
 echo "  - Rimozione cache Python..."

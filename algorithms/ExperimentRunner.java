@@ -30,7 +30,7 @@ public class ExperimentRunner {
     // ============================================================================
 
     // Numero di run multiple per stabilizzare i risultati
-    private static final int NUM_RUNS = 10; // Production: 10 runs per stabilizzare i risultati
+    private static final int NUM_RUNS = 3; // Production: 10 runs per stabilizzare i risultati
     private static final int WARMUP_RUNS = 1; // Production: 1 warmup per eliminare cold start effects
 
     // Workflow Pegasus XML reali dal paper (convertiti da XML a CSV)
@@ -366,9 +366,11 @@ public class ExperimentRunner {
             // 2-PASS ITERATIVE REFINEMENT WITH VM-SPECIFIC BANDWIDTH
             // ============================================================================
             
-            // PASS 1: Initial scheduling with average bandwidth
-            // Calculate communication costs using average bandwidth (all VM pairs)
-            Map<String, Double> commCostsPass1 = calculateCommunicationCosts(smgt, ccr, null);
+            // PASS 1: Initial scheduling with DCP formula
+            // Calculate communication costs using paper's formula for DCP:
+            // ci,j = (1/m(m-1)) × Σ(k=0 to m-1) Σ(l=0,l≠k to m-1) [TTi,j / B(VMk, VMl)]
+            // This averages costs over all VM pairs, appropriate since tasks aren't assigned yet
+            Map<String, Double> commCostsPass1 = calculateCommunicationCostsForDCP(smgt, ccr);
             
             // Execute SM-CPTD with average bandwidth to get initial assignments
             Map<Integer, List<Integer>> assignmentsPass1 = smcptd.executeSMCPTD(commCostsPass1, vmMapping);
@@ -566,96 +568,28 @@ public class ExperimentRunner {
     }
     
     /**
-     * Trova la directory del workflow Pegasus con supporto per VM variabili
-     */
+      * Trova la directory del workflow Pegasus con supporto per VM variabili
+      * Converte XML in CSV nella cartella data/
+      */
     private static String findPegasusWorkflowDir(String workflow, int targetTasks, int targetVMs) {
-        // Prima prova con la cartella workflow XML
+        // Trova il file XML del workflow
         String xmlFile = findWorkflowXML(workflow, targetTasks);
-        if (xmlFile != null) {
-            // Converti XML in CSV al volo
-            try {
-                String outputDir = "../data/data_temp_" + workflow + "_" + targetTasks;
-                int vms = targetVMs > 0 ? targetVMs : 5; // Default 5 VM
-                PegasusXMLParser.parseAndConvert(xmlFile, outputDir, vms);
-                return outputDir;
-            } catch (Exception e) {
-                System.out.println("   ⚠️ Errore conversione XML: " + e.getMessage());
-            }
-        }
-
-        // Fallback: prova con data_pegasus_xml
-        File pegasusDir = new File("../data_pegasus_xml");
-        if (!pegasusDir.exists()) {
-            System.out.println("   ⚠️ Workflow non trovato per " + workflow + " " + targetTasks + " task");
+        if (xmlFile == null) {
+            System.out.println("   ⚠️ Workflow XML non trovato per " + workflow + " " + targetTasks + " task");
             return null;
         }
 
-        String bestMatch = null;
-        int bestDiff = Integer.MAX_VALUE;
-        String searchPrefix = workflow.toLowerCase() + "_";
-
-        for (File dir : pegasusDir.listFiles()) {
-            if (dir.isDirectory() && dir.getName().startsWith(searchPrefix)) {
-                String name = dir.getName();
-
-                // Se targetVMs > 0, cerca match esatto con VM
-                if (targetVMs > 0) {
-                    // Formato atteso: workflow_1000tasks_20vms
-                    if (!name.contains("vms"))
-                        continue;
-
-                    // Estrai numero VM
-                    int vmsIdx = name.lastIndexOf("_");
-                    String vmsStr = name.substring(vmsIdx + 1).replace("vms", "");
-                    try {
-                        int vms = Integer.parseInt(vmsStr);
-                        if (vms != targetVMs)
-                            continue;
-                    } catch (NumberFormatException e) {
-                        continue;
-                    }
-
-                    // Estrai numero task
-                    int taskStart = name.indexOf("_") + 1;
-                    int taskEnd = name.indexOf("tasks");
-                    if (taskStart > 0 && taskEnd > taskStart) {
-                        String taskStr = name.substring(taskStart, taskEnd);
-                        try {
-                            int tasks = Integer.parseInt(taskStr);
-                            int diff = Math.abs(tasks - targetTasks);
-                            if (diff < bestDiff) {
-                                bestDiff = diff;
-                                bestMatch = dir.getAbsolutePath();
-                            }
-                        } catch (NumberFormatException e) {
-                            // Ignora
-                        }
-                    }
-                } else {
-                    // Ricerca originale: solo per numero task (Esperimento 1)
-                    // Ignora directory con "vms" nel nome
-                    if (name.contains("vms"))
-                        continue;
-
-                    int idx = name.lastIndexOf("_");
-                    if (idx > 0) {
-                        String taskStr = name.substring(idx + 1).replace("tasks", "");
-                        try {
-                            int tasks = Integer.parseInt(taskStr);
-                            int diff = Math.abs(tasks - targetTasks);
-                            if (diff < bestDiff) {
-                                bestDiff = diff;
-                                bestMatch = dir.getAbsolutePath();
-                            }
-                        } catch (NumberFormatException e) {
-                            // Ignora
-                        }
-                    }
-                }
-            }
+        // Converti XML in CSV nella cartella data/
+        try {
+            String outputDir = "../data/" + workflow.toLowerCase() + "_" + targetTasks;
+            int vms = targetVMs > 0 ? targetVMs : 5; // Default 5 VM
+            PegasusXMLParser.parseAndConvert(xmlFile, outputDir, vms);
+            return outputDir;
+        } catch (Exception e) {
+            System.out.println("   ⚠️ Errore conversione XML: " + e.getMessage());
+            e.printStackTrace();
+            return null;
         }
-
-        return bestMatch;
     }
 
     /**
@@ -753,6 +687,107 @@ public class ExperimentRunner {
         
         // Fallback to 25.0 if no bandwidth data found
         return count > 0 ? sum / count : 25.0;
+    }
+
+    /**
+     * Calculate communication costs for DCP using the paper's formula.
+     * 
+     * Formula: ci,j = (1 / m(m-1)) × Σ(k=0 to m-1) Σ(l=0,l≠k to m-1) [TTi,j / B(VMk, VMl)]
+     * 
+     * Where:
+     * - TTi,j = sti × CCR (data transfer size)
+     * - m = number of VMs
+     * - B(VMk, VMl) = bandwidth from VMk to VMl
+     * 
+     * This averages the communication cost across ALL possible VM pairs (k ≠ l),
+     * which is appropriate for DCP since tasks are not yet assigned to VMs.
+     * 
+     * Note: This is mathematically different from averaging bandwidths first.
+     * avg(TTi,j / B) ≠ TTi,j / avg(B)
+     * 
+     * @param smgt SMGT object with tasks and VMs
+     * @param ccr Communication-to-Computation Ratio
+     * @return Map of communication costs (key: "sourceTaskId_destTaskId", value: cost)
+     * @throws IllegalStateException if bandwidth data is missing or invalid
+     */
+    private static Map<String, Double> calculateCommunicationCostsForDCP(SMGT smgt, double ccr) {
+        Map<String, Double> costs = new HashMap<>();
+        
+        List<VM> vms = smgt.getVMs();
+        int m = vms.size();
+        
+        // Edge case: if only 1 VM or no VMs, communication cost is 0
+        if (m <= 1) {
+            for (task t : smgt.getTasks()) {
+                for (int succId : t.getSucc()) {
+                    String key = t.getID() + "_" + succId;
+                    costs.put(key, 0.0);
+                }
+            }
+            return costs;
+        }
+        
+        // Calculate expected number of VM pairs: m(m-1)
+        int expectedPairs = m * (m - 1);
+        
+        // For each edge in the task graph
+        for (task t : smgt.getTasks()) {
+            for (int succId : t.getSucc()) {
+                String key = t.getID() + "_" + succId;
+                
+                // Calculate TTi,j = sti × CCR
+                double TTij = t.getSize() * ccr;
+                
+                // Sum over all VM pairs (k ≠ l)
+                double sumCosts = 0.0;
+                int validPairs = 0;
+                
+                for (int k = 0; k < m; k++) {
+                    VM vmK = vms.get(k);
+                    
+                    for (int l = 0; l < m; l++) {
+                        if (k == l) continue; // Skip same VM (k ≠ l constraint)
+                        
+                        VM vmL = vms.get(l);
+                        int vmLId = vmL.getID();
+                        
+                        // Get bandwidth B(VMk, VMl)
+                        if (!vmK.hasBandwidthToVM(vmLId)) {
+                            throw new IllegalStateException(
+                                "Missing bandwidth data: VM" + vmK.getID() + 
+                                " -> VM" + vmLId + ". Cannot calculate DCP communication costs.");
+                        }
+                        
+                        double bandwidth = vmK.getBandwidthToVM(vmLId);
+                        
+                        // Validate bandwidth is positive
+                        if (bandwidth <= 0.0) {
+                            throw new IllegalStateException(
+                                "Invalid bandwidth (≤ 0): VM" + vmK.getID() + 
+                                " -> VM" + vmLId + " = " + bandwidth + 
+                                ". Cannot calculate DCP communication costs.");
+                        }
+                        
+                        // Calculate TTi,j / B(VMk, VMl)
+                        sumCosts += TTij / bandwidth;
+                        validPairs++;
+                    }
+                }
+                
+                // Verify we processed all expected pairs
+                if (validPairs != expectedPairs) {
+                    throw new IllegalStateException(
+                        "Expected " + expectedPairs + " VM pairs but only processed " + 
+                        validPairs + ". Bandwidth matrix may be incomplete.");
+                }
+                
+                // Calculate average: ci,j = (1 / m(m-1)) × Σ [TTi,j / B(VMk, VMl)]
+                double cij = sumCosts / expectedPairs;
+                costs.put(key, cij);
+            }
+        }
+        
+        return costs;
     }
 
     /**

@@ -247,7 +247,7 @@ public class PegasusXMLParser {
             for (String xmlFile : cyberShakeFiles) {
                 if (new File(xmlFile).exists()) {
                     String name = new File(xmlFile).getName().replace(".xml", "");
-                    String outputDir = "../data_pegasus_xml/" + name.toLowerCase();
+                    String outputDir = "../data/" + name.toLowerCase();
                     int numVMs = name.contains("1000") ? 50 : name.contains("100") ? 10 : 5;
                     parseAndConvert(xmlFile, outputDir, numVMs);
                     System.out.println();
@@ -265,7 +265,7 @@ public class PegasusXMLParser {
             for (String xmlFile : epigenomicsFiles) {
                 if (new File(xmlFile).exists()) {
                     String name = new File(xmlFile).getName().replace(".xml", "");
-                    String outputDir = "../data_pegasus_xml/" + name.toLowerCase();
+                    String outputDir = "../data/" + name.toLowerCase();
                     int numVMs = name.contains("997") ? 50 : name.contains("100") ? 10 : 5;
                     parseAndConvert(xmlFile, outputDir, numVMs);
                     System.out.println();
@@ -283,7 +283,7 @@ public class PegasusXMLParser {
             for (String xmlFile : ligoFiles) {
                 if (new File(xmlFile).exists()) {
                     String name = new File(xmlFile).getName().replace(".xml", "");
-                    String outputDir = "../data_pegasus_xml/" + name.toLowerCase();
+                    String outputDir = "../data/" + name.toLowerCase();
                     int numVMs = name.contains("1000") ? 50 : name.contains("100") ? 10 : 5;
                     parseAndConvert(xmlFile, outputDir, numVMs);
                     System.out.println();
@@ -301,7 +301,7 @@ public class PegasusXMLParser {
             for (String xmlFile : montageFiles) {
                 if (new File(xmlFile).exists()) {
                     String name = new File(xmlFile).getName().replace(".xml", "");
-                    String outputDir = "../data_pegasus_xml/" + name.toLowerCase();
+                    String outputDir = "../data/" + name.toLowerCase();
                     int numVMs = name.contains("1000") ? 50 : name.contains("100") ? 10 : 5;
                     parseAndConvert(xmlFile, outputDir, numVMs);
                     System.out.println();
@@ -311,7 +311,7 @@ public class PegasusXMLParser {
             System.out.println("════════════════════════════════════════════════════════════");
             System.out.println("✅ CONVERSION COMPLETED");
             System.out.println("════════════════════════════════════════════════════════════");
-            System.out.println("Output directory: ../data_pegasus_xml/");
+            System.out.println("Output directory: ../data/");
             System.out.println("\nWorkflows ready:");
             System.out.println("  - CyberShake: 50, 100, 1000 tasks");
             System.out.println("  - Epigenomics: 47, 100, 997 tasks");

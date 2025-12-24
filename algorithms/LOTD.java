@@ -10,13 +10,14 @@ import java.util.*;
  * 1. Identify entry tasks (tasks with no predecessors)
  * 2. For each entry task:
  * - Find VMs hosting its successor tasks
- * - Check if VM has idle time before successor starts
+ * - Check if VM has available time before successor starts
  * - Duplicate if: duplicate_finish < original_finish + comm_cost
- * 3. Recalculate schedule with duplicates
- * 4. Return optimized schedule
+ * 3. Add duplicates to VM schedules (real tasks, not phantom)
+ * 4. Recalculate schedule timing with duplicates
+ * 5. Return optimized schedule with duplicates included
  * 
  * @author Lorenzo Cappetti
- * @version 4.0 - Simplified Entry Task Duplication
+ * @version 4.1 - Entry Task Duplication with Real Task Accounting
  */
 public class LOTD {
 
@@ -30,11 +31,12 @@ public class LOTD {
     // Current schedule state
     private Map<Integer, Double> taskAST; // Actual Start Time
     private Map<Integer, Double> taskAFT; // Actual Finish Time
-    private Map<Integer, List<Integer>> vmSchedule; // VM -> tasks (original schedule)
+    private Map<Integer, List<Integer>> vmSchedule; // VM -> tasks (includes duplicates)
     private Map<Integer, Integer> taskToVM; // task -> VM
 
     // Duplication tracking
     private Map<Integer, Set<Integer>> duplicatedTasks; // VM -> Set of duplicated task IDs
+    private int totalDuplicationCount; // Counter for total duplications
 
     private static final boolean VERBOSE = false;
 
@@ -51,6 +53,7 @@ public class LOTD {
         this.vmSchedule = new HashMap<>();
         this.taskToVM = new HashMap<>();
         this.duplicatedTasks = new HashMap<>();
+        this.totalDuplicationCount = 0;
 
         for (VM vm : vms) {
             duplicatedTasks.put(vm.getID(), new HashSet<>());
@@ -273,7 +276,7 @@ public class LOTD {
      * Check if duplicating entry task on target VM is beneficial
      * 
      * Conditions:
-     * 1. VM must be idle before successor starts
+     * 1. VM must have time to execute duplicate before successor starts
      * 2. Duplicate must finish before data arrives from original
      */
     private boolean shouldDuplicate(int entryTaskId, int targetVM, int succId) {
@@ -286,10 +289,9 @@ public class LOTD {
         // 1. Calculate when duplicate would finish
         double duplicateET = calculateExecutionTime(entryTask, targetVM);
 
-        // Entry tasks have no predecessors, so they CAN start at time 0
-        // They execute "in parallel" with other tasks as phantom duplicates
-        // The key is: can they finish BEFORE the successor needs them?
-        double vmReadyTime = 0.0; // Entry tasks can always start immediately!
+        // Get actual VM ready time (when VM finishes currently scheduled tasks)
+        // Since duplicates are now added to schedule, they will block the VM
+        double vmReadyTime = getVMReadyTime(targetVM, -1);
         double duplicateFinish = vmReadyTime + duplicateET;
 
         // 2. Calculate when data would arrive from original VM
@@ -314,13 +316,13 @@ public class LOTD {
         }
 
         // Check conditions:
-        // A) Duplicate finishes before successor starts (idle slot available)
-        boolean hasIdleSlot = duplicateFinish <= succAST;
+        // A) Duplicate finishes before successor starts (enough time available)
+        boolean hasTimeSlot = duplicateFinish <= succAST;
 
         // B) Duplicate finishes before data arrives (performance gain)
         boolean isBeneficial = duplicateFinish < dataArrival;
 
-        return hasIdleSlot && isBeneficial;
+        return hasTimeSlot && isBeneficial;
     }
 
     /**
@@ -329,10 +331,13 @@ public class LOTD {
     private void performDuplication(int taskId, int targetVM) {
         // Mark as duplicated (this affects future timing calculations)
         duplicatedTasks.get(targetVM).add(taskId);
+        totalDuplicationCount++; // Increment counter
 
-        // Note: We DON'T add to vmSchedule because duplicates are "phantom" tasks
-        // They execute opportunistically in idle time but don't change the main
-        // schedule
+        // Add duplicate to vmSchedule (real task, not phantom)
+        // This ensures AVU and other metrics account for duplicate execution time
+        if (!vmSchedule.get(targetVM).contains(taskId)) {
+            vmSchedule.get(targetVM).add(taskId);
+        }
 
         // Recalculate timing for affected successors
         task t = getTaskById(taskId);
@@ -556,8 +561,8 @@ public class LOTD {
         return duplicatedTasks;
     }
 
-    public Map<Integer, Double> getTaskAST() {
-        return taskAST;
+    public int getTotalDuplicationCount() {
+        return totalDuplicationCount;
     }
 
     public Map<Integer, Double> getTaskAFT() {
