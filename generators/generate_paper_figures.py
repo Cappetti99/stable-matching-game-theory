@@ -2,6 +2,7 @@ import json
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import sys
 from pathlib import Path
 
 # ============================================================================
@@ -22,7 +23,19 @@ ALGO_STYLES = {
                 'markersize': 9, 'linestyle': '--', 'zorder': 2, 'label': 'Min-Min'}
 }
 
-WORKFLOW_ORDER = ['montage', 'cybershake', 'ligo', 'epigenomics']
+# Stili per gli algoritmi dell'ablation study (Figure 12)
+ABLATION_STYLES = {
+    'SM_CPTD': {'color': '#1f77b4', 'marker': 'o', 'linewidth': 2.0,
+                'markersize': 7, 'linestyle': '-', 'zorder': 4, 'label': 'SM-CPTD'},
+    'DCP_SMGT': {'color': '#d62728', 'marker': 's', 'linewidth': 2.0,
+                 'markersize': 7, 'linestyle': '-', 'zorder': 4, 'label': 'SM-CP'},
+    'SMGT_LOTD': {'color': '#ff7f0e', 'marker': '^', 'linewidth': 2.0,
+                  'markersize': 7, 'linestyle': '-', 'zorder': 4, 'label': 'SM-TD'},
+    'SMGT_ONLY': {'color': '#2ca02c', 'marker': 'x', 'linewidth': 2.0,
+                  'markersize': 7, 'linestyle': '-', 'zorder': 4, 'label': 'SM'}
+}
+
+WORKFLOW_ORDER = ['cybershake', 'epigenomics', 'ligo', 'montage']
 WORKFLOW_TITLES = {
     'montage': 'Montage',
     'cybershake': 'CyberShake', 
@@ -41,6 +54,16 @@ def load_experiments_data(filepath='../results/experiments_results.json'):
     with open(filepath, 'r') as f:
         data = json.load(f)
     return pd.DataFrame(data['experiments'])
+
+def load_ablation_data(filepath='../results/ablation_study.json'):
+    """Carica dati da ablation_study.json (Figure 12)"""
+    try:
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return pd.DataFrame(data['ablation_experiments'])
+    except FileNotFoundError:
+        print(f"Warning: {filepath} not found")
+        return None
 
 def load_ccr_analysis(workflow_type):
     """Carica dati da ccr_analysis_results_{workflow}.json"""
@@ -762,6 +785,81 @@ def plot_metrics_comparison(data, scale='large', output_filename='figure_metrics
     plt.close()
 
 # ============================================================================
+# FUNZIONI DI PLOTTING - FIGURA 12 (Ablation Study)
+# ============================================================================
+
+def plot_ablation_figure12(output_filename='figure12_ablation_study.png'):
+    """Genera Figure 12: SLR, AVU, VF con workflow sull'asse X e algoritmi come linee."""
+    df = load_ablation_data()
+    if df is None or df.empty:
+        print("⚠️  No ablation data found. Run AblationExperimentRunner first.")
+        return
+
+    workflows = WORKFLOW_ORDER
+    algorithms = ['SM_CPTD', 'DCP_SMGT', 'SMGT_LOTD', 'SMGT_ONLY']
+    metrics = ['slr', 'avu', 'vf']
+    metric_titles = ['SLR', 'AVU', 'VF']
+
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+    fig.suptitle('1000×50×1', fontsize=13, fontweight='bold')
+
+    x_pos = np.arange(len(workflows))
+    x_labels = [WORKFLOW_TITLES[w] for w in workflows]
+
+    for ax, metric, metric_title in zip(axes, metrics, metric_titles):
+        for algo in algorithms:
+            algo_df = df[df['algorithm'] == algo]
+            y_vals = []
+            for wf in workflows:
+                row = algo_df[algo_df['workflow'] == wf]
+                if len(row) == 0:
+                    y_vals.append(np.nan)
+                else:
+                    val = row[metric].iloc[0]
+                    y_vals.append(val)
+
+            style = ABLATION_STYLES.get(algo, {})
+            ax.plot(x_pos, y_vals,
+                    label=style.get('label', algo),
+                    color=style.get('color'),
+                    marker=style.get('marker', 'o'),
+                    linewidth=style.get('linewidth', 2),
+                    markersize=style.get('markersize', 7),
+                    linestyle=style.get('linestyle', '-'),
+                    zorder=style.get('zorder', 3))
+
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(x_labels, rotation=0)
+        ax.set_ylabel(metric_title)
+        ax.grid(True, linestyle='--', alpha=0.3, color='gray', linewidth=0.5)
+        ax.set_title(metric_title, fontsize=12, fontweight='bold')
+
+    # Legenda centrata in basso
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='lower center', ncol=4, frameon=False, fontsize=9)
+    plt.tight_layout(rect=(0, 0.12, 1, 1))
+
+    output_path = Path('../results/figures') / output_filename
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    print(f"Saved: {output_path}")
+    plt.close()
+
+
+def generate_ablation_figures():
+    print("\n" + "="*70)
+    print("GENERAZIONE FIGURE 12: Ablation Study")
+    print("="*70)
+
+    plot_ablation_figure12(output_filename='figure12_ablation_study.png')
+
+    print("\n" + "="*70)
+    print("✅ Ablation study figures complete!")
+    print("="*70)
+    print("\nFile generati in results/figures/:")
+    print("  - figure12_ablation_study.png")
+
+# ============================================================================
 # FUNZIONE PRINCIPALE
 # ============================================================================
 
@@ -848,6 +946,21 @@ def generate_all_figures():
     print("  - figure_vf_large.png")
     print("  - figure_metrics_comparison_large.png")
 
+def generate_ablation_figures():
+    """Genera Figure 12 (line plot) come nel paper."""
+
+    print("\n" + "="*70)
+    print("GENERAZIONE FIGURE 12: Ablation Study")
+    print("="*70)
+
+    plot_ablation_figure12(output_filename='figure12_ablation_study.png')
+
+    print("\n" + "="*70)
+    print("✅ Ablation study figures complete!")
+    print("="*70)
+    print("\nFile generati in results/figures/:")
+    print("  - figure12_ablation_study.png")
+
 # ============================================================================
 # FUNZIONI AGGIUNTIVE - STATISTICHE E VERIFICA
 # ============================================================================
@@ -926,22 +1039,35 @@ def verify_data_completeness():
 # ============================================================================
 
 if __name__ == '__main__':
-    import sys
-    
+    # Check command line arguments
+    ablation_only = '--ablation' in sys.argv
+    auto_mode = '--auto' in sys.argv or not sys.stdin.isatty()
+
+    if ablation_only:
+        generate_ablation_figures()
+        sys.exit(0)
+
     # Verifica e stampa info sui dati
     print_data_summary()
     data_complete = verify_data_completeness()
     
-    # Check if running in non-interactive mode (from Java)
-    auto_mode = '--auto' in sys.argv or not sys.stdin.isatty()
-    
-    # Genera tutte le figure
+    # Genera tutte le figure principali
     if data_complete or auto_mode:
         generate_all_figures()
+
+        # Genera anche la Figure 12 se i dati esistono
+        if Path('../results/ablation_study.json').exists():
+            print("\n" + "="*70)
+            print("Ablation study data found! Generating Figure 12...")
+            print("="*70)
+            generate_ablation_figures()
     else:
         print("\n⚠️  WARNING: Dati incompleti! Procedo comunque...")
         response = input("Continuare con la generazione dei grafici? (y/n): ")
         if response.lower() == 'y':
             generate_all_figures()
+
+            if Path('../results/ablation_study.json').exists():
+                generate_ablation_figures()
         else:
-            print("Operazione annullata.")
+            print("Generazione annullata.")

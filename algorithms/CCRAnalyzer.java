@@ -12,9 +12,6 @@ import java.text.SimpleDateFormat;
  * 4. Overall performance metrics (SLR, AVU, VF)
  * 
  * Output: JSON report for visualization and analysis
- * 
- * @author Lorenzo Cappetti
- * @version 1.0
  */
 public class CCRAnalyzer {
     

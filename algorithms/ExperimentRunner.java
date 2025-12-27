@@ -357,6 +357,7 @@ public class ExperimentRunner {
             // This may result in different assignments due to more accurate costs
             SMCPTD smcptdPass2 = new SMCPTD();
             smcptdPass2.setInputData(tasks, vms);
+
             Map<Integer, List<Integer>> assignments = smcptdPass2.executeSMCPTD(commCostsPass2, vmMapping);
             
             // Use results from Pass 2 (refined with VM-specific bandwidth)
@@ -539,7 +540,7 @@ public class ExperimentRunner {
       * Trova la directory del workflow Pegasus con supporto per VM variabili
       * Converte XML in CSV nella cartella data/
       */
-    private static String findPegasusWorkflowDir(String workflow, int targetTasks, int targetVMs) {
+    protected static String findPegasusWorkflowDir(String workflow, int targetTasks, int targetVMs) {
         // Trova il file XML del workflow
         String xmlFile = findWorkflowXML(workflow, targetTasks);
         if (xmlFile == null) {
