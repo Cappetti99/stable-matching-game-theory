@@ -240,9 +240,6 @@ public class DCP {
             // Aggiungi al Critical Path
             if (maxRankTask != -1) {
                 criticalPath.add(maxRankTask);
-                // Debug output commented out to avoid flooding console in large-scale tests
-                // System.out.println("      Level " + level + ": t" + maxRankTask +
-                //         " (rank: " + String.format("%.3f", maxRank) + ")");
             }
         }
 

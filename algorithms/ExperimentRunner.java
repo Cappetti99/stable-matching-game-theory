@@ -30,8 +30,8 @@ public class ExperimentRunner {
     // ============================================================================
 
     // Numero di run multiple per stabilizzare i risultati
-    private static final int NUM_RUNS = 3; // Production: 10 runs per stabilizzare i risultati
-    private static final int WARMUP_RUNS = 1; // Production: 1 warmup per eliminare cold start effects
+    private static final int NUM_RUNS = 10; // Production: 10 runs per stabilizzare i risultati
+    private static final int WARMUP_RUNS = 2; // Production: 1 warmup per eliminare cold start effects
 
     // Workflow Pegasus XML reali dal paper (convertiti da XML a CSV)
     private static final String[] WORKFLOWS = { "cybershake", "epigenomics", "ligo", "montage" };
@@ -93,20 +93,8 @@ public class ExperimentRunner {
             return;
         }
 
-        System.out.println("╔════════════════════════════════════════════════════════════════╗");
-        System.out.println("║     SM-CPTD PAPER EXPERIMENTS - Full Benchmark Suite          ║");
-        System.out.println("╠════════════════════════════════════════════════════════════════╣");
-        System.out.println("║  Experiment 1: CCR Effect (Figures 3-8)                       ║");
-        System.out.println("║  Experiment 2: VM Count Effect (Figures 9-10)                 ║");
-        System.out.println("║  Metrics: SLR, AVU, VF                                        ║");
-        System.out.println("╠════════════════════════════════════════════════════════════════╣");
-        System.out.printf("║  Multiple Runs: %d runs + %d warmup = %d total per config     ║%n",
-                NUM_RUNS, WARMUP_RUNS, NUM_RUNS + WARMUP_RUNS);
-        System.out.println("║  Results: Average of " + NUM_RUNS + " runs (after warmup)                  ║");
-        System.out.println("╠════════════════════════════════════════════════════════════════╣");
-        System.out.println("║  ⏱️  Estimated time: ~3-4 hours (164 configs × 11 runs each)   ║");
-        System.out.println("╚════════════════════════════════════════════════════════════════╝");
-        System.out.println();
+        System.out.println("SM-CPTD Experiments");
+        System.out.println("Runs: " + NUM_RUNS + " + " + WARMUP_RUNS + " warmup");
 
         // Parse arguments
         boolean runExp1 = true;
@@ -144,7 +132,7 @@ public class ExperimentRunner {
             printSummary();
 
         } catch (Exception e) {
-            System.err.println("❌ Errore durante l'esecuzione: " + e.getMessage());
+            System.err.println("Errore durante l'esecuzione: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -153,12 +141,10 @@ public class ExperimentRunner {
      * Esperimento 1: Effetto del CCR sui workflow
      */
     private static void runExperiment1_CCREffect(String[] workflows) {
-        System.out.println("\n" + "=".repeat(70));
-        System.out.println("📊 ESPERIMENTO 1: Effetto del CCR (Figure 3-8)");
-        System.out.println("=".repeat(70));
+        System.out.println("\nExperiment 1: CCR Effect");
 
-        // Small workflows - usa configurazioni specifiche per ogni workflow
-        System.out.println("\n📦 SMALL WORKFLOWS (47-50 task - 5 VM)");
+        // Small workflows
+        System.out.println("\nSmall (47-50 tasks, 5 VMs):");
         for (String workflow : workflows) {
             if (workflow.equals("cybershake")) {
                 // CyberShake ha sia 30 che 50 task disponibili - usa 50
@@ -171,13 +157,13 @@ public class ExperimentRunner {
         }
 
         // Medium workflows
-        System.out.println("\n📦 MEDIUM WORKFLOWS (100 task - 10 VM)");
+        System.out.println("\nMedium (100 tasks, 10 VMs):");
         for (int[] config : MEDIUM_CONFIGS) {
             runCCRExperiment(workflows, config[0], config[1], "EXP1_MEDIUM");
         }
 
         // Large workflows - epigenomics ha 997 task invece di 1000
-        System.out.println("\n📦 LARGE WORKFLOWS (997-1000 task - 50 VM)");
+        System.out.println("\nLarge (997-1000 tasks, 50 VMs):");
         for (String workflow : workflows) {
             int tasks = workflow.equals("epigenomics") ? 997 : 1000;
             runCCRExperiment(new String[] { workflow }, tasks, 50, "EXP1_LARGE");
@@ -188,14 +174,12 @@ public class ExperimentRunner {
      * Esperimento 2: Effetto del numero di VM
      */
     private static void runExperiment2_VMEffect(String[] workflows) {
-        System.out.println("\n" + "=".repeat(70));
-        System.out.println("📊 ESPERIMENTO 2: Effetto del numero di VM (Figure 9-10)");
-        System.out.println("=".repeat(70));
+        System.out.println("\nExperiment 2: VM Count Effect");
 
         for (String workflow : workflows) {
             // Epigenomics ha 997 task, gli altri 1000
             int tasks = workflow.equals("epigenomics") ? 997 : 1000;
-            System.out.println("\n🔬 Workflow: " + workflow + " (" + tasks + " task, CCR fisso: " + FIXED_CCR + ")");
+            System.out.println("\n" + workflow + " (" + tasks + " tasks, CCR=" + FIXED_CCR + ")");
 
             for (int numVMs : VM_COUNTS) {
                 System.out.printf("   VM=%d: ", numVMs);
@@ -204,15 +188,15 @@ public class ExperimentRunner {
                     ExperimentResult result = runSingleExperiment(
                             workflow, tasks, numVMs, FIXED_CCR, "EXP2_VM", NUM_RUNS, WARMUP_RUNS);
                     if (result == null) {
-                        System.out.println("⚠️  Skipped (workflow non trovato)");
+                        System.out.println("Skipped");
                         continue;
                     }
                     results.add(result);
                     checkpointSave();
-                    System.out.printf("SLR=%.4f, AVU=%.4f, VF=%.6f (avg of %d runs)%n",
+                    System.out.printf("SLR=%.4f, AVU=%.4f, VF=%.6f %n",
                             result.slr, result.avu, result.vf, NUM_RUNS);
                 } catch (Exception e) {
-                    System.out.println("❌ Errore: " + e.getMessage());
+                    System.out.println("Error: " + e.getMessage());
                 }
             }
         }
@@ -224,7 +208,7 @@ public class ExperimentRunner {
      */
     private static void runCCRExperiment(String[] workflows, int numTasks, int numVMs, String expName) {
         for (String workflow : workflows) {
-            System.out.println("\n🔬 Workflow: " + workflow + " (" + numTasks + " task, " + numVMs + " VM)");
+            System.out.println("\nWorkflow: " + workflow + " (" + numTasks + " task, " + numVMs + " VM)");
 
             // NEW: Create CCR analyzer for this workflow
             CCRAnalyzer ccrAnalyzer = new CCRAnalyzer(workflow, numTasks, numVMs, expName);
@@ -236,15 +220,15 @@ public class ExperimentRunner {
                     ExperimentResult result = runSingleExperimentWithAnalysis(
                             workflow, numTasks, numVMs, ccr, expName, NUM_RUNS, WARMUP_RUNS, ccrAnalyzer);
                     if (result == null) {
-                        System.out.println("⚠️  Skipped (workflow non trovato)");
+                        System.out.println(" Skipped");
                         continue;
                     }
                     results.add(result);
                     checkpointSave();
-                    System.out.printf("SLR=%.4f, AVU=%.4f, VF=%.6f (avg of %d runs)%n",
+                    System.out.printf("SLR=%.4f, AVU=%.4f, VF=%.6f %n",
                             result.slr, result.avu, result.vf, NUM_RUNS);
                 } catch (Exception e) {
-                    System.out.println("❌ Errore: " + e.getMessage());
+                    System.out.println("Error: " + e.getMessage());
                 }
             }
             
@@ -253,9 +237,8 @@ public class ExperimentRunner {
                 String outputPath = "../results/ccr_sensitivity/" + workflow + "_" + 
                                    expName.toLowerCase() + "_analysis.json";
                 ccrAnalyzer.saveToJSON(outputPath);
-                System.out.println("   📊 CCR sensitivity analysis saved");
             } catch (Exception e) {
-                System.err.println("   ⚠️  Failed to save CCR analysis: " + e.getMessage());
+                System.err.println("   Failed to save CCR analysis: " + e.getMessage());
             }
         }
     }
@@ -308,9 +291,9 @@ public class ExperimentRunner {
         if (workflowDir == null) {
             if (expName.equals("EXP2_VM")) {
                 System.out.println(
-                        "⚠️ Workflow non trovato per " + workflow + " " + numTasks + " task, " + numVMs + " VMs");
+                        "Workflow non trovato per " + workflow + " " + numTasks + " task, " + numVMs + " VMs");
             } else {
-                System.out.println("⚠️ Workflow non trovato per " + workflow + " " + numTasks + " task");
+                System.out.println("Workflow non trovato per " + workflow + " " + numTasks + " task");
             }
             return null;
         }
@@ -319,20 +302,8 @@ public class ExperimentRunner {
         List<RunMetrics> runs = new ArrayList<>();
         int totalRuns = warmupRuns + numRuns;
 
-        // Mostra progresso solo se ci sono multiple run
-        boolean showProgress = totalRuns > 1;
-
         for (int runIdx = 0; runIdx < totalRuns; runIdx++) {
             boolean isWarmup = runIdx < warmupRuns;
-
-            if (showProgress && runIdx == 0 && isWarmup) {
-                System.out.print("[warmup]");
-            } else if (showProgress && runIdx == warmupRuns) {
-                System.out.print("[runs: ");
-            }
-            if (showProgress && !isWarmup) {
-                System.out.print(".");
-            }
 
             // 2. Carica dati (DataLoader genera valori random)
             // ExperimentRunner è l'entry point: prepara task/VM e li passa a SMCPTD.
@@ -407,10 +378,6 @@ public class ExperimentRunner {
             }
         }
 
-        if (showProgress) {
-            System.out.print("] ");
-        }
-
         // Calcola la media dei risultati
         double avgSLR = runs.stream().mapToDouble(r -> r.slr).average().orElse(0);
         double avgAVU = runs.stream().mapToDouble(r -> r.avu).average().orElse(0);
@@ -467,8 +434,9 @@ public class ExperimentRunner {
                 }
                 
                 // 2-PASS APPROACH (same as main execution)
-                // Pass 1: Average bandwidth
-                Map<String, Double> commCostsPass1 = calculateCommunicationCosts(smgt, ccr, null);
+                // Pass 1: Use DCP formula (average over all VM pairs)
+                // BUG FIX: Use calculateCommunicationCostsForDCP for Pass 1 consistency
+                Map<String, Double> commCostsPass1 = calculateCommunicationCostsForDCP(smgt, ccr);
                 Map<Integer, List<Integer>> assignmentsPass1 = smcptd.executeSMCPTD(commCostsPass1, vmMapping);
                 Map<Integer, Integer> taskToVM = buildTaskToVMMap(assignmentsPass1);
                 
@@ -504,7 +472,7 @@ public class ExperimentRunner {
                 );
             }
         } catch (Exception e) {
-            System.err.println("      ⚠️  CCR analysis capture failed: " + e.getMessage());
+            System.err.println("       CCR analysis capture failed: " + e.getMessage());
             // Continue anyway - don't fail the experiment
         }
         
@@ -575,7 +543,7 @@ public class ExperimentRunner {
         // Trova il file XML del workflow
         String xmlFile = findWorkflowXML(workflow, targetTasks);
         if (xmlFile == null) {
-            System.out.println("   ⚠️ Workflow XML non trovato per " + workflow + " " + targetTasks + " task");
+            System.out.println("   Workflow XML non trovato per " + workflow + " " + targetTasks + " task");
             return null;
         }
 
@@ -586,7 +554,7 @@ public class ExperimentRunner {
             PegasusXMLParser.parseAndConvert(xmlFile, outputDir, vms);
             return outputDir;
         } catch (Exception e) {
-            System.out.println("   ⚠️ Errore conversione XML: " + e.getMessage());
+            System.out.println("   Errore conversione XML: " + e.getMessage());
             e.printStackTrace();
             return null;
         }
@@ -869,7 +837,7 @@ public class ExperimentRunner {
      *         <li>Overestimated AVU (appears higher than reality)</li>
      *         <li>Misleading efficiency metrics</li>
      *       </ul>
-     *       Check SMCPTD logs for "⚠️ Using fallback makespan" warnings.
+     *       Check SMCPTD logs for "Using fallback makespan" warnings.
      *   </li>
      * </ul>
      * 
@@ -884,8 +852,8 @@ public class ExperimentRunner {
      * 
      * Look for this log in SMCPTD output to confirm accuracy:
      * <pre>
-     *   ✅ Makespan calculated from LOTD AFT: 333.333
-     *   ℹ️  Source: LOTD Actual Finish Times (accurate for AVU/VF calculation)
+     *   Makespan calculated from LOTD AFT: 333.333
+     *    Source: LOTD Actual Finish Times (accurate for AVU/VF calculation)
      * </pre>
      * 
      * <h3>COMPLEXITY:</h3>
@@ -918,8 +886,6 @@ public class ExperimentRunner {
      * @see SMCPTD#calculateFinalMetrics for makespan calculation details
      */
     private static double calculateAVU(SMGT smgt, Map<Integer, List<Integer>> assignments, double makespan) {
-        long startTime = System.nanoTime();
-        
         if (makespan <= 0)
             return 0;
 
@@ -936,19 +902,26 @@ public class ExperimentRunner {
         }
 
         // OPTIMIZATION 3: Convert assignments using direct HashMap lookups - O(k) where k = total assignments
-        // OLD: Nested loop O(n²) - for each assignment, search through all tasks
-        // NEW: Direct lookup O(1) per assignment
+        // BUG FIX: Track which tasks have been assigned to avoid counting duplicates
+        // LOTD may duplicate tasks across multiple VMs - count each task only once
+        Set<Integer> assignedTaskIds = new HashSet<>();
         Map<Integer, List<task>> taskAssignments = new HashMap<>();
+        
         for (Map.Entry<Integer, List<Integer>> entry : assignments.entrySet()) {
             int vmId = entry.getKey();
             List<task> tasks = new ArrayList<>();
             for (int taskId : entry.getValue()) {
-                task t = taskMap.get(taskId);  // O(1) lookup instead of O(n) search
+                task t = taskMap.get(taskId);
                 if (t != null) {
-                    tasks.add(t);
+                    // Only add if this is the FIRST assignment of this task
+                    // (duplicates created by LOTD should not be counted multiple times)
+                    if (!assignedTaskIds.contains(taskId)) {
+                        tasks.add(t);
+                        assignedTaskIds.add(taskId);
+                    }
+                    // If already assigned, this is a duplicate - skip it for AVU calculation
                 } else {
-                    // Task ID in assignment but not in task list - log warning for debugging
-                    System.err.println("⚠️  Warning: Task ID " + taskId + " not found in task map");
+                    System.err.println(" Warning: Task ID " + taskId + " not found in task map");
                 }
             }
             taskAssignments.put(vmId, tasks);
@@ -956,22 +929,13 @@ public class ExperimentRunner {
 
         double avu = Metrics.AVU(vmMap, taskAssignments, makespan, "processingCapacity");
         
-        // Performance logging (only for large workflows > 500 tasks to avoid noise)
-        long endTime = System.nanoTime();
-        long durationNanos = endTime - startTime;
-        if (smgt.getTasks().size() > 500 || durationNanos > 10_000_000) { // > 10ms
-            double durationMs = durationNanos / 1_000_000.0;
-            System.out.printf("   ⚡ calculateAVU performance: %.3fms (%d tasks, %d VMs)%n",
-                    durationMs, smgt.getTasks().size(), smgt.getVMs().size());
-        }
-        
         return avu;
     }
 
     /**
      * <h2>Calculates VF (Variance of Fairness) - Task Satisfaction Metric</h2>
      * 
-     * <h3>📊 WHAT VF MEASURES</h3>
+     * <h3>WHAT VF MEASURES</h3>
      * <p>
      * VF (Variance of Fairness) quantifies <b>how fairly tasks are distributed</b> across VMs
      * by measuring the variance in task "satisfaction" levels. Each task's satisfaction
@@ -996,39 +960,39 @@ public class ExperimentRunner {
      *    = Σ(satisfaction_i - mean_satisfaction)² / n
      * </pre>
      * 
-     * <h3>⚠️ LIMITATIONS</h3>
+     * <h3>LIMITATIONS</h3>
      * <ul>
-     *   <li>❌ <b>Does NOT account for communication overhead</b>
+     *   <li><b>Does NOT account for communication overhead</b>
      *       <br>→ Only considers computation time (task.size / vm.capacity)</li>
-     *   <li>❌ <b>Does NOT consider task dependencies</b>
+     *   <li><b>Does NOT consider task dependencies</b>
      *       <br>→ Ignores predecessor wait times and critical path constraints</li>
-     *   <li>❌ <b>Simplified satisfaction metric</b>
+     *   <li><b>Simplified satisfaction metric</b>
      *       <br>→ Assumes "fastest ET" = execution on most powerful VM</li>
-     *   <li>⚠️ <b>Sensitive to VM heterogeneity</b>
+     *   <li><b>Sensitive to VM heterogeneity</b>
      *       <br>→ Large capacity differences inflate VF even with good scheduling</li>
-     *   <li>⚠️ <b>Makespan parameter unused in calculation</b>
+     *   <li><b>Makespan parameter unused in calculation</b>
      *       <br>→ VF is independent of total workflow completion time</li>
      * </ul>
      * 
-     * <h3>✅ ACCURACY CONSIDERATIONS</h3>
+     * <h3>ACCURACY CONSIDERATIONS</h3>
      * <p><b>VF is most accurate when:</b></p>
      * <ul>
-     *   <li>✓ All tasks have non-zero size</li>
-     *   <li>✓ All VMs have positive processing capacity</li>
-     *   <li>✓ VM assignments contain valid task IDs</li>
-     *   <li>✓ Communication costs are negligible compared to computation</li>
+     *   <li>All tasks have non-zero size</li>
+     *   <li>All VMs have positive processing capacity</li>
+     *   <li>VM assignments contain valid task IDs</li>
+     *   <li>Communication costs are negligible compared to computation</li>
      * </ul>
      * <p><b>Expected log output for valid calculation:</b></p>
      * <pre>
      *   (No warnings about missing tasks or invalid IDs)
-     *   ⚡ calculateVF performance: X.XXXms (N tasks, M VMs)  [for large workflows]
+     *   calculateVF performance: X.XXXms (N tasks, M VMs)  [for large workflows]
      * </pre>
      * <p><b>Warning signs of issues:</b></p>
      * <pre>
-     *   ⚠️  Warning: Task ID X not found in task map  [Assignment references non-existent task]
+     *    Warning: Task ID X not found in task map  [Assignment references non-existent task]
      * </pre>
      * 
-     * <h3>⚡ COMPLEXITY &amp; PERFORMANCE</h3>
+     * <h3>COMPLEXITY &amp; PERFORMANCE</h3>
      * <p><b>OPTIMIZED VERSION - O(n²) → O(n) improvement:</b></p>
      * <ul>
      *   <li><b>OLD</b>: Nested loop - for each assignment, search all tasks = O(n²)</li>
@@ -1068,8 +1032,6 @@ public class ExperimentRunner {
      * @see #calculateAVU(SMGT, Map, double) for AVU (VM utilization) metric calculation
      */
     private static double calculateVF(SMGT smgt, Map<Integer, List<Integer>> assignments, double makespan) {
-        long startTime = System.nanoTime();
-        
         if (makespan <= 0)
             return 0;
 
@@ -1086,19 +1048,26 @@ public class ExperimentRunner {
         }
 
         // OPTIMIZATION 3: Convert assignments using direct HashMap lookups - O(k) where k = total assignments
-        // OLD: Nested loop O(n²) - for each assignment, search through all tasks
-        // NEW: Direct lookup O(1) per assignment
+        // BUG FIX: Track which tasks have been assigned to avoid counting duplicates
+        // LOTD may duplicate tasks across multiple VMs - count each task only once
+        Set<Integer> assignedTaskIds = new HashSet<>();
         Map<Integer, List<task>> taskAssignments = new HashMap<>();
+        
         for (Map.Entry<Integer, List<Integer>> entry : assignments.entrySet()) {
             int vmId = entry.getKey();
             List<task> tasks = new ArrayList<>();
             for (int taskId : entry.getValue()) {
-                task t = taskMap.get(taskId);  // O(1) lookup instead of O(n) search
+                task t = taskMap.get(taskId);
                 if (t != null) {
-                    tasks.add(t);
+                    // Only add if this is the FIRST assignment of this task
+                    // (duplicates created by LOTD should not be counted multiple times)
+                    if (!assignedTaskIds.contains(taskId)) {
+                        tasks.add(t);
+                        assignedTaskIds.add(taskId);
+                    }
+                    // If already assigned, this is a duplicate - skip it for VF calculation
                 } else {
-                    // Task ID in assignment but not in task list - log warning for debugging
-                    System.err.println("⚠️  Warning: Task ID " + taskId + " not found in task map");
+                    System.err.println(" Warning: Task ID " + taskId + " not found in task map");
                 }
             }
             taskAssignments.put(vmId, tasks);
@@ -1106,15 +1075,6 @@ public class ExperimentRunner {
 
         // Calcola VF usando Metrics
         double vf = Metrics.VF(smgt.getTasks(), vmMap, taskAssignments, null, "processingCapacity");
-        
-        // Performance logging (only for large workflows > 500 tasks to avoid noise)
-        long endTime = System.nanoTime();
-        long durationNanos = endTime - startTime;
-        if (smgt.getTasks().size() > 500 || durationNanos > 10_000_000) { // > 10ms
-            double durationMs = durationNanos / 1_000_000.0;
-            System.out.printf("   ⚡ calculateVF performance: %.3fms (%d tasks, %d VMs)%n",
-                    durationMs, smgt.getTasks().size(), smgt.getVMs().size());
-        }
         
         return Double.isNaN(vf) || Double.isInfinite(vf) ? Double.NaN : vf;
     }
@@ -1136,10 +1096,10 @@ public class ExperimentRunner {
                 }
             }
             if (verbose) {
-                System.out.println("\n✅ Risultati salvati: results/experiments_results.csv");
+                System.out.println("\nSaved: results/experiments_results.csv");
             }
         } catch (Exception e) {
-            System.err.println("❌ Errore salvataggio CSV: " + e.getMessage());
+            System.err.println("Save error CSV: " + e.getMessage());
         }
     }
 
@@ -1182,10 +1142,10 @@ public class ExperimentRunner {
             writer.println("  ]");
             writer.println("}");
             if (verbose) {
-                System.out.println("✅ Risultati salvati: results/experiments_results.json");
+                System.out.println("Saved: results/experiments_results.json");
             }
         } catch (Exception e) {
-            System.err.println("❌ Errore salvataggio JSON: " + e.getMessage());
+            System.err.println("Save error JSON: " + e.getMessage());
         }
     }
 
@@ -1194,9 +1154,9 @@ public class ExperimentRunner {
      */
     private static void printSummary() {
         System.out.println("\n" + "=".repeat(70));
-        System.out.println("📋 RIEPILOGO ESPERIMENTI");
+        System.out.println("Summary");
         System.out.println("=".repeat(70));
-        System.out.println("Totale esperimenti eseguiti: " + results.size());
+        System.out.println("Total experiments: " + results.size());
 
         // Raggruppa per esperimento
         Map<String, List<ExperimentResult>> byExperiment = new HashMap<>();
@@ -1217,7 +1177,7 @@ public class ExperimentRunner {
             System.out.printf("   Avg VF:  %.6f%n", avgVF);
         }
 
-        System.out.println("\n✅ Esperimenti completati!");
+        System.out.println("\nComplete");
     }
 
     /**
@@ -1225,11 +1185,8 @@ public class ExperimentRunner {
      * INUTILE!!! SOLO PER DEBUG VELOCE
      */
     private static void runTestSingle() {
-        System.out.println("╔════════════════════════════════════════════════════════════════╗");
-        System.out.println("║              TEST SINGOLO - DEBUG MODE                         ║");
-        System.out.println("║  Workflow: CyberShake Small (30 tasks, 5 VMs)                 ║");
-        System.out.println("║  Testing CCR values to verify SLR calculation                 ║");
-        System.out.println("╚════════════════════════════════════════════════════════════════╝\n");
+        System.out.println("Test Mode: CyberShake 30 tasks, 5 VMs");
+        System.out.println("Testing CCR values: 0.4, 0.8, 1.2, 1.6, 2.0\n");
 
         double[] testCCRs = { 0.4, 0.8, 1.2, 1.6, 2.0 };
 
@@ -1249,7 +1206,7 @@ public class ExperimentRunner {
                 );
 
                 if (result == null) {
-                    System.out.println("⚠️  Skipped (workflow non trovato)");
+                    System.out.println(" Skipped");
                     continue;
                 }
 
@@ -1265,10 +1222,7 @@ public class ExperimentRunner {
             }
         }
 
-        System.out.println("\n📊 Expected values from paper (approx):");
-        System.out.println("   CCR=0.4: SLR ~1.1-1.2");
-        System.out.println("   CCR=2.0: SLR ~1.5-1.8");
-        System.out.println("   AVU should be 40-70%");
-        System.out.println("\n✅ Test completato!");
+        System.out.println("\nExpected from paper: CCR=0.4 SLR~1.1-1.2, CCR=2.0 SLR~1.5-1.8, AVU 40-70%");
+        System.out.println("Test complete");
     }
 }

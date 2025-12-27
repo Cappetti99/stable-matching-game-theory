@@ -29,11 +29,16 @@ public class Metrics {
     }
 
     /**
-     * Scheduling Length Ratio.
+     * Scheduling Length Ratio (Paper Equation 7).
+     * 
+     * SLR = makespan / Σmin{ET(ti, VMk)} for ALL tasks in the workflow
+     * 
+     * Note: The denominator sums the minimum execution time across all VMs
+     * for EVERY task in the workflow, not just the critical path tasks.
      */
-    public static double SLR(double makespan, List<task> criticalPathTasks, Map<Integer, VM> vms) {
+    public static double SLR(double makespan, List<task> allTasks, Map<Integer, VM> vms) {
         double sumMinET = 0.0;
-        for (task t : criticalPathTasks) {
+        for (task t : allTasks) {
             double minET = Double.POSITIVE_INFINITY;
             for (VM vm : vms.values()) minET = Math.min(minET, ET(t, vm, "processingCapacity"));
             if (minET != Double.POSITIVE_INFINITY) sumMinET += minET;

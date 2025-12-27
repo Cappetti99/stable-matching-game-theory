@@ -1,5 +1,4 @@
 import java.io.*;
-import java.nio.file.*;
 import java.util.*;
 import javax.xml.parsers.*;
 import org.w3c.dom.*;
@@ -156,7 +155,7 @@ public class PegasusXMLParser {
                 int id = jobIdToTaskId.get(entry.getKey());
                 // Genera size secondo paper: [500, 700] uniforme
                 double size = 500.0 + taskRand.nextDouble() * 200.0;
-                writer.printf("%.0f,%.2f\n", (double)id, size);
+                writer.printf(Locale.US, "%.0f,%.2f\n", (double)id, size);
             }
         }
         
@@ -179,7 +178,7 @@ public class PegasusXMLParser {
                         dataSize = predJob.totalOutputSize / 1000000.0; // MB
                     }
                     
-                    writer.printf("%d,%d,%.2f\n", edge[0], edge[1], dataSize);
+                    writer.printf(Locale.US, "%d,%d,%.2f\n", edge[0], edge[1], dataSize);
                 }
             }
         }
@@ -212,11 +211,11 @@ public class PegasusXMLParser {
                 for (int j = 0; j < numVMs; j++) {
                     if (i == j) {
                         // Bandwidth to self = 0 (no communication needed)
-                        writer.printf("%d,%d,0.00\n", i, j);
+                        writer.printf(Locale.US, "%d,%d,0.00\n", i, j);
                     } else {
                         // [20, 30] uniforme
                         double bandwidth = 20.0 + bwRand.nextDouble() * 10.0;
-                        writer.printf("%d,%d,%.2f\n", i, j, bandwidth);
+                        writer.printf(Locale.US, "%d,%d,%.2f\n", i, j, bandwidth);
                     }
                 }
             }

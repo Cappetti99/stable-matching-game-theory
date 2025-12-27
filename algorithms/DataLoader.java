@@ -205,9 +205,23 @@ public class DataLoader {
                     int predId = Integer.parseInt(parts[0].replace("t", "").trim());
                     int succId = Integer.parseInt(parts[1].replace("t", "").trim());
 
-                    // Add relationships
-                    getTaskById(predId, tasks).getSucc().add(succId);
-                    getTaskById(succId, tasks).getPre().add(predId);
+                    // BUG FIX: Add null checks to prevent NullPointerException
+                    task predTask = getTaskById(predId, tasks);
+                    task succTask = getTaskById(succId, tasks);
+                    
+                    if (predTask != null && succTask != null) {
+                        // Add relationships
+                        predTask.getSucc().add(succId);
+                        succTask.getPre().add(predId);
+                    } else {
+                        // Log warning if task not found (possible data inconsistency)
+                        if (predTask == null) {
+                            System.err.println("Warning: DAG references non-existent predecessor task ID: " + predId);
+                        }
+                        if (succTask == null) {
+                            System.err.println("Warning: DAG references non-existent successor task ID: " + succId);
+                        }
+                    }
                 }
             }
         }

@@ -286,13 +286,8 @@ public class LOTD {
         if (entryTask == null || originalVM == null)
             return false;
 
-        // 1. Calculate when duplicate would finish
+        // 1. Calculate execution time for duplicate
         double duplicateET = calculateExecutionTime(entryTask, targetVM);
-
-        // Get actual VM ready time (when VM finishes currently scheduled tasks)
-        // Since duplicates are now added to schedule, they will block the VM
-        double vmReadyTime = getVMReadyTime(targetVM, -1);
-        double duplicateFinish = vmReadyTime + duplicateET;
 
         // 2. Calculate when data would arrive from original VM
         Double originalFinish = taskAFT.get(entryTaskId);
@@ -307,22 +302,121 @@ public class LOTD {
         if (succAST == null)
             succAST = Double.MAX_VALUE;
 
+        // 4. Find earliest idle slot where duplicate can fit BEFORE successor starts
+        // The duplicate must start after entry task's predecessors finish on target VM
+        double earliestStart = 0.0;
+        
+        // Check predecessors of entry task to see when their data arrives on target VM
+        for (Integer predId : entryTask.getPre()) {
+            Double predFinish = taskAFT.get(predId);
+            if (predFinish != null) {
+                Integer predVM = taskToVM.get(predId);
+                if (predVM != null && predVM != targetVM) {
+                    double predCommCost = getCommunicationCost(predId, entryTaskId, predVM, targetVM);
+                    earliestStart = Math.max(earliestStart, predFinish + predCommCost);
+                } else if (predVM != null) {
+                    // Predecessor on same VM, just wait for it to finish
+                    earliestStart = Math.max(earliestStart, predFinish);
+                }
+            }
+        }
+
+        // Find idle slot on target VM where duplicate can fit
+        double idleSlotStart = findIdleSlot(targetVM, earliestStart, succAST, duplicateET);
+        
+        if (idleSlotStart < 0) {
+            // No suitable idle slot found
+            if (VERBOSE) {
+                System.out.printf("  No idle slot found (earliest=%.2f, deadline=%.2f, duration=%.2f)\n",
+                        earliestStart, succAST, duplicateET);
+            }
+            return false;
+        }
+
+        double duplicateFinish = idleSlotStart + duplicateET;
+
         if (VERBOSE) {
-            System.out.printf("  VM ready time: %.2f\n", vmReadyTime);
-            System.out.printf("  Duplicate finish: %.2f\n", duplicateFinish);
+            System.out.printf("  Idle slot: %.2f - %.2f\n", idleSlotStart, duplicateFinish);
             System.out.printf("  Data arrival: %.2f (original=%.2f + comm=%.2f)\n",
                     dataArrival, originalFinish, commCost);
             System.out.printf("  Successor starts: %.2f\n", succAST);
         }
 
         // Check conditions:
-        // A) Duplicate finishes before successor starts (enough time available)
+        // A) Duplicate finishes before successor starts (fits in idle slot)
         boolean hasTimeSlot = duplicateFinish <= succAST;
 
         // B) Duplicate finishes before data arrives (performance gain)
         boolean isBeneficial = duplicateFinish < dataArrival;
 
+        if (VERBOSE) {
+            System.out.printf("  hasTimeSlot=%b, isBeneficial=%b\n", hasTimeSlot, isBeneficial);
+        }
+
         return hasTimeSlot && isBeneficial;
+    }
+
+    /**
+     * Find an idle time slot on VM where a task of given duration can fit
+     * 
+     * @param vmId Target VM
+     * @param earliestStart Earliest time the task can start
+     * @param deadline Latest time the task must finish
+     * @param duration Task execution time
+     * @return Start time of idle slot, or -1 if no slot found
+     */
+    private double findIdleSlot(int vmId, double earliestStart, double deadline, double duration) {
+        List<Integer> tasksOnVM = vmSchedule.get(vmId);
+        
+        if (tasksOnVM == null || tasksOnVM.isEmpty()) {
+            // VM has no tasks, can start immediately
+            if (earliestStart + duration <= deadline) {
+                return earliestStart;
+            }
+            return -1;
+        }
+
+        // Build list of busy periods [start, finish] for this VM
+        List<double[]> busyPeriods = new ArrayList<>();
+        for (Integer taskId : tasksOnVM) {
+            Double ast = taskAST.get(taskId);
+            Double aft = taskAFT.get(taskId);
+            if (ast != null && aft != null) {
+                busyPeriods.add(new double[]{ast, aft});
+            }
+        }
+
+        // Sort by start time
+        busyPeriods.sort((a, b) -> Double.compare(a[0], b[0]));
+
+        // Try to fit in gap before first task
+        if (!busyPeriods.isEmpty()) {
+            double firstTaskStart = busyPeriods.get(0)[0];
+            if (earliestStart + duration <= Math.min(firstTaskStart, deadline)) {
+                return earliestStart;
+            }
+        }
+
+        // Try to fit in gaps between tasks
+        for (int i = 0; i < busyPeriods.size() - 1; i++) {
+            double gapStart = Math.max(earliestStart, busyPeriods.get(i)[1]);
+            double gapEnd = Math.min(deadline, busyPeriods.get(i + 1)[0]);
+            
+            if (gapEnd - gapStart >= duration) {
+                return gapStart;
+            }
+        }
+
+        // Try to fit after last task
+        if (!busyPeriods.isEmpty()) {
+            double lastTaskFinish = busyPeriods.get(busyPeriods.size() - 1)[1];
+            double slotStart = Math.max(earliestStart, lastTaskFinish);
+            if (slotStart + duration <= deadline) {
+                return slotStart;
+            }
+        }
+
+        return -1; // No suitable slot found
     }
 
     /**

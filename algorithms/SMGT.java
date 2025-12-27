@@ -311,8 +311,20 @@ public class SMGT {
         for (int vmIdx = 0; vmIdx < vms.size(); vmIdx++) {
             double capacity = getVMProcessingCapacity(vms.get(vmIdx));
 
-            // Formula: (sumPreviousTasks / sumCapacities) × capacity
-            double rawThreshold = (sumPreviousTasks / sumCapacities) * capacity;
+            // BUG FIX: Handle level 0 specially
+            // For level 0 (entry tasks), there are no previous levels
+            // so we must distribute current level tasks proportionally
+            double rawThreshold;
+            if (level == 0) {
+                // Special case for level 0: distribute current level tasks
+                int tasksInCurrentLevel = levelTasks.getOrDefault(level, new ArrayList<>()).size();
+                rawThreshold = ((double) tasksInCurrentLevel / sumCapacities) * capacity;
+            } else {
+                // Standard formula for levels > 0: based on previous levels
+                // Formula from paper: threshold(VMk, l) = (Σ(v=0 to l-1) nv / Σpi) × pk
+                rawThreshold = (sumPreviousTasks / sumCapacities) * capacity;
+            }
+            
             int threshold = (int) Math.floor(rawThreshold);
 
             // Sottrai task CP già assegnati
@@ -323,16 +335,37 @@ public class SMGT {
             totalThreshold += threshold;
         }
 
-        // CORREZIONE: Se threshold totale insufficiente, aggiungi alla VM più veloce
+        // CORREZIONE: Se threshold totale insufficiente, distribuisci proporzionalmente
+        // BUG FIX: Distribute deficit proportionally by capacity (round-robin weighted)
         int deficit = nonCpTaskCount - totalThreshold;
         if (deficit > 0) {
-            int fastestVM = getFastestVM();
-            VMThreshold fastest = thresholds.get(fastestVM);
-            fastest.remaining += deficit;
-
             if (VERBOSE) {
-                System.out.println("   ⚠️  Threshold deficit: " + deficit +
-                        " → added to VM" + fastestVM);
+                System.out.println("   Threshold deficit: " + deficit + " tasks");
+            }
+            
+            // Create list of (vmIdx, remainingCapacityFraction) for proportional distribution
+            List<Map.Entry<Integer, Double>> vmCapacityFractions = new ArrayList<>();
+            for (int vmIdx = 0; vmIdx < vms.size(); vmIdx++) {
+                double capacity = getVMProcessingCapacity(vms.get(vmIdx));
+                double fraction = capacity / sumCapacities;
+                vmCapacityFractions.add(new AbstractMap.SimpleEntry<>(vmIdx, fraction));
+            }
+            
+            // Sort by capacity fraction (descending) to distribute fairly
+            vmCapacityFractions.sort((a, b) -> Double.compare(b.getValue(), a.getValue()));
+            
+            // Distribute deficit using round-robin weighted by capacity
+            int remaining = deficit;
+            int roundRobinIdx = 0;
+            while (remaining > 0) {
+                int vmIdx = vmCapacityFractions.get(roundRobinIdx % vmCapacityFractions.size()).getKey();
+                thresholds.get(vmIdx).remaining++;
+                remaining--;
+                roundRobinIdx++;
+                
+                if (VERBOSE) {
+                    System.out.println("      → +1 to VM" + vmIdx);
+                }
             }
         }
 

@@ -355,25 +355,16 @@ public class SMCPTD {
         // Calcola SLR (Paper Equation 7) usando Metrics.SLR
         System.out.println("   📈 Calculating SLR...");
         
-        if (!criticalPath.isEmpty()) {
-            // Converti criticalPath in lista di task objects
-            List<task> criticalPathTasks = new ArrayList<>();
-            for (Integer taskId : criticalPath) {
-                task cpTask = smgt.getTaskById(taskId);
-                if (cpTask != null) {
-                    criticalPathTasks.add(cpTask);
-                }
-            }
-            
-            if (!criticalPathTasks.isEmpty()) {
-                slr = Metrics.SLR(makespan, criticalPathTasks, vmMapping);
-                System.out.println("   ✓ SLR calculated: " + String.format("%.3f", slr));
-            } else {
-                slr = Double.POSITIVE_INFINITY;
-                System.out.println("   ⚠️  Invalid SLR calculation (no valid CP tasks)");
-            }
+        // Get ALL tasks from the workflow (not just critical path)
+        List<task> allTasks = smgt.getTasks();
+        
+        if (allTasks != null && !allTasks.isEmpty()) {
+            // Calculate SLR using ALL tasks (Paper Equation 7)
+            slr = Metrics.SLR(makespan, allTasks, vmMapping);
+            System.out.println("   ✓ SLR calculated: " + String.format("%.3f", slr));
+            System.out.println("      (using " + allTasks.size() + " tasks in denominator)");
         } else {
-            System.out.println("   ⚠️  Empty critical path, cannot calculate SLR");
+            System.out.println("   ⚠️  No tasks available, cannot calculate SLR");
             slr = Double.POSITIVE_INFINITY;
         }
     }
