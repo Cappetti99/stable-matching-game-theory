@@ -36,7 +36,6 @@ public class DCP {
      * 
      * @param tasks              Lista completa dei task del DAG
      * @param taskLevels         Mappa livello -> lista di task ID
-     * @param exitTask           Task di uscita del DAG
      * @param communicationCosts Costi di comunicazione tra task (key:
      *                           "taskId_succId")
      * @param vmMapping          Mappa ID VM -> oggetto VM
@@ -45,7 +44,6 @@ public class DCP {
     public static Set<Integer> executeDCP(
             List<task> tasks,
             Map<Integer, List<Integer>> taskLevels,
-            task exitTask,
             Map<String, Double> communicationCosts,
             Map<Integer, VM> vmMapping) {
 
@@ -60,7 +58,6 @@ public class DCP {
         // STEP 2: Calcola ricorsivamente i rank di tutti i task
         Map<Integer, Double> taskRanks = calculateTaskRanksRecursive(
                 taskMap,
-                exitTask,
                 communicationCosts,
                 vmMapping);
 
@@ -90,27 +87,17 @@ public class DCP {
      * - Altrimenti, calcola ricorsivamente partendo dai successori
      * 
      * @param taskMap            Mappa ID -> task object
-     * @param exitTask           Task di uscita (punto di partenza)
      * @param communicationCosts Costi di comunicazione
      * @param vmMapping          Mappa delle VM
      * @return Mappa taskId -> rank
      */
     private static Map<Integer, Double> calculateTaskRanksRecursive(
             Map<Integer, task> taskMap,
-            task exitTask,
             Map<String, Double> communicationCosts,
             Map<Integer, VM> vmMapping) {
 
         Map<Integer, Double> ranks = new HashMap<>();
 
-        // CASO BASE: Calcola rank dell'exit task
-        double exitRank = calculateTaskWeight(exitTask, vmMapping);
-        ranks.put(exitTask.getID(), exitRank);
-
-        System.out.println("   📍 Exit task t" + exitTask.getID() +
-                " rank: " + String.format("%.3f", exitRank));
-
-        // RICORSIONE: Calcola rank di tutti gli altri task
         for (task t : taskMap.values()) {
             if (t.getID() != exitTask.getID()) {
                 calculateRankRecursive(
@@ -160,17 +147,16 @@ public class DCP {
         // Ottieni lista successori
         List<Integer> successors = currentTask.getSucc();
 
-        // CASO BASE: Nessun successore (questo dovrebbe essere solo l'exit task)
+        // CASO BASE: Nessun successore (exit tasks)
         if (successors == null || successors.isEmpty()) {
             ranks.put(taskId, Wi);
             return;
         }
 
-        // RICORSIONE: Calcola max_{t_j ∈ succ}(c_{i,j} + rank(t_j))
         double maxSuccessorValue = 0.0;
 
         for (int successorId : successors) {
-            // RICORSIONE: Assicurati che il rank del successore sia calcolato
+            // Ricorsione
             if (!ranks.containsKey(successorId)) {
                 calculateRankRecursive(
                         successorId,
