@@ -1,13 +1,16 @@
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 public class VM {
     private int ID;
     private Map<String, Double> processingCapabilities; // Map of capability type to processing power
     private Map<Integer, Double> bandwidthToVMs; // Map of VM_ID to bandwidth value B(this_VM, target_VM)
     private boolean isActive;
-    private int threshold; // Maximum number of tasks this VM can handle
+    private int threshold; // Maximum number of tasks this VM can handle per level
+    private List<Integer> waitingList; // Tasks assigned to this VM
     
     // Constructor
     public VM(int ID) {
@@ -16,6 +19,7 @@ public class VM {
         this.bandwidthToVMs = new HashMap<>();
         this.isActive = true;
         this.threshold = 1; // Default threshold
+        this.waitingList = new ArrayList<>();
     }
     
     // Getters
@@ -33,6 +37,31 @@ public class VM {
     
     public int getThreshold() {
         return threshold;
+    }
+    
+    public void setThreshold(int threshold) {
+        this.threshold = threshold;
+    }
+    
+    // WaitingList management
+    public List<Integer> getWaitingList() {
+        return waitingList;
+    }
+    
+    public void addToWaitingList(int taskId) {
+        waitingList.add(taskId);
+    }
+    
+    public void clearWaitingList() {
+        waitingList.clear();
+    }
+    
+    public boolean isFull() {
+        return waitingList.size() >= threshold;
+    }
+    
+    public int getWaitingListSize() {
+        return waitingList.size();
     }
     
     // Capability management
@@ -69,6 +98,7 @@ public class VM {
                 ", bandwidthToVMs=" + bandwidthToVMs +
                 ", isActive=" + isActive +
                 ", threshold=" + threshold +
+                ", waitingList=" + waitingList +
                 '}';
     }
 }

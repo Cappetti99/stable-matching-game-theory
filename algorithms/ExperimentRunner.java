@@ -31,7 +31,7 @@ public class ExperimentRunner {
 
     // Numero di run multiple per stabilizzare i risultati
     private static final int NUM_RUNS = 10; // Production: 10 runs per stabilizzare i risultati
-    private static final int WARMUP_RUNS = 2; // Production: 1 warmup per eliminare cold start effects
+    private static final int WARMUP_RUNS = 1; // Production: 1 warmup per eliminare cold start effects
 
     // Workflow Pegasus XML reali dal paper (convertiti da XML a CSV)
     private static final String[] WORKFLOWS = { "cybershake", "epigenomics", "ligo", "montage" };
@@ -325,6 +325,7 @@ public class ExperimentRunner {
 
             SMCPTD smcptd = new SMCPTD();
             smcptd.setInputData(tasks, vms);
+            smcptd.setGanttChartSettings(true, workflow, ccr);
             SMGT smgt = smcptd.getSMGT();
 
             // 4. Crea mapping VM
@@ -334,42 +335,31 @@ public class ExperimentRunner {
             }
 
             // ============================================================================
-            // 2-PASS ITERATIVE REFINEMENT WITH VM-SPECIFIC BANDWIDTH
+            // SINGLE-PASS SCHEDULING (Paper Algorithm)
             // ============================================================================
-            
-            // PASS 1: Initial scheduling with DCP formula
-            // Calculate communication costs using paper's formula for DCP:
+            // Calculate communication costs using paper's DCP formula:
             // ci,j = (1/m(m-1)) × Σ(k=0 to m-1) Σ(l=0,l≠k to m-1) [TTi,j / B(VMk, VMl)]
-            // This averages costs over all VM pairs, appropriate since tasks aren't assigned yet
-            Map<String, Double> commCostsPass1 = calculateCommunicationCostsForDCP(smgt, ccr);
+            // This averages costs over all VM pairs as specified in the paper
+            Map<String, Double> commCosts = calculateCommunicationCostsForDCP(smgt, ccr);
             
-            // Execute SM-CPTD with average bandwidth to get initial assignments
-            Map<Integer, List<Integer>> assignmentsPass1 = smcptd.executeSMCPTD(commCostsPass1, vmMapping);
-            
-            // Convert assignments to task-to-VM map
-            Map<Integer, Integer> taskToVM = buildTaskToVMMap(assignmentsPass1);
-            
-            // PASS 2: Refined scheduling with VM-pair-specific bandwidth
-            // Recalculate communication costs using actual bandwidth between assigned VMs
-            Map<String, Double> commCostsPass2 = calculateCommunicationCosts(smgt, ccr, taskToVM);
-            
-            // Re-execute SM-CPTD with refined communication costs
-            // This may result in different assignments due to more accurate costs
-            SMCPTD smcptdPass2 = new SMCPTD();
-            smcptdPass2.setInputData(tasks, vms);
-
-            Map<Integer, List<Integer>> assignments = smcptdPass2.executeSMCPTD(commCostsPass2, vmMapping);
-            
-            // Use results from Pass 2 (refined with VM-specific bandwidth)
-            Map<String, Double> commCosts = commCostsPass2;
-            smcptd = smcptdPass2;
+            // Execute SM-CPTD algorithm (DCP → SMGT → LOTD)
+            Map<Integer, List<Integer>> assignments = smcptd.executeSMCPTD(commCosts, vmMapping);
             
             // ============================================================================
 
             // 6. Calcola metriche
             double makespan = smcptd.getMakespan();
-            // Usa l'SLR calcolato da SMCPTD (Eq. 7) usando il CP trovato da DCP
-            double slr = smcptd.getSLR();
+            
+            // Calculate SLR using critical path tasks (Paper Equation 7)
+            Set<Integer> criticalPath = smcptd.getCriticalPath();
+            List<task> criticalPathTasks = new ArrayList<>();
+            for (task t : tasks) {
+                if (criticalPath.contains(t.getID())) {
+                    criticalPathTasks.add(t);
+                }
+            }
+            double slr = Metrics.SLR(makespan, criticalPathTasks, vmMapping);
+            
             double avu = calculateAVU(smgt, assignments, makespan);
             double vf = calculateVF(smgt, assignments, makespan);
 
@@ -426,6 +416,7 @@ public class ExperimentRunner {
                 
                 SMCPTD smcptd = new SMCPTD();
                 smcptd.setInputData(tasks, vms);
+                smcptd.setGenerateGanttChart(false); // Disable for CCR analysis
                 SMGT smgt = smcptd.getSMGT();
                 
                 // Create VM mapping
@@ -434,21 +425,9 @@ public class ExperimentRunner {
                     vmMapping.put(vm.getID(), vm);
                 }
                 
-                // 2-PASS APPROACH (same as main execution)
-                // Pass 1: Use DCP formula (average over all VM pairs)
-                // BUG FIX: Use calculateCommunicationCostsForDCP for Pass 1 consistency
-                Map<String, Double> commCostsPass1 = calculateCommunicationCostsForDCP(smgt, ccr);
-                Map<Integer, List<Integer>> assignmentsPass1 = smcptd.executeSMCPTD(commCostsPass1, vmMapping);
-                Map<Integer, Integer> taskToVM = buildTaskToVMMap(assignmentsPass1);
-                
-                // Pass 2: VM-specific bandwidth
-                Map<String, Double> commCosts = calculateCommunicationCosts(smgt, ccr, taskToVM);
-                SMCPTD smcptdPass2 = new SMCPTD();
-                smcptdPass2.setInputData(tasks, vms);
-                smcptdPass2.executeSMCPTD(commCosts, vmMapping);
-                
-                // Use Pass 2 results
-                smcptd = smcptdPass2;
+                // Single-pass scheduling (paper algorithm)
+                Map<String, Double> commCosts = calculateCommunicationCostsForDCP(smgt, ccr);
+                smcptd.executeSMCPTD(commCosts, vmMapping);
                 
                 // Get Critical Path
                 Set<Integer> criticalPath = smcptd.getCriticalPath();
@@ -562,103 +541,6 @@ public class ExperimentRunner {
     }
 
     /**
-      * Calcola costi di comunicazione basati su CCR
-      * 
-      * @param smgt SMGT object with tasks and VMs
-      * @param ccr Communication-to-Computation Ratio
-      * @param taskToVM Optional task-to-VM assignment map. If provided, uses VM-pair-specific bandwidth.
-      *                 If null, uses average bandwidth across all VM pairs.
-      * @return Map of communication costs (key: "sourceTaskId_destTaskId", value: cost)
-      */
-     private static Map<String, Double> calculateCommunicationCosts(SMGT smgt, double ccr, 
-                                                                      Map<Integer, Integer> taskToVM) {
-        Map<String, Double> costs = new HashMap<>();
-
-        // Calculate average bandwidth from all VM pairs
-        double avgBandwidth = calculateAverageBandwidth(smgt.getVMs());
-        
-        boolean usingSpecificBandwidth = (taskToVM != null && !taskToVM.isEmpty());
-        
-        // Optional: Log bandwidth usage mode (set to true for debugging)
-        boolean VERBOSE_BANDWIDTH = false;
-        if (VERBOSE_BANDWIDTH) {
-            if (usingSpecificBandwidth) {
-                System.out.println("      [Bandwidth: Using VM-specific (avg=" + 
-                    String.format("%.2f", avgBandwidth) + " Mbps as fallback)]");
-            } else {
-                System.out.println("      [Bandwidth: Using average " + 
-                    String.format("%.2f", avgBandwidth) + " Mbps]");
-            }
-        }
-        
-        for (task t : smgt.getTasks()) {
-            for (int succId : t.getSucc()) {
-                String key = t.getID() + "_" + succId;
-                double dataSize = t.getSize() * ccr;
-                
-                double bandwidth;
-                if (usingSpecificBandwidth && taskToVM.containsKey(t.getID()) && taskToVM.containsKey(succId)) {
-                    // Use VM-pair-specific bandwidth
-                    int sourceVMId = taskToVM.get(t.getID());
-                    int destVMId = taskToVM.get(succId);
-                    
-                    if (sourceVMId == destVMId) {
-                        // Same VM: no communication cost
-                        costs.put(key, 0.0);
-                        continue;
-                    }
-                    
-                    // Get bandwidth between the two VMs
-                    VM sourceVM = null;
-                    for (VM vm : smgt.getVMs()) {
-                        if (vm.getID() == sourceVMId) {
-                            sourceVM = vm;
-                            break;
-                        }
-                    }
-                    
-                    if (sourceVM != null && sourceVM.hasBandwidthToVM(destVMId)) {
-                        bandwidth = sourceVM.getBandwidthToVM(destVMId);
-                    } else {
-                        // Fallback to average if bandwidth not found
-                        bandwidth = avgBandwidth;
-                    }
-                } else {
-                    // Use average bandwidth
-                    bandwidth = avgBandwidth;
-                }
-                
-                double commCost = dataSize / bandwidth;
-                costs.put(key, commCost);
-            }
-        }
-
-        return costs;
-    }
-
-    /**
-     * Calculate average bandwidth across all VM pairs
-     * 
-     * @param vms List of VMs with bandwidth data
-     * @return Average bandwidth value
-     */
-    private static double calculateAverageBandwidth(List<VM> vms) {
-        double sum = 0;
-        int count = 0;
-        
-        for (VM vm : vms) {
-            Map<Integer, Double> bandwidths = vm.getAllBandwidths();
-            for (double bandwidth : bandwidths.values()) {
-                sum += bandwidth;
-                count++;
-            }
-        }
-        
-        // Fallback to 25.0 if no bandwidth data found
-        return count > 0 ? sum / count : 25.0;
-    }
-
-    /**
      * Calculate communication costs for DCP using the paper's formula.
      * 
      * Formula: ci,j = (1 / m(m-1)) × Σ(k=0 to m-1) Σ(l=0,l≠k to m-1) [TTi,j / B(VMk, VMl)]
@@ -757,27 +639,6 @@ public class ExperimentRunner {
         }
         
         return costs;
-    }
-
-    /**
-     * Convert assignment map from (VM_ID → List<Task_ID>) to (Task_ID → VM_ID)
-     * 
-     * @param assignments Map from VM ID to list of task IDs assigned to that VM
-     * @return Map from task ID to the VM ID it's assigned to
-     */
-    private static Map<Integer, Integer> buildTaskToVMMap(Map<Integer, List<Integer>> assignments) {
-        Map<Integer, Integer> taskToVM = new HashMap<>();
-        
-        for (Map.Entry<Integer, List<Integer>> entry : assignments.entrySet()) {
-            int vmId = entry.getKey();
-            List<Integer> taskIds = entry.getValue();
-            
-            for (int taskId : taskIds) {
-                taskToVM.put(taskId, vmId);
-            }
-        }
-        
-        return taskToVM;
     }
 
     /**

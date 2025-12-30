@@ -152,13 +152,23 @@ public class AblationExperimentRunner {
             
             Map<String, Double> commCosts = calculateCommunicationCostsForDCP(smgt, ccr);
             
+            // Calculate critical path for SLR computation
+            Map<Integer, List<Integer>> taskLevels = Utility.organizeTasksByLevels(tasks);
+            Set<Integer> criticalPath = DCP.executeDCP(tasks, taskLevels, commCosts, vmMapping);
+            List<task> criticalPathTasks = new ArrayList<>();
+            for (task t : tasks) {
+                if (criticalPath.contains(t.getID())) {
+                    criticalPathTasks.add(t);
+                }
+            }
+            
             // Run the specific algorithm variant
             Map<Integer, List<Integer>> assignments = executeVariant(
                     variant, tasks, vms, commCosts, vmMapping, smgt);
             
             // Calculate metrics with proper precedence and communication costs
             double makespan = calculateMakespan(assignments, tasks, vmMapping, commCosts);
-            double slr = Metrics.SLR(makespan, tasks, vmMapping);
+            double slr = Metrics.SLR(makespan, criticalPathTasks, vmMapping);
             double avu = calculateAVU(smgt, assignments, makespan);
             double vf = calculateVF(smgt, assignments, makespan);
             
@@ -238,11 +248,10 @@ public class AblationExperimentRunner {
         smgt.calculateTaskLevels();
         
         // Execute DCP to find critical path
-        task exitTask = findExitTask(tasks);
         Map<Integer, List<Integer>> taskLevels = Utility.organizeTasksByLevels(tasks);
         
         Set<Integer> criticalPath = DCP.executeDCP(
-                tasks, taskLevels, exitTask, commCosts, vmMapping);
+                tasks, taskLevels, commCosts, vmMapping);
         
         // Run SMGT with critical path (but no LOTD)
         return smgt.runSMGT(criticalPath);
@@ -309,20 +318,6 @@ public class AblationExperimentRunner {
     // ============================================================================
     // HELPER METHODS (copied from ExperimentRunner for consistency)
     // ============================================================================
-    
-    private static task findExitTask(List<task> tasks) {
-        List<task> exits = Utility.findExitTasks(tasks);
-        if (exits.isEmpty()) {
-            throw new IllegalStateException("No exit task found!");
-        }
-        task exitTask = exits.get(0);
-        for (task t : exits) {
-            if (t != null && t.getID() > exitTask.getID()) {
-                exitTask = t;
-            }
-        }
-        return exitTask;
-    }
     
     private static Map<String, Double> calculateCommunicationCostsForDCP(SMGT smgt, double ccr) {
         Map<String, Double> costs = new HashMap<>();

@@ -99,14 +99,12 @@ public class DCP {
         Map<Integer, Double> ranks = new HashMap<>();
 
         for (task t : taskMap.values()) {
-            if (t.getID() != exitTask.getID()) {
-                calculateRankRecursive(
-                        t.getID(),
-                        taskMap,
-                        ranks,
-                        communicationCosts,
-                        vmMapping);
-            }
+            calculateRankRecursive(
+                    t.getID(),
+                    taskMap,
+                    ranks,
+                    communicationCosts,
+                    vmMapping);
         }
 
         return ranks;

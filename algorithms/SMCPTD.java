@@ -35,11 +35,15 @@ public class SMCPTD {
 
     // Metriche finali
     private double makespan;
-    private double slr;
 
     // Dati necessari per il calcolo
     private task exitTask;
     private Map<Integer, List<Integer>> taskLevels;
+
+    // Gantt chart settings
+    private boolean generateGanttChart = false;
+    private String ganttChartWorkflow = "";
+    private double ganttChartCCR = 0.0;
 
     /**
      * Costruttore
@@ -50,7 +54,6 @@ public class SMCPTD {
         this.smgtSchedule = new HashMap<>();
         this.finalSchedule = new HashMap<>();
         this.makespan = 0.0;
-        this.slr = 0.0;
     }
 
     /**
@@ -78,7 +81,6 @@ public class SMCPTD {
         this.smgtSchedule = new HashMap<>();
         this.finalSchedule = new HashMap<>();
         this.makespan = 0.0;
-        this.slr = 0.0;
         this.taskLevels = null;
         this.exitTask = null;
 
@@ -184,12 +186,12 @@ public class SMCPTD {
             }
 
             // ============================================================
-            // STEP 4: Calcolo Metriche Finali
+            // STEP 4: Calcolo Makespan
             // ============================================================
-            System.out.println("\n📊 STEP 4: Calculating Final Metrics");
+            System.out.println("\n📊 STEP 4: Calculating Makespan");
             System.out.println("-".repeat(70));
             
-            calculateFinalMetrics(communicationCosts, vmMapping);
+            calculateMakespan(vmMapping);
 
             // ============================================================
             // RISULTATI FINALI
@@ -229,7 +231,6 @@ public class SMCPTD {
         Set<Integer> cp = DCP.executeDCP(
             smgt.getTasks(),
             taskLevels,
-            exitTask,
             communicationCosts,
             vmMapping
         );
@@ -239,7 +240,8 @@ public class SMCPTD {
 
     /**
      * Helper: Trova exit task (deterministicamente)
-     * Se ci sono più exit task, sceglie quello con ID massimo
+     * Se ci sono più exit task, sceglie quello con peso computazionale massimo.
+     * In caso di parità, sceglie quello con ID minimo per determinismo.
      */
     private task findExitTask(List<task> tasks) {
         List<task> exits = Utility.findExitTasks(tasks);
@@ -248,15 +250,52 @@ public class SMCPTD {
             throw new IllegalStateException("No exit task found in DAG!");
         }
         
-        // Scegli deterministicamente: ID massimo
+        // Scegli deterministicamente: peso massimo (avg execution time su tutte le VM)
+        // In caso di parità, ID minimo
         task exitTask = exits.get(0);
+        double maxWeight = calculateTaskWeight(exitTask);
+        
         for (task t : exits) {
-            if (t != null && t.getID() > exitTask.getID()) {
+            if (t == null) continue;
+            
+            double weight = calculateTaskWeight(t);
+            
+            // Priorità: peso massimo, poi ID minimo in caso di parità
+            if (weight > maxWeight || (weight == maxWeight && t.getID() < exitTask.getID())) {
+                maxWeight = weight;
                 exitTask = t;
             }
         }
         
+        if (exits.size() > 1) {
+            System.out.println("   ⚠️  Multiple exit tasks found (" + exits.size() + "), " +
+                    "selected t" + exitTask.getID() + " with max weight: " + 
+                    String.format("%.3f", maxWeight));
+        }
+        
         return exitTask;
+    }
+    
+    /**
+     * Calcola il peso computazionale di un task (avg execution time su tutte le VM)
+     */
+    private double calculateTaskWeight(task t) {
+        if (smgt.getVMs() == null || smgt.getVMs().isEmpty()) {
+            return t.getSize();
+        }
+        
+        double totalTime = 0.0;
+        int count = 0;
+        
+        for (VM vm : smgt.getVMs()) {
+            double et = Metrics.ET(t, vm, "processingCapacity");
+            if (et != Double.POSITIVE_INFINITY) {
+                totalTime += et;
+                count++;
+            }
+        }
+        
+        return count > 0 ? totalTime / count : t.getSize();
     }
 
     /**
@@ -289,125 +328,56 @@ public class SMCPTD {
     }
 
     /**
-     * STEP 4: Calcolo metriche finali
-     * - Makespan: tempo totale di esecuzione
-     * - SLR: Schedule Length Ratio (Paper Eq. 7)
+     * STEP 4: Calcolo Makespan (Paper Formula)
      * 
-     * Includes validation and logging:
-     * - Validates makespan is valid (> 0 and not NaN)
-     * - Logs the source of makespan calculation (LOTD vs fallback)
-     * - Warns if fallback is used (may affect AVU accuracy)
+     * makespan = max{MS(VM_k)} for k in {0,...,m-1}
+     * where MS(VM_k) is the finish time of the last task assigned to VM_k
      */
-    private void calculateFinalMetrics(
-            Map<String, Double> communicationCosts,
-            Map<Integer, VM> vmMapping) {
-
+    private void calculateMakespan(Map<Integer, VM> vmMapping) {
         System.out.println("   📈 Calculating makespan...");
+        System.out.println("   ℹ️  Formula: makespan = max{MS(VM_k)} for all VMs");
 
-        boolean usedFallback = false;
+        double maxVMFinishTime = 0.0;
         
-        // Calcola makespan usando AFT da LOTD
-        if (lotd != null && lotd.getTaskAFT() != null && !lotd.getTaskAFT().isEmpty()) {
-            Map<Integer, Double> taskAFT = lotd.getTaskAFT();
-            makespan = taskAFT.values().stream()
-                .mapToDouble(Double::doubleValue)
-                .max()
-                .orElse(0.0);
-
-            // INFO level log - LOTD AFT used (preferred method)
-            System.out.println("   ✅ Makespan calculated from LOTD AFT: " + 
-                String.format("%.3f", makespan));
-            System.out.println("   ℹ️  Source: LOTD Actual Finish Times (accurate for AVU/VF calculation)");
-            
-        } else {
-            // Fallback: calcolo semplificato
-            System.out.println("   ⚠️  LOTD AFT not available, using fallback calculation");
-            makespan = calculateMakespanFallback();
-            usedFallback = true;
-            
-            // WARNING level log - fallback used (may be inaccurate)
-            System.out.println("   ⚠️  Using fallback makespan (may affect AVU accuracy): " + 
-                String.format("%.3f", makespan));
-            System.out.println("   ⚠️  Source: Simplified calculation without communication costs");
-            System.out.println("   ⚠️  Note: AVU and VF metrics may be less accurate with fallback makespan");
-        }
+        // Get task AFT from LOTD if available
+        Map<Integer, Double> taskAFT = (lotd != null) ? lotd.getTaskAFT() : null;
         
-        // VALIDATION 1: Check if makespan is NaN
-        if (Double.isNaN(makespan)) {
-            throw new IllegalStateException(
-                "Invalid makespan calculation: result is NaN. " +
-                "Source: " + (usedFallback ? "fallback" : "LOTD AFT") + ". " +
-                "Check task sizes and VM capabilities.");
-        }
-        
-        // VALIDATION 2: Check if makespan is <= 0
-        if (makespan <= 0) {
-            throw new IllegalStateException(
-                String.format("Invalid makespan calculation: result is %.6f (must be > 0). ", makespan) +
-                "Source: " + (usedFallback ? "fallback" : "LOTD AFT") + ". " +
-                "Check schedule validity and task assignments.");
-        }
-        
-        // DEBUG log - validation passed
-        System.out.println("   ✓ Makespan validation passed: " + 
-            String.format("%.3f > 0 and not NaN", makespan));
-
-        // Calcola SLR (Paper Equation 7) usando Metrics.SLR
-        System.out.println("   📈 Calculating SLR...");
-        
-        // Get ALL tasks from the workflow (not just critical path)
-        List<task> allTasks = smgt.getTasks();
-        
-        if (allTasks != null && !allTasks.isEmpty()) {
-            // Calculate SLR using ALL tasks (Paper Equation 7)
-            slr = Metrics.SLR(makespan, allTasks, vmMapping);
-            System.out.println("   ✓ SLR calculated: " + String.format("%.3f", slr));
-            System.out.println("      (using " + allTasks.size() + " tasks in denominator)");
-        } else {
-            System.out.println("   ⚠️  No tasks available, cannot calculate SLR");
-            slr = Double.POSITIVE_INFINITY;
-        }
-    }
-
-    /**
-     * Fallback per calcolo makespan quando LOTD AFT non è disponibile
-     * Usa Metrics.ET per calcolare i tempi di esecuzione
-     */
-    private double calculateMakespanFallback() {
-        double maxFinishTime = 0.0;
-
         for (Map.Entry<Integer, List<Integer>> entry : finalSchedule.entrySet()) {
             int vmId = entry.getKey();
             List<Integer> assignedTasks = entry.getValue();
-
+            
             if (assignedTasks.isEmpty()) continue;
-
-            VM vm = null;
-            for (VM v : smgt.getVMs()) {
-                if (v.getID() == vmId) {
-                    vm = v;
-                    break;
-                }
-            }
-
-            if (vm == null) continue;
-
+            
             double vmFinishTime = 0.0;
-            for (Integer taskId : assignedTasks) {
-                task t = smgt.getTaskById(taskId);
-                if (t != null) {
-                    // Usa Metrics.ET invece del calcolo manuale
-                    double execTime = Metrics.ET(t, vm, "processingCapacity");
-                    if (execTime != Double.POSITIVE_INFINITY) {
-                        vmFinishTime += execTime;
+            
+            if (taskAFT != null && !taskAFT.isEmpty()) {
+                // MS(VM_k) = max AFT of tasks assigned to this VM
+                for (Integer taskId : assignedTasks) {
+                    Double aft = taskAFT.get(taskId);
+                    if (aft != null) {
+                        vmFinishTime = Math.max(vmFinishTime, aft);
                     }
                 }
+            } else {
+                //warning fallback
+                System.out.println("   ⚠️  Warning: Task AFT data not available from LOTD, " +
+                    "using fallback calculation based on ET sums.");
             }
-
-            maxFinishTime = Math.max(maxFinishTime, vmFinishTime);
+            
+            System.out.println("      VM" + vmId + ": MS = " + String.format("%.3f", vmFinishTime));
+            
+            // makespan = max{MS(VM_k)}
+            maxVMFinishTime = Math.max(maxVMFinishTime, vmFinishTime);
         }
-
-        return maxFinishTime;
+        
+        makespan = maxVMFinishTime;
+        
+        // Validation
+        if (Double.isNaN(makespan) || makespan <= 0) {
+            throw new IllegalStateException("Invalid makespan: " + makespan);
+        }
+        
+        System.out.println("   ✅ Makespan = " + String.format("%.3f", makespan));
     }
 
     /**
@@ -433,7 +403,6 @@ public class SMCPTD {
         System.out.println("\n📋 FINAL RESULTS:");
         System.out.println("   🎯 Critical Path Size: " + criticalPath.size());
         System.out.println("   📊 Makespan: " + String.format("%.3f", makespan));
-        System.out.println("   📈 SLR: " + String.format("%.3f", slr));
         
         // Display total LOTD duplications
         if (lotd != null) {
@@ -474,15 +443,52 @@ public class SMCPTD {
         return makespan;
     }
 
-    public double getSLR() {
-        return slr;
-    }
-
     public SMGT getSMGT() {
         return smgt;
     }
 
     public LOTD getLOTD() {
         return lotd;
+    }
+
+    /**
+     * Configure Gantt chart generation settings
+     * @param generate Whether to generate Gantt charts
+     * @param workflow Workflow name for chart title
+     * @param ccr CCR value for chart title
+     */
+    public void setGanttChartSettings(boolean generate, String workflow, double ccr) {
+        this.generateGanttChart = generate;
+        this.ganttChartWorkflow = workflow;
+        this.ganttChartCCR = ccr;
+    }
+
+    /**
+     * Enable or disable Gantt chart generation
+     * @param generate Whether to generate Gantt charts
+     */
+    public void setGenerateGanttChart(boolean generate) {
+        this.generateGanttChart = generate;
+    }
+
+    /**
+     * @return Whether Gantt chart generation is enabled
+     */
+    public boolean isGenerateGanttChart() {
+        return generateGanttChart;
+    }
+
+    /**
+     * @return Workflow name for Gantt chart
+     */
+    public String getGanttChartWorkflow() {
+        return ganttChartWorkflow;
+    }
+
+    /**
+     * @return CCR value for Gantt chart
+     */
+    public double getGanttChartCCR() {
+        return ganttChartCCR;
     }
 }

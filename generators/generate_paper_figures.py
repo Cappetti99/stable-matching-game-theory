@@ -139,7 +139,7 @@ def plot_slr_vs_ccr(data, scale='small', output_filename='figure3_slr_vs_ccr.png
         scale: 'small', 'medium', o 'large'
         output_filename: nome file output
     """
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 7))
     fig.suptitle(f'Comparison of SLR in CCRs and {scale}-scale workflows', 
                  fontsize=14, fontweight='bold')
     
@@ -213,7 +213,7 @@ def plot_avu_vs_ccr(data, scale='small', output_filename='figure6_avu_vs_ccr.png
     Genera Figura 6 (small), 7 (medium), o 8 (large): AVU vs CCR
     ENHANCED: Uses adaptive Y-axis scaling to highlight AVU decreasing trend
     """
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 7))
     fig.suptitle(f'AVU vs CCR for {scale}-scale workflows (decreasing trend with communication overhead)', 
                  fontsize=13, fontweight='bold')
     
@@ -319,7 +319,7 @@ def plot_vf_vs_ccr(data, scale='large', output_filename='figure_vf_large.png'):
     """
     Genera grafico VF (Violation Frequency) vs CCR per large workflows
     """
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 7))
     fig.suptitle(f'Comparison of VF in different {scale}-scale workflows', 
                  fontsize=14, fontweight='bold')
     
@@ -438,7 +438,7 @@ def plot_slr_vs_vms(data, output_filename='figure9_slr_vs_vms.png'):
         data: dict con struttura {workflow: {algorithm: {'VMs': [...], 'SLR': [...]}}}
         output_filename: nome file output
     """
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 7))
     fig.suptitle('Comparison of SLR with different VM counts (CCR=1.0)', 
                  fontsize=14, fontweight='bold')
     
@@ -514,7 +514,7 @@ def plot_vf_vs_vms(data, output_filename='figure_vf_vs_vms.png'):
         data: dict con struttura {workflow: {algorithm: {'VMs': [...], 'VF': [...]}}}
         output_filename: nome file output
     """
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 7))
     fig.suptitle('Comparison of VF with different VM counts (CCR=1.0)', 
                  fontsize=14, fontweight='bold')
     
@@ -583,7 +583,7 @@ def plot_avu_vs_vms(data, output_filename='figure10_avu_vs_vms.png'):
         data: dict con struttura {workflow: {algorithm: {'VMs': [...], 'AVU': [...]}}}
         output_filename: nome file output
     """
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 7))
     fig.suptitle('Comparison of AVU with different VM counts (CCR=1.0)', 
                  fontsize=14, fontweight='bold')
     
@@ -800,7 +800,7 @@ def plot_ablation_figure12(output_filename='figure12_ablation_study.png'):
     metrics = ['slr', 'avu', 'vf']
     metric_titles = ['SLR', 'AVU', 'VF']
 
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+    fig, axes = plt.subplots(1, 3, figsize=(14, 7))
     fig.suptitle('1000×50×1', fontsize=13, fontweight='bold')
 
     x_pos = np.arange(len(workflows))

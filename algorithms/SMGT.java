@@ -22,19 +22,6 @@ public class SMGT {
     // Configurazione
     private static final boolean VERBOSE = false; // Imposta a true per debug dettagliato
 
-    /**
-     * Classe per gestire threshold dinamico di una VM
-     */
-    private static class VMThreshold {
-        int remaining; // Slot rimasti disponibili
-        List<Integer> assigned; // Task già assegnati
-
-        VMThreshold(int initial) {
-            this.remaining = initial;
-            this.assigned = new ArrayList<>();
-        }
-    }
-
     public SMGT() {
         this.vms = new ArrayList<>();
         this.tasks = new ArrayList<>();
@@ -223,29 +210,29 @@ public class SMGT {
             System.out.println("   Non-CP tasks: " + nonCpTasks.size());
         }
 
-        // STEP 1: Assegna task CP alla VM più veloce
+        // STEP 1: Calcola threshold per ogni VM (per tutte le task del livello)
+        calculateAndSetThresholds(level, levelTaskIds.size());
+
+        // STEP 2: Assegna task CP alla VM più veloce e aggiorna waitingList
         int fastestVM = getFastestVM();
-        Map<Integer, Integer> cpCountPerVM = new HashMap<>();
 
         for (Integer cpTaskId : cpTasks) {
             schedule.get(fastestVM).add(cpTaskId);
-            cpCountPerVM.put(fastestVM, cpCountPerVM.getOrDefault(fastestVM, 0) + 1);
+            vms.get(fastestVM).addToWaitingList(cpTaskId);
 
             if (VERBOSE) {
-                System.out.println("   ✓ CP task t" + cpTaskId + " → VM" + fastestVM);
+                VM vm = vms.get(fastestVM);
+                System.out.println("   ✓ CP task t" + cpTaskId + " → VM" + fastestVM +
+                    " (waitingList: " + vm.getWaitingListSize() + "/" + vm.getThreshold() + ")");
             }
         }
 
-        // STEP 2: Se non ci sono task non-CP, termina
+        // STEP 3: Se non ci sono task non-CP, termina
         if (nonCpTasks.isEmpty()) {
             if (VERBOSE)
                 System.out.println("   (no non-CP tasks, level complete)");
             return;
         }
-
-        // STEP 3: Calcola threshold per ogni VM
-        Map<Integer, VMThreshold> vmThresholds = calculateThresholds(
-                level, cpCountPerVM, nonCpTasks.size());
 
         // STEP 4: Genera preference lists
         Map<Integer, List<Integer>> taskPreferences = new HashMap<>();
@@ -255,17 +242,14 @@ public class SMGT {
 
         Map<Integer, List<Integer>> vmPreferences = generateAllVMPreferences();
 
-        // STEP 5: Stable matching per task non-CP
-        stableMatchingForLevel(nonCpTasks, taskPreferences, vmPreferences,
-                vmThresholds, schedule);
+        // STEP 5: Stable matching per task non-CP (uno ad uno)
+        stableMatchingForLevel(nonCpTasks, taskPreferences, vmPreferences, schedule);
 
         if (VERBOSE) {
             System.out.println("   Level " + level + " completed:");
             for (int vmIdx = 0; vmIdx < vms.size(); vmIdx++) {
-                VMThreshold vmt = vmThresholds.get(vmIdx);
-                int assigned = vmt.assigned.size();
-                int capacity = assigned + vmt.remaining;
-                System.out.println("      VM" + vmIdx + ": " + assigned + "/" + capacity + " slots used");
+                VM vm = vms.get(vmIdx);
+                System.out.println("      VM" + vmIdx + ": " + vm.getWaitingListSize() + "/" + vm.getThreshold() + " slots used");
             }
         }
     }
@@ -273,22 +257,20 @@ public class SMGT {
     // ==================== THRESHOLD CALCULATION ====================
 
     /**
-     * Calcola threshold migliorato per ogni VM
+     * Calcola e setta il threshold per ogni VM
      * 
-     * Formula migliorata:
-     * threshold(VM_k, l) = floor((Σ_{v=0}^{l-1} n_v / Σp_i) × p_k) - cp_count_k
+     * Formula:
+     * threshold(VM_k, l) = ceil((Σ_{v=0}^{l} n_v / Σp_i) × p_k)
      * 
-     * Garantisce che la somma dei threshold ≥ numero di task non-CP
+     * Il threshold viene settato direttamente sulla VM e aumenta ad ogni livello.
+     * La VM è piena quando waitingList.size() >= threshold
      */
-    private Map<Integer, VMThreshold> calculateThresholds(
-            int level, Map<Integer, Integer> cpCountPerVM, int nonCpTaskCount) {
+    private void calculateAndSetThresholds(int level, int tasksInCurrentLevel) {
 
-        Map<Integer, VMThreshold> thresholds = new HashMap<>();
-
-        // Calcola somma task nei livelli precedenti (0..level-1)
-        double sumPreviousTasks = 0.0;
-        for (int l = 0; l < level; l++) {
-            sumPreviousTasks += levelTasks.getOrDefault(l, new ArrayList<>()).size();
+        // Calcola somma task nei livelli da 0 a level (incluso)
+        double sumTasksUpToLevel = 0.0;
+        for (int l = 0; l <= level; l++) {
+            sumTasksUpToLevel += levelTasks.getOrDefault(l, new ArrayList<>()).size();
         }
 
         // Calcola somma capacità VM
@@ -299,45 +281,34 @@ public class SMGT {
 
         if (sumCapacities == 0) {
             // Fallback: distribuzione uniforme
-            int baseThreshold = (int) Math.ceil((double) nonCpTaskCount / vms.size());
-            for (int i = 0; i < vms.size(); i++) {
-                thresholds.put(i, new VMThreshold(baseThreshold));
+            int baseThreshold = (int) Math.ceil((double) sumTasksUpToLevel / vms.size());
+            for (VM vm : vms) {
+                vm.setThreshold(baseThreshold);
             }
-            return thresholds;
+            return;
         }
 
-        // Calcola threshold per ogni VM
+        // Calcola e setta threshold per ogni VM
         int totalThreshold = 0;
         for (int vmIdx = 0; vmIdx < vms.size(); vmIdx++) {
-            double capacity = getVMProcessingCapacity(vms.get(vmIdx));
+            VM vm = vms.get(vmIdx);
+            double capacity = getVMProcessingCapacity(vm);
 
-            // BUG FIX: Handle level 0 specially
-            // For level 0 (entry tasks), there are no previous levels
-            // so we must distribute current level tasks proportionally
-            double rawThreshold;
-            if (level == 0) {
-                // Special case for level 0: distribute current level tasks
-                int tasksInCurrentLevel = levelTasks.getOrDefault(level, new ArrayList<>()).size();
-                rawThreshold = ((double) tasksInCurrentLevel / sumCapacities) * capacity;
-            } else {
-                // Standard formula for levels > 0: based on previous levels
-                // Formula from paper: threshold(VMk, l) = (Σ(v=0 to l-1) nv / Σpi) × pk
-                rawThreshold = (sumPreviousTasks / sumCapacities) * capacity;
-            }
-            
-            int threshold = (int) Math.floor(rawThreshold);
+            // Formula: threshold(VMk, l) = ceil((Σ(v=0 to l) nv / Σpi) × pk)
+            double rawThreshold = (sumTasksUpToLevel / sumCapacities) * capacity;
+            int threshold = (int) Math.ceil(rawThreshold);
 
-            // Sottrai task CP già assegnati
-            int cpCount = cpCountPerVM.getOrDefault(vmIdx, 0);
-            threshold = Math.max(0, threshold - cpCount);
-
-            thresholds.put(vmIdx, new VMThreshold(threshold));
+            vm.setThreshold(threshold);
             totalThreshold += threshold;
+            
+            if (VERBOSE) {
+                System.out.println("   VM" + vmIdx + " threshold: " + threshold + 
+                    " (waitingList: " + vm.getWaitingListSize() + ")");
+            }
         }
 
         // CORREZIONE: Se threshold totale insufficiente, distribuisci proporzionalmente
-        // BUG FIX: Distribute deficit proportionally by capacity (round-robin weighted)
-        int deficit = nonCpTaskCount - totalThreshold;
+        int deficit = (int) sumTasksUpToLevel - totalThreshold;
         if (deficit > 0) {
             if (VERBOSE) {
                 System.out.println("   Threshold deficit: " + deficit + " tasks");
@@ -359,7 +330,8 @@ public class SMGT {
             int roundRobinIdx = 0;
             while (remaining > 0) {
                 int vmIdx = vmCapacityFractions.get(roundRobinIdx % vmCapacityFractions.size()).getKey();
-                thresholds.get(vmIdx).remaining++;
+                VM vm = vms.get(vmIdx);
+                vm.setThreshold(vm.getThreshold() + 1);
                 remaining--;
                 roundRobinIdx++;
                 
@@ -368,20 +340,18 @@ public class SMGT {
                 }
             }
         }
-
-        return thresholds;
     }
 
     // ==================== STABLE MATCHING ====================
 
     /**
      * Stable matching per i task non-CP di un livello
+     * La VM è piena quando waitingList.size() >= threshold
      */
     private void stableMatchingForLevel(
             List<Integer> unassignedTasks,
             Map<Integer, List<Integer>> taskPreferences,
             Map<Integer, List<Integer>> vmPreferences,
-            Map<Integer, VMThreshold> vmThresholds,
             Map<Integer, List<Integer>> schedule) {
 
         Set<Integer> remaining = new HashSet<>(unassignedTasks);
@@ -395,23 +365,23 @@ public class SMGT {
 
             // Se non ha più preferenze, assegna alla migliore disponibile
             if (prefs == null || prefs.isEmpty()) {
-                int bestVM = findBestAvailableVM(taskId, vmThresholds);
-                assignTask(taskId, bestVM, vmThresholds, schedule);
+                int bestVM = findBestAvailableVM(taskId);
+                assignTask(taskId, bestVM, schedule);
                 continue;
             }
 
             // Prova prima VM in preferenza
             Integer vmIdx = prefs.get(0);
-            VMThreshold vmThreshold = vmThresholds.get(vmIdx);
+            VM vm = vms.get(vmIdx);
 
-            // Se VM ha spazio, assegna direttamente
-            if (vmThreshold.remaining > 0) {
-                assignTask(taskId, vmIdx, vmThresholds, schedule);
+            // Se VM ha spazio (waitingList.size() < threshold), assegna direttamente
+            if (!vm.isFull()) {
+                assignTask(taskId, vmIdx, schedule);
                 continue;
             }
 
-            // VM piena: cerca task da sostituire
-            Integer worstTask = findWorstTask(vmThreshold.assigned, vmIdx, vmPreferences);
+            // VM piena: cerca task da sostituire (solo tra non-CP tasks)
+            Integer worstTask = findWorstNonCPTask(vm.getWaitingList(), vmIdx, vmPreferences, taskPreferences);
 
             if (worstTask == null) {
                 // Nessun task da sostituire, prova prossima VM
@@ -426,11 +396,14 @@ public class SMGT {
 
             if (ftTask < ftWorst) {
                 // Sostituisci worst con task corrente
-                unassignTask(worstTask, vmIdx, vmThresholds, schedule);
-                assignTask(taskId, vmIdx, vmThresholds, schedule);
+                unassignTask(worstTask, vmIdx, schedule);
+                assignTask(taskId, vmIdx, schedule);
 
-                // Rimetti worst nella coda
-                taskPreferences.get(worstTask).remove((Integer) vmIdx);
+                // Rimetti worst nella coda (solo se ha preferenze - non-CP tasks)
+                List<Integer> worstPrefs = taskPreferences.get(worstTask);
+                if (worstPrefs != null) {
+                    worstPrefs.remove((Integer) vmIdx);
+                }
                 remaining.add(worstTask);
 
                 if (VERBOSE) {
@@ -448,42 +421,41 @@ public class SMGT {
     // ==================== UTILITY METHODS ====================
 
     /**
-     * Assegna un task a una VM
+     * Assegna un task a una VM (aggiorna schedule e waitingList)
      */
     private void assignTask(int taskId, int vmIdx,
-            Map<Integer, VMThreshold> vmThresholds,
             Map<Integer, List<Integer>> schedule) {
         schedule.get(vmIdx).add(taskId);
-        VMThreshold vmt = vmThresholds.get(vmIdx);
-        vmt.assigned.add(taskId);
-        vmt.remaining = Math.max(0, vmt.remaining - 1);
+        VM vm = vms.get(vmIdx);
+        vm.addToWaitingList(taskId);
 
         if (VERBOSE) {
-            System.out.println("   ✓ Assigned t" + taskId + " → VM" + vmIdx);
+            System.out.println("   ✓ Assigned t" + taskId + " → VM" + vmIdx +
+                " (waitingList: " + vm.getWaitingListSize() + "/" + vm.getThreshold() + ")");
         }
     }
 
     /**
-     * Rimuove assegnamento di un task
+     * Rimuove assegnamento di un task (rimuove da schedule e waitingList)
      */
     private void unassignTask(int taskId, int vmIdx,
-            Map<Integer, VMThreshold> vmThresholds,
             Map<Integer, List<Integer>> schedule) {
         schedule.get(vmIdx).remove((Integer) taskId);
-        VMThreshold vmt = vmThresholds.get(vmIdx);
-        vmt.assigned.remove((Integer) taskId);
-        vmt.remaining++;
+        VM vm = vms.get(vmIdx);
+        vm.getWaitingList().remove((Integer) taskId);
     }
 
     /**
      * Trova VM con capacità residua migliore per un task
+     * La VM ha spazio se waitingList.size() < threshold
      */
-    private int findBestAvailableVM(int taskId, Map<Integer, VMThreshold> vmThresholds) {
+    private int findBestAvailableVM(int taskId) {
         int bestVM = -1;
         double bestFT = Double.MAX_VALUE;
 
         for (int vmIdx = 0; vmIdx < vms.size(); vmIdx++) {
-            if (vmThresholds.get(vmIdx).remaining > 0) {
+            VM vm = vms.get(vmIdx);
+            if (!vm.isFull()) {
                 double ft = calculateFinishTime(taskId, vmIdx);
                 if (ft < bestFT) {
                     bestFT = ft;
@@ -501,6 +473,35 @@ public class SMGT {
         }
 
         return bestVM;
+    }
+
+    /**
+     * Trova task con finish time peggiore in una lista (solo tra non-CP tasks)
+     * CP tasks non possono essere sostituiti perché hanno priorità
+     */
+    private Integer findWorstNonCPTask(List<Integer> taskList, int vmIdx,
+            Map<Integer, List<Integer>> vmPreferences,
+            Map<Integer, List<Integer>> taskPreferences) {
+        if (taskList.isEmpty())
+            return null;
+
+        Integer worst = null;
+        double maxFT = -1;
+
+        for (Integer taskId : taskList) {
+            // Skip CP tasks - they cannot be replaced
+            if (!taskPreferences.containsKey(taskId)) {
+                continue;
+            }
+            
+            double ft = calculateFinishTime(taskId, vmIdx);
+            if (ft > maxFT) {
+                maxFT = ft;
+                worst = taskId;
+            }
+        }
+
+        return worst;
     }
 
     /**

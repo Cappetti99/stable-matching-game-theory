@@ -659,6 +659,10 @@ public class LOTD {
         return totalDuplicationCount;
     }
 
+    public Map<Integer, Double> getTaskAST() {
+        return taskAST;
+    }
+
     public Map<Integer, Double> getTaskAFT() {
         return taskAFT;
     }
