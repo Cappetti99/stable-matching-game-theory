@@ -30,8 +30,8 @@ public class ExperimentRunner {
     // ============================================================================
 
     // Numero di run multiple per stabilizzare i risultati
-    private static final int NUM_RUNS = 3; // Production: 10 runs per stabilizzare i risultati
-    private static final int WARMUP_RUNS = 0; // Production: 1 warmup per eliminare cold start effects
+    private static final int NUM_RUNS = 10; // Production: 10 runs per stabilizzare i risultati
+    private static final int WARMUP_RUNS = 1; // Production: 1 warmup per eliminare cold start effects
 
     // Workflow Pegasus XML reali dal paper (convertiti da XML a CSV)
     private static final String[] WORKFLOWS = { "cybershake", "epigenomics", "ligo", "montage" };
@@ -312,7 +312,7 @@ public class ExperimentRunner {
             // Option A: SAME SEED FOR ALL RUNS (current - for reproducibility)
             //   Use -1 as runIdx to keep same seed across all runs
             //   Good for: Testing if algorithm is deterministic
-            // int seedRunIdx = -1;
+            //int seedRunIdx = -1;
             //
             // Option B: DIFFERENT SEED PER RUN (for statistical analysis)
             //   Uncomment line below to vary seed per run

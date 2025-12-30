@@ -315,66 +315,75 @@ def plot_avu_vs_ccr(data, scale='small', output_filename='figure6_avu_vs_ccr.png
 # FUNZIONI DI PLOTTING - FIGURA AVU (Allocation VM Usage)
 # ============================================================================
 
-def plot_vf_vs_ccr(data, scale='large', output_filename='figure_vf_large.png'):
+def plot_vf_vs_workflow(
+    experiment='EXP1_LARGE',
+    vms_target=50,
+    ccr_target=1.0,
+    algorithm='SM-CPTD',
+    output_filename='figure_vf_vs_workflow_1000x50_ccr1.png'
+):
     """
-    Genera grafico VF (Violation Frequency) vs CCR per large workflows
+    Plot VF vs Workflow for fixed configuration:
+    ~1000 tasks × 50 VMs × CCR = 1.0
+    (Epigenomics has 997 tasks, others have 1000)
     """
-    fig, axes = plt.subplots(2, 2, figsize=(14, 7))
-    fig.suptitle(f'Comparison of VF in different {scale}-scale workflows', 
-                 fontsize=14, fontweight='bold')
-    
-    for idx, (ax, workflow) in enumerate(zip(axes.flat, WORKFLOW_ORDER)):
-        if workflow not in data:
-            continue
-            
-        workflow_results = data[workflow]
-        
-        # Estrai info su tasks e VMs
-        info = workflow_results.get('info', {})
-        tasks = info.get('tasks', '?')
-        vms = info.get('vms', '?')
-        
-        # Plot per ogni algoritmo
-        for algo_name, algo_data in workflow_results.items():
-            if algo_name == 'info':  # Salta il campo info
-                continue
-            
-            style = ALGO_STYLES.get(algo_name, {})
-            
-            ccr_vals = algo_data['CCR']
-            vf_vals = algo_data['VF']
-            
-            ax.plot(ccr_vals, vf_vals, 
-                   label=style.get('label', algo_name),
-                   color=style.get('color', None),
-                   marker=style.get('marker', 'o'),
-                   linewidth=style.get('linewidth', 1.5),
-                   markersize=style.get('markersize', 7),
-                   linestyle=style.get('linestyle', '-'),
-                   zorder=style.get('zorder', 3))
-        
-        # Configurazione assi
-        ax.set_xlabel('CCR', fontsize=11)
-        ax.set_ylabel('VF', fontsize=11)
-        ax.set_title(f'{WORKFLOW_TITLES[workflow]} ({tasks}×{vms})', fontsize=12, fontweight='bold')
-        
-        # Grid
-        ax.grid(True, linestyle='--', alpha=0.3, color='gray', linewidth=0.5)
-        
-        # Legenda
-        ax.legend(loc='best', fontsize=9, framealpha=0.9, 
-                 edgecolor='black', fancybox=False)
-        
-        # Limiti assi
-        ax.set_xlim(0.35, 2.05)
-        ax.set_xticks(CCR_VALUES)
-    
-    plt.tight_layout()
+
+    df = load_experiments_data()
+
+    # Filtra per experiment, vms e ccr (non per tasks, perché varia per workflow)
+    df_filt = df[
+        (df['experiment'] == experiment) &
+        (df['vms'] == vms_target) &
+        (df['ccr'] == ccr_target)
+    ].copy()
+
+    if df_filt.empty:
+        print("⚠️  No data found for the selected configuration.")
+        return
+
+    # Ordine workflow richiesto
+    workflows = WORKFLOW_ORDER
+    x_pos = np.arange(len(workflows))
+    x_labels = [WORKFLOW_TITLES[w] for w in workflows]
+
+    vf_vals = []
+
+    for wf in workflows:
+        row = df_filt[df_filt['workflow'] == wf]
+        if len(row) == 0:
+            vf_vals.append(np.nan)
+        else:
+            vf_vals.append(row['vf'].iloc[0])
+
+    style = ALGO_STYLES.get(algorithm, {})
+
+    # Plot
+    plt.figure(figsize=(7, 4))
+    plt.plot(
+        x_pos, vf_vals,
+        marker=style.get('marker', 'o'),
+        linewidth=2.5,
+        markersize=9,
+        linestyle='-',
+        color=style.get('color', '#1f77b4'),
+        label=style.get('label', algorithm)
+    )
+
+    plt.xticks(x_pos, x_labels)
+    plt.ylabel('VF', fontsize=11)
+    plt.title('VF across workflows (1000×50, CCR = 1.0)',
+              fontsize=12, fontweight='bold')
+
+    plt.grid(True, linestyle='--', alpha=0.3)
+    plt.legend(frameon=False)
+
     output_path = Path('../results/figures') / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    print(f"Saved: {output_path}")
     plt.close()
+
+    print(f"Saved: {output_path}")
 
 # ============================================================================
 # FUNZIONI DI PLOTTING - FIGURA 9, 10 (VM Effect - Experiment 2)
@@ -907,8 +916,7 @@ def generate_all_figures():
                     output_filename='figure8_avu_vs_ccr_large.png')
     
     print("  → Generating VF Comparison (Large)...")
-    plot_vf_vs_ccr(data_large, scale='large', 
-                   output_filename='figure_vf_large.png')
+    plot_vf_vs_workflow()
     
     print("  → Generating Metrics Comparison (SLR, AVU, VF - Large)...")
     plot_metrics_comparison(data_large, scale='large', 
