@@ -3,15 +3,6 @@ import java.io.*;
 
 /**
  * SMGT - Stable Matching Game Theory Algorithm
- * 
- * Versione migliorata con:
- * - Calcolo threshold più robusto
- * - Gestione deterministica dei task CP
- * - Logging dettagliato per debug
- * - Compatibilità completa con SMCPTD e DCP
- * 
- * @author Lorenzo Cappetti
- * @version 3.0 - Improved
  */
 public class SMGT {
     private List<VM> vms;
@@ -28,7 +19,7 @@ public class SMGT {
         this.taskLevels = new HashMap<>();
         this.levelTasks = new HashMap<>();
     }
-
+  
     // ==================== SETTERS E GETTERS ====================
 
     public void setTasks(List<task> tasks) {
@@ -54,53 +45,19 @@ public class SMGT {
                 .orElse(null);
     }
 
-    // ==================== DATA LOADING ====================
-
-    // Note: Load methods removed - use DataLoader directly instead
-
-    // ==================== TASK LEVELS CALCULATION ====================
-
     /**
      * Calcola i livelli del DAG usando BFS topologico
      */
     public void calculateTaskLevels() {
+        // Usa l'helper condiviso in Utility per evitare duplicazione logica
         taskLevels.clear();
-        levelTasks.clear();
+        levelTasks = Utility.organizeTasksByLevels(tasks);
 
-        Queue<Integer> queue = new LinkedList<>();
-        Map<Integer, Integer> inDegree = new HashMap<>();
-
-        // Inizializza in-degree
-        for (task t : tasks) {
-            int degree = (t.getPre() == null) ? 0 : t.getPre().size();
-            inDegree.put(t.getID(), degree);
-
-            if (degree == 0) {
-                queue.offer(t.getID());
-                taskLevels.put(t.getID(), 0);
-                levelTasks.computeIfAbsent(0, k -> new ArrayList<>()).add(t.getID());
-            }
-        }
-
-        // BFS per calcolare livelli
-        while (!queue.isEmpty()) {
-            int currentTaskId = queue.poll();
-            int currentLevel = taskLevels.get(currentTaskId);
-            task currentTask = getTaskById(currentTaskId);
-
-            if (currentTask == null || currentTask.getSucc() == null)
-                continue;
-
-            for (int succId : currentTask.getSucc()) {
-                int newDegree = inDegree.get(succId) - 1;
-                inDegree.put(succId, newDegree);
-
-                if (newDegree == 0) {
-                    int succLevel = currentLevel + 1;
-                    taskLevels.put(succId, succLevel);
-                    levelTasks.computeIfAbsent(succLevel, k -> new ArrayList<>()).add(succId);
-                    queue.offer(succId);
-                }
+        // Costruisce la mappa inversa taskId -> livello (mantiene compatibilità con il resto di SMGT)
+        for (Map.Entry<Integer, List<Integer>> entry : levelTasks.entrySet()) {
+            Integer level = entry.getKey();
+            for (Integer taskId : entry.getValue()) {
+                taskLevels.put(taskId, level);
             }
         }
 
@@ -127,7 +84,7 @@ public class SMGT {
     public Map<Integer, List<Integer>> runSMGT(Set<Integer> criticalPath) {
         if (VERBOSE) {
             System.out.println("\n" + "=".repeat(70));
-            System.out.println("🎮 SMGT ALGORITHM START");
+            System.out.println("SMGT ALGORITHM START");
             System.out.println("=".repeat(70));
             System.out.println("Critical Path: " + criticalPath);
             System.out.println("Total tasks: " + tasks.size());

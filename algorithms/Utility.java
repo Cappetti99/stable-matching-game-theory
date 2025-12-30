@@ -1,14 +1,21 @@
 import java.util.*;
 
 /**
- * Utility class per operazioni comuni su task e VM
+ * Utility class providing common operations on tasks and virtual machines.
  */
 public class Utility {
 
-    /** HA SENSO METTERLI?
-     * Trova tutti i task di uscita (senza successori).
-     * Sono ammessi più exit task.
+    /**
+     * Finds all exit tasks (tasks with no successors).
+     * <p>
+     * A workflow may contain multiple exit tasks.
+     *
+     * @param tasks the list of tasks to analyze
+     * @return a list of exit tasks
+     * @throws IllegalArgumentException if the task list is null or empty
+     * @throws NoSuchElementException if no exit task is found
      */
+
     public static List<task> findExitTasks(List<task> tasks) {
         if (tasks == null || tasks.isEmpty()) {
             throw new IllegalArgumentException("tasks must not be null or empty");
@@ -29,72 +36,99 @@ public class Utility {
     }
 
     /**
-     * Organizza i task in livelli topologici usando BFS
-     * 
-     * Algoritmo ottimizzato con complessità O(V+E) invece di O(V²):
-     * - Usa taskMap per lookup O(1)
-     * - Attraversa il grafo usando la lista dei successori (forward traversal)
-     * 
-     * @param tasks lista dei task
-     * @return mappa livello -> lista di task ID
+     * Organizes tasks into topological levels using BFS.
+     *
+     * Optimized algorithm with O(V + E) complexity instead of O(V²):
+     * - Uses taskMap for O(1) lookup
+     * - Traverses the graph using the successors list (forward traversal)
+     *
+     * @param tasks list of tasks
+     * @return a map level -> list of task IDs
      */
+
     public static Map<Integer, List<Integer>> organizeTasksByLevels(List<task> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
+            throw new IllegalArgumentException("tasks must not be null or empty");
+        }
+
         Map<Integer, List<Integer>> levelMap = new HashMap<>();
-        
-        // Prima passa: calcola i livelli usando un algoritmo topologico
+
+        Map<Integer, List<Integer>> levelMap = new HashMap<>();
+
+        // First pass: compute levels using a topological algorithm
         Map<Integer, Integer> taskToLevel = new HashMap<>();
         Map<Integer, task> taskMap = new HashMap<>();
-        
-        // Crea mappa per accesso rapido
+
+        // Build a map for fast task lookup
         for (task t : tasks) {
+            if (t == null) {
+                continue;
+            }
             taskMap.put(t.getID(), t);
         }
-        
-        // Trova i task senza predecessori (entry tasks) - livello 0
+
+        // Find tasks with no predecessors (entry tasks) - level 0
         Queue<Integer> queue = new LinkedList<>();
         Map<Integer, Integer> inDegree = new HashMap<>();
-        
-        // Inizializza in-degree per tutti i task
+
+        // Initialize in-degree for all tasks (null-safe access)
         for (task t : tasks) {
-            inDegree.put(t.getID(), t.getPre().size());
-            if (t.getPre().isEmpty()) {
+            if (t == null) {
+                continue;
+            }
+            List<Integer> predecessors =
+                t.getPre() == null ? Collections.emptyList() : t.getPre();
+
+            inDegree.put(t.getID(), predecessors.size());
+
+            if (predecessors.isEmpty()) {
                 queue.offer(t.getID());
                 taskToLevel.put(t.getID(), 0);
             }
         }
-        
-        // BFS per calcolare i livelli
+
+        // BFS to compute task levels
         while (!queue.isEmpty()) {
             int currentId = queue.poll();
             int currentLevel = taskToLevel.get(currentId);
             task current = taskMap.get(currentId);
-            
-            if (current == null) continue;
-            
-            // Processa tutti i successori
-            for (int succId : current.getSucc()) {
-                // Il livello del successore è almeno currentLevel + 1
+
+            if (current == null) {
+                continue;
+            }
+
+            List<Integer> successors =
+                current.getSucc() == null ? Collections.emptyList() : current.getSucc();
+
+            // Process all successors
+            for (int succId : successors) {
+                // The successor level must be at least currentLevel + 1
                 int newLevel = currentLevel + 1;
-                taskToLevel.put(succId, Math.max(taskToLevel.getOrDefault(succId, 0), newLevel));
-                
-                // Decrementa in-degree
-                inDegree.put(succId, inDegree.get(succId) - 1);
-                
-                // Se tutti i predecessori sono stati processati, aggiungi alla coda
+                taskToLevel.put(
+                    succId,
+                    Math.max(taskToLevel.getOrDefault(succId, 0), newLevel)
+                );
+
+                // Decrease in-degree
+                inDegree.put(succId, inDegree.getOrDefault(succId, 0) - 1);
+
+                // If all predecessors have been processed, add to the queue
                 if (inDegree.get(succId) == 0) {
                     queue.offer(succId);
                 }
             }
         }
-        
-        // Seconda passa: costruisci la mappa level -> [taskIds]
+
+        // Second pass: build the map level -> [taskIds]
         for (Map.Entry<Integer, Integer> entry : taskToLevel.entrySet()) {
             int taskId = entry.getKey();
             int level = entry.getValue();
-            
-            levelMap.computeIfAbsent(level, k -> new ArrayList<>()).add(taskId);
+
+            levelMap
+                .computeIfAbsent(level, k -> new ArrayList<>())
+                .add(taskId);
         }
-        
+
         return levelMap;
     }
 
