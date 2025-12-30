@@ -20,7 +20,7 @@ public class Metrics {
         }
         
         // VALIDATION: Check VM capability
-        double pk = vmK.getCapability(capabilityType);
+        double pk = vmK.getProcessingCapacity();
         if (pk <= 0) {
             return Double.POSITIVE_INFINITY;
         }
@@ -37,7 +37,7 @@ public class Metrics {
      * representing the theoretical lower bound (critical path on fastest VM).
      * 
      * @param makespan The actual schedule makespan
-     * @param criticalPathTasks Tasks on the critical path (not all tasks)
+     * @param criticalPathTasks Tasks on the critical path 
      * @param vms Available VMs
      */
     public static double SLR(double makespan, List<task> criticalPathTasks, Map<Integer, VM> vms) {
@@ -46,8 +46,18 @@ public class Metrics {
             double minET = Double.POSITIVE_INFINITY;
             for (VM vm : vms.values()) minET = Math.min(minET, ET(t, vm, "processingCapacity"));
             if (minET != Double.POSITIVE_INFINITY) sumMinET += minET;
+            else {
+                // If any critical path task cannot be executed, SLR return error 
+                throw new IllegalArgumentException(
+                    "Cannot compute SLR: Task " + t.getID() + " cannot be executed on any VM.");
+
+            }
         }
-        return (sumMinET > 0) ? makespan / sumMinET : Double.POSITIVE_INFINITY;
+        if(sumMinET > 0) {
+            return makespan / sumMinET;
+        } else {
+            throw new IllegalArgumentException("Cannot compute SLR: Sum of minimum ETs is zero.");
+        }
     }
 
     /**
@@ -81,69 +91,92 @@ public class Metrics {
 
     /**
      * Variance of Fairness.
-     * 
-     * OPTIMIZED VERSION - O(n*m*k) → O(n*m)
-     * Pre-builds reverse lookup map for O(1) task-to-VM assignment lookup.
      */
-    public static double VF(List<task> tasks, Map<Integer, VM> vms,
+    
+    public static double VF(List<task> tasks,
+                            Map<Integer, VM> vms,
                             Map<Integer, List<task>> vmTaskAssignments,
-                            Map<Integer, Double> taskFinishTimes,
                             String capabilityName) {
 
-        // OPTIMIZATION: Pre-build reverse lookup map: task → VM
-        // OLD: For each task, search through all VM assignments O(n*m*k)
-        // NEW: Build map once O(m*k), then lookup in O(1) per task
+        // --------- NULL VALIDATION ---------
+        if (tasks == null || vms == null || vmTaskAssignments == null) {
+            throw new IllegalArgumentException("tasks, vms and vmTaskAssignments must not be null");
+        }
+
+        // Build map once O(m*k), then lookup in O(1) per task
         Map<Integer, VM> taskToVM = new HashMap<>();
         for (Map.Entry<Integer, List<task>> entry : vmTaskAssignments.entrySet()) {
             VM vm = vms.get(entry.getKey());
-            if (vm != null) {
-                for (task t : entry.getValue()) {
+            if (vm == null || entry.getValue() == null) continue;
+
+            for (task t : entry.getValue()) {
+                if (t != null) {
                     taskToVM.put(t.getID(), vm);
                 }
             }
         }
 
         List<Double> satisfactions = new ArrayList<>();
+
         for (task t : tasks) {
-            // O(1) lookup instead of O(m*k) search
+            if (t == null) continue;
+
+            // O(1) lookup
             VM assignedVM = taskToVM.get(t.getID());
             if (assignedVM == null) continue;
 
-            // VALIDATION: Check for zero/negative VM capacity
-            double vmCapability = assignedVM.getCapability(capabilityName);
-            if (vmCapability <= 0) {
-                System.err.println("⚠️  Warning: VM " + assignedVM.getID() + 
-                                   " has invalid capacity: " + vmCapability);
+            // --------- VM CAPABILITY VALIDATION ---------
+            double vmCapability = assignedVM.getProcessingCapacity();
+            if (!Double.isFinite(vmCapability) || vmCapability <= 0) {
+                System.err.println("⚠️  Warning: VM " + assignedVM.getID()
+                        + " has invalid capacity: " + vmCapability);
                 continue;
             }
 
+            // --------- ACTUAL EXECUTION TIME ---------
             double actualET = ET(t, assignedVM, capabilityName);
-            
-            // VALIDATION: Check for invalid actualET
-            if (actualET == Double.POSITIVE_INFINITY || actualET <= 0) {
-                System.err.println("⚠️  Warning: Invalid actualET for task " + t.getID() + 
-                                   " on VM " + assignedVM.getID() + ": " + actualET);
+            if (!Double.isFinite(actualET) || actualET <= 0) {
+                System.err.println("⚠️  Warning: Invalid actualET for task " + t.getID()
+                        + " on VM " + assignedVM.getID() + ": " + actualET);
                 continue;
             }
 
+            // --------- FASTEST POSSIBLE EXECUTION TIME ---------
             double fastestET = Double.POSITIVE_INFINITY;
             for (VM vm : vms.values()) {
+                if (vm == null) continue;
+
                 double et = ET(t, vm, capabilityName);
-                if (et != Double.POSITIVE_INFINITY && et > 0) {
+                if (Double.isFinite(et) && et > 0) {
                     fastestET = Math.min(fastestET, et);
                 }
             }
 
-            if (fastestET > 0 && fastestET != Double.POSITIVE_INFINITY)
-                satisfactions.add(actualET / fastestET);
+            if (Double.isFinite(fastestET) && fastestET > 0) {
+                double satisfaction = actualET / fastestET;
+                if (Double.isFinite(satisfaction)) {
+                    satisfactions.add(satisfaction);
+                }
+            }
         }
 
+        // --------- FINAL FAIRNESS VARIANCE ---------
         if (satisfactions.isEmpty()) return 0.0;
 
-        double avg = satisfactions.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        double avg = satisfactions.stream()
+                                .mapToDouble(Double::doubleValue)
+                                .average()
+                                .orElse(0.0);
+
         double sumSq = 0.0;
-        for (double s : satisfactions) sumSq += (avg - s) * (avg - s);
+        for (double s : satisfactions) {
+            double d = s - avg;
+            sumSq += d * d;
+        }
+
+        // population variance
         return sumSq / satisfactions.size();
     }
+
 
 }

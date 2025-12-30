@@ -30,8 +30,8 @@ public class ExperimentRunner {
     // ============================================================================
 
     // Numero di run multiple per stabilizzare i risultati
-    private static final int NUM_RUNS = 10; // Production: 10 runs per stabilizzare i risultati
-    private static final int WARMUP_RUNS = 1; // Production: 1 warmup per eliminare cold start effects
+    private static final int NUM_RUNS = 3; // Production: 10 runs per stabilizzare i risultati
+    private static final int WARMUP_RUNS = 0; // Production: 1 warmup per eliminare cold start effects
 
     // Workflow Pegasus XML reali dal paper (convertiti da XML a CSV)
     private static final String[] WORKFLOWS = { "cybershake", "epigenomics", "ligo", "montage" };
@@ -936,7 +936,7 @@ public class ExperimentRunner {
         }
 
         // Calcola VF usando Metrics
-        double vf = Metrics.VF(smgt.getTasks(), vmMap, taskAssignments, null, "processingCapacity");
+        double vf = Metrics.VF(smgt.getTasks(), vmMap, taskAssignments, "processingCapacity");
         
         return Double.isNaN(vf) || Double.isInfinite(vf) ? Double.NaN : vf;
     }

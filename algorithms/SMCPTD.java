@@ -201,6 +201,29 @@ public class SMCPTD {
             System.out.println("=".repeat(70));
             printFinalResults();
 
+            // ============================================================
+            // GANTT CHART GENERATION (if enabled)
+            // ============================================================
+            if (generateGanttChart) {
+                System.out.println("\n📊 Generating Gantt chart JSON...");
+                GanttChartGenerator.generateGanttChart(
+                    ganttChartWorkflow,
+                    smgt.getTasks().size(),
+                    smgt.getVMs().size(),
+                    ganttChartCCR,
+                    makespan,
+                    finalSchedule,
+                    lotd.getTaskAST(),
+                    lotd.getTaskAFT(),
+                    criticalPath,
+                    lotd.getDuplicatedTasks(),
+                    lotd.getDuplicateAST(),
+                    lotd.getDuplicateAFT(),
+                    smgt.getTasks(),
+                    smgt.getVMs()
+                );
+            }
+
             return finalSchedule;
 
         } catch (Exception e) {

@@ -22,7 +22,7 @@ public class GanttChartGenerator {
     private static final String OUTPUT_DIR = "../results/gantt_charts";
 
     /**
-     * Generate Gantt chart JSON file
+     * Generate a JSON file containing Gantt chart data
      * 
      * @param workflow Workflow name (e.g., "cybershake")
      * @param numTasks Number of tasks
@@ -34,6 +34,8 @@ public class GanttChartGenerator {
      * @param taskAFT Task Actual Finish Times
      * @param criticalPath Set of critical path task IDs
      * @param duplicatedTasks Map of duplicated tasks per VM
+     * @param duplicateAST Per-VM AST for duplicates (key: "taskId_vmId")
+     * @param duplicateAFT Per-VM AFT for duplicates (key: "taskId_vmId")
      * @param tasks List of all tasks
      * @param vms List of all VMs
      */
@@ -48,6 +50,8 @@ public class GanttChartGenerator {
             Map<Integer, Double> taskAFT,
             Set<Integer> criticalPath,
             Map<Integer, Set<Integer>> duplicatedTasks,
+            Map<String, Double> duplicateAST,
+            Map<String, Double> duplicateAFT,
             List<task> tasks,
             List<VM> vms) {
 
@@ -55,7 +59,7 @@ public class GanttChartGenerator {
 
         // Generate filename with timestamp
         String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-        String filename = String.format("%s_%d_tasks_%d_vms_ccr%.1f_%s.json",
+        String filename = String.format(Locale.US, "%s_%d_tasks_%d_vms_ccr%.1f_%s.json",
                 workflow, numTasks, numVMs, ccr, timestamp);
         File outputFile = new File(OUTPUT_DIR, filename);
 
@@ -85,7 +89,7 @@ public class GanttChartGenerator {
 
             // Schedule section (Gantt chart data)
             writer.println("  \"schedule\": [");
-            writeScheduleSection(writer, vmSchedule, taskAST, taskAFT, tasks, duplicatedTasks, criticalPath);
+            writeScheduleSection(writer, vmSchedule, taskAST, taskAFT, tasks, duplicatedTasks, duplicateAST, duplicateAFT, criticalPath);
             writer.println("  ],");
 
             // Critical path section
@@ -117,7 +121,7 @@ public class GanttChartGenerator {
         for (VM vm : vms) {
             writer.print("    {");
             writer.printf("\"id\": %d, ", vm.getID());
-            writer.printf(Locale.US, "\"processingCapacity\": %.4f", vm.getCapability("processingCapacity"));
+            writer.printf(Locale.US, "\"processingCapacity\": %.4f", vm.getProcessingCapacity());
             writer.print("}");
             count++;
             if (count < vms.size()) {
@@ -221,6 +225,8 @@ public class GanttChartGenerator {
             Map<Integer, Double> taskAFT,
             List<task> tasks,
             Map<Integer, Set<Integer>> duplicatedTasks,
+            Map<String, Double> duplicateAST,
+            Map<String, Double> duplicateAFT,
             Set<Integer> criticalPath) {
 
         if (vmSchedule == null || vmSchedule.isEmpty()) return;
@@ -245,25 +251,36 @@ public class GanttChartGenerator {
             writer.printf("      \"vmId\": %d,%n", vmId);
             writer.println("      \"tasks\": [");
 
-            // Sort tasks by AST
+            // Sort tasks by AST (use duplicate-specific timing if available)
+            final Integer finalVmId = vmId;
             List<Integer> sortedTaskIds = new ArrayList<>(taskIds);
             sortedTaskIds.sort((a, b) -> {
-                double astA = taskAST != null ? taskAST.getOrDefault(a, 0.0) : 0.0;
-                double astB = taskAST != null ? taskAST.getOrDefault(b, 0.0) : 0.0;
+                double astA = getEffectiveAST(a, finalVmId, taskAST, duplicateAST, duplicatedTasks);
+                double astB = getEffectiveAST(b, finalVmId, taskAST, duplicateAST, duplicatedTasks);
                 return Double.compare(astA, astB);
             });
 
             int taskCount = 0;
             for (Integer taskId : sortedTaskIds) {
-                double ast = taskAST != null ? taskAST.getOrDefault(taskId, 0.0) : 0.0;
-                double aft = taskAFT != null ? taskAFT.getOrDefault(taskId, 0.0) : 0.0;
+                boolean isDuplicate = duplicatedTasks != null && 
+                                     duplicatedTasks.get(vmId) != null && 
+                                     duplicatedTasks.get(vmId).contains(taskId);
+
+                // Use duplicate-specific timing if this is a duplicate
+                double ast, aft;
+                if (isDuplicate && duplicateAST != null && duplicateAFT != null) {
+                    String key = taskId + "_" + vmId;
+                    ast = duplicateAST.getOrDefault(key, taskAST != null ? taskAST.getOrDefault(taskId, 0.0) : 0.0);
+                    aft = duplicateAFT.getOrDefault(key, taskAFT != null ? taskAFT.getOrDefault(taskId, 0.0) : 0.0);
+                } else {
+                    ast = taskAST != null ? taskAST.getOrDefault(taskId, 0.0) : 0.0;
+                    aft = taskAFT != null ? taskAFT.getOrDefault(taskId, 0.0) : 0.0;
+                }
+
                 task t = taskMap.get(taskId);
                 double size = t != null ? t.getSize() : 0.0;
                 
                 boolean isCritical = criticalPath != null && criticalPath.contains(taskId);
-                boolean isDuplicate = duplicatedTasks != null && 
-                                     duplicatedTasks.get(vmId) != null && 
-                                     duplicatedTasks.get(vmId).contains(taskId);
 
                 writer.print("        {");
                 writer.printf("\"taskId\": %d, ", taskId);
@@ -293,6 +310,31 @@ public class GanttChartGenerator {
                 writer.println();
             }
         }
+    }
+
+    /**
+     * Get effective AST for a task on a specific VM (considering duplicates)
+     */
+    private static double getEffectiveAST(
+            int taskId, 
+            int vmId, 
+            Map<Integer, Double> taskAST,
+            Map<String, Double> duplicateAST,
+            Map<Integer, Set<Integer>> duplicatedTasks) {
+        
+        boolean isDuplicate = duplicatedTasks != null && 
+                             duplicatedTasks.get(vmId) != null && 
+                             duplicatedTasks.get(vmId).contains(taskId);
+        
+        if (isDuplicate && duplicateAST != null) {
+            String key = taskId + "_" + vmId;
+            Double dupAST = duplicateAST.get(key);
+            if (dupAST != null) {
+                return dupAST;
+            }
+        }
+        
+        return taskAST != null ? taskAST.getOrDefault(taskId, 0.0) : 0.0;
     }
 
     /**

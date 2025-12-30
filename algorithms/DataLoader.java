@@ -69,8 +69,7 @@ public class DataLoader {
                     double capacity = 10.0 + rand.nextDouble() * 10.0;
 
                     VM vm = new VM(vmId);
-                    vm.addCapability("processing", capacity);
-                    vm.addCapability("processingCapacity", capacity);
+                    vm.setProcessingCapacity(capacity);
                     vms.add(vm);
                 }
             }

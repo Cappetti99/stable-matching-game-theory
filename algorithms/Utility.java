@@ -53,8 +53,6 @@ public class Utility {
 
         Map<Integer, List<Integer>> levelMap = new HashMap<>();
 
-        Map<Integer, List<Integer>> levelMap = new HashMap<>();
-
         // First pass: compute levels using a topological algorithm
         Map<Integer, Integer> taskToLevel = new HashMap<>();
         Map<Integer, task> taskMap = new HashMap<>();

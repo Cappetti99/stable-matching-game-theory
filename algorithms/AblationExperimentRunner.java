@@ -561,7 +561,7 @@ public class AblationExperimentRunner {
             taskAssignments.put(vmId, tasks);
         }
         
-        double vf = Metrics.VF(smgt.getTasks(), vmMap, taskAssignments, null, "processingCapacity");
+        double vf = Metrics.VF(smgt.getTasks(), vmMap, taskAssignments, "processingCapacity");
         return Double.isNaN(vf) || Double.isInfinite(vf) ? Double.NaN : vf;
     }
     

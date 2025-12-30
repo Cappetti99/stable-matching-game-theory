@@ -38,6 +38,10 @@ public class LOTD {
     private Map<Integer, Set<Integer>> duplicatedTasks; // VM -> Set of duplicated task IDs
     private int totalDuplicationCount; // Counter for total duplications
 
+    // Per-VM timing for duplicated tasks (key: "taskId_vmId")
+    private Map<String, Double> duplicateAST; // Duplicate Actual Start Time per VM
+    private Map<String, Double> duplicateAFT; // Duplicate Actual Finish Time per VM
+
     private static final boolean VERBOSE = false;
 
     /**
@@ -54,6 +58,8 @@ public class LOTD {
         this.taskToVM = new HashMap<>();
         this.duplicatedTasks = new HashMap<>();
         this.totalDuplicationCount = 0;
+        this.duplicateAST = new HashMap<>();
+        this.duplicateAFT = new HashMap<>();
 
         for (VM vm : vms) {
             duplicatedTasks.put(vm.getID(), new HashSet<>());
@@ -258,8 +264,9 @@ public class LOTD {
             }
 
             // Check if duplication is beneficial
-            if (shouldDuplicate(entryTaskId, succVM, succId)) {
-                performDuplication(entryTaskId, succVM);
+            double[] duplicateTiming = shouldDuplicate(entryTaskId, succVM, succId);
+            if (duplicateTiming != null) {
+                performDuplication(entryTaskId, succVM, duplicateTiming[0], duplicateTiming[1]);
 
                 if (VERBOSE) {
                     System.out.println("✓ Duplicated t" + entryTaskId + " on VM" + succVM);
@@ -278,13 +285,15 @@ public class LOTD {
      * Conditions:
      * 1. VM must have time to execute duplicate before successor starts
      * 2. Duplicate must finish before data arrives from original
+     * 
+     * @return double[] {AST, AFT} if beneficial, null otherwise
      */
-    private boolean shouldDuplicate(int entryTaskId, int targetVM, int succId) {
+    private double[] shouldDuplicate(int entryTaskId, int targetVM, int succId) {
         task entryTask = getTaskById(entryTaskId);
         Integer originalVM = taskToVM.get(entryTaskId);
 
         if (entryTask == null || originalVM == null)
-            return false;
+            return null;
 
         // 1. Calculate execution time for duplicate
         double duplicateET = calculateExecutionTime(entryTask, targetVM);
@@ -330,7 +339,7 @@ public class LOTD {
                 System.out.printf("  No idle slot found (earliest=%.2f, deadline=%.2f, duration=%.2f)\n",
                         earliestStart, succAST, duplicateET);
             }
-            return false;
+            return null;
         }
 
         double duplicateFinish = idleSlotStart + duplicateET;
@@ -353,7 +362,10 @@ public class LOTD {
             System.out.printf("  hasTimeSlot=%b, isBeneficial=%b\n", hasTimeSlot, isBeneficial);
         }
 
-        return hasTimeSlot && isBeneficial;
+        if (hasTimeSlot && isBeneficial) {
+            return new double[] { idleSlotStart, duplicateFinish };
+        }
+        return null;
     }
 
     /**
@@ -421,11 +433,21 @@ public class LOTD {
 
     /**
      * Perform the actual duplication
+     * 
+     * @param taskId Task to duplicate
+     * @param targetVM VM to duplicate onto
+     * @param duplicateAST Actual Start Time for this duplicate on targetVM
+     * @param duplicateAFT Actual Finish Time for this duplicate on targetVM
      */
-    private void performDuplication(int taskId, int targetVM) {
+    private void performDuplication(int taskId, int targetVM, double dupAST, double dupAFT) {
         // Mark as duplicated (this affects future timing calculations)
         duplicatedTasks.get(targetVM).add(taskId);
         totalDuplicationCount++; // Increment counter
+
+        // Store per-VM timing for this duplicate
+        String key = taskId + "_" + targetVM;
+        this.duplicateAST.put(key, dupAST);
+        this.duplicateAFT.put(key, dupAFT);
 
         // Add duplicate to vmSchedule (real task, not phantom)
         // This ensures AVU and other metrics account for duplicate execution time
@@ -524,9 +546,7 @@ public class LOTD {
         if (vm == null)
             return t.getSize();
 
-        double capacity = vm.getCapability("processingCapacity");
-        if (capacity <= 0)
-            capacity = vm.getCapability("processing");
+        double capacity = vm.getProcessingCapacity();
         if (capacity <= 0)
             return t.getSize();
 
@@ -665,5 +685,21 @@ public class LOTD {
 
     public Map<Integer, Double> getTaskAFT() {
         return taskAFT;
+    }
+
+    /**
+     * Get per-VM AST for duplicated tasks
+     * Key format: "taskId_vmId"
+     */
+    public Map<String, Double> getDuplicateAST() {
+        return duplicateAST;
+    }
+
+    /**
+     * Get per-VM AFT for duplicated tasks
+     * Key format: "taskId_vmId"
+     */
+    public Map<String, Double> getDuplicateAFT() {
+        return duplicateAFT;
     }
 }

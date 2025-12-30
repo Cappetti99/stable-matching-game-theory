@@ -502,22 +502,9 @@ public class SMGT {
      * Ottiene capacità di processing di una VM
      */
     private double getVMProcessingCapacity(VM vm) {
-        // Prova "processingCapacity" prima
-        double cap = vm.getCapability("processingCapacity");
+        double cap = vm.getProcessingCapacity();
         if (cap > 0)
             return cap;
-
-        // Fallback a "processing"
-        cap = vm.getCapability("processing");
-        if (cap > 0)
-            return cap;
-
-        // Ultimo fallback: prima capability disponibile
-        Map<String, Double> caps = vm.getProcessingCapabilities();
-        if (!caps.isEmpty()) {
-            return caps.values().iterator().next();
-        }
-
         return 1.0; // Default
     }
 
