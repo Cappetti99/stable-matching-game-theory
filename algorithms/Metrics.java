@@ -170,7 +170,7 @@ public class Metrics {
 
         double sumSq = 0.0;
         for (double s : satisfactions) {
-            double d = s - avg;
+            double d = avg - s;
             sumSq += d * d;
         }
 

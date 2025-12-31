@@ -797,8 +797,8 @@ def plot_metrics_comparison(data, scale='large', output_filename='figure_metrics
 # FUNZIONI DI PLOTTING - FIGURA 12 (Ablation Study)
 # ============================================================================
 
-def plot_ablation_figure12(output_filename='figure12_ablation_study.png'):
-    """Genera Figure 12: SLR, AVU, VF con workflow sull'asse X e algoritmi come linee."""
+def plot_ablation_single_metric(metric, metric_title, output_filename):
+    """Genera un singolo grafico per una metrica dell'ablation study."""
     df = load_ablation_data()
     if df is None or df.empty:
         print("⚠️  No ablation data found. Run AblationExperimentRunner first.")
@@ -806,53 +806,65 @@ def plot_ablation_figure12(output_filename='figure12_ablation_study.png'):
 
     workflows = WORKFLOW_ORDER
     algorithms = ['SM_CPTD', 'DCP_SMGT', 'SMGT_LOTD', 'SMGT_ONLY']
-    metrics = ['slr', 'avu', 'vf']
-    metric_titles = ['SLR', 'AVU', 'VF']
 
-    fig, axes = plt.subplots(1, 3, figsize=(14, 7))
-    fig.suptitle('1000×50×1', fontsize=13, fontweight='bold')
+    fig, ax = plt.subplots(figsize=(10, 6))
+    fig.suptitle(f'Ablation Study - {metric_title} (1000×50, CCR=1.0)', fontsize=13, fontweight='bold')
 
     x_pos = np.arange(len(workflows))
     x_labels = [WORKFLOW_TITLES[w] for w in workflows]
 
-    for ax, metric, metric_title in zip(axes, metrics, metric_titles):
-        for algo in algorithms:
-            algo_df = df[df['algorithm'] == algo]
-            y_vals = []
-            for wf in workflows:
-                row = algo_df[algo_df['workflow'] == wf]
-                if len(row) == 0:
-                    y_vals.append(np.nan)
-                else:
-                    val = row[metric].iloc[0]
-                    y_vals.append(val)
+    for algo in algorithms:
+        algo_df = df[df['algorithm'] == algo]
+        y_vals = []
+        for wf in workflows:
+            row = algo_df[algo_df['workflow'] == wf]
+            if len(row) == 0:
+                y_vals.append(np.nan)
+            else:
+                val = row[metric].iloc[0]
+                # Convert AVU to percentage
+                if metric == 'avu':
+                    val = val * 100
+                y_vals.append(val)
 
-            style = ABLATION_STYLES.get(algo, {})
-            ax.plot(x_pos, y_vals,
-                    label=style.get('label', algo),
-                    color=style.get('color'),
-                    marker=style.get('marker', 'o'),
-                    linewidth=style.get('linewidth', 2),
-                    markersize=style.get('markersize', 7),
-                    linestyle=style.get('linestyle', '-'),
-                    zorder=style.get('zorder', 3))
+        style = ABLATION_STYLES.get(algo, {})
+        ax.plot(x_pos, y_vals,
+                label=style.get('label', algo),
+                color=style.get('color'),
+                marker=style.get('marker', 'o'),
+                linewidth=style.get('linewidth', 2),
+                markersize=style.get('markersize', 9),
+                linestyle=style.get('linestyle', '-'),
+                zorder=style.get('zorder', 3))
 
-        ax.set_xticks(x_pos)
-        ax.set_xticklabels(x_labels, rotation=0)
-        ax.set_ylabel(metric_title)
-        ax.grid(True, linestyle='--', alpha=0.3, color='gray', linewidth=0.5)
-        ax.set_title(metric_title, fontsize=12, fontweight='bold')
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(x_labels, rotation=0, fontsize=11)
+    
+    # Y-axis label
+    if metric == 'avu':
+        ax.set_ylabel('AVU (%)', fontsize=12)
+    else:
+        ax.set_ylabel(metric_title, fontsize=12)
+    
+    ax.set_xlabel('Workflow', fontsize=12)
+    ax.grid(True, linestyle='--', alpha=0.3, color='gray', linewidth=0.5)
+    ax.legend(loc='best', fontsize=10, framealpha=0.9, edgecolor='black', fancybox=False)
 
-    # Legenda centrata in basso
-    handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc='lower center', ncol=4, frameon=False, fontsize=9)
-    plt.tight_layout(rect=(0, 0.12, 1, 1))
+    plt.tight_layout()
 
     output_path = Path('../results/figures') / output_filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     print(f"Saved: {output_path}")
     plt.close()
+
+
+def plot_ablation_figure12(output_filename='figure12_ablation_study.png'):
+    """Genera 3 file separati per l'ablation study: SLR, AVU, VF."""
+    # Generate separate files for each metric
+    plot_ablation_single_metric('slr', 'SLR', 'figure12_ablation_slr.png')
+    plot_ablation_single_metric('avu', 'AVU', 'figure12_ablation_avu.png')
+    plot_ablation_single_metric('vf', 'VF', 'figure12_ablation_vf.png')
 
 
 def generate_ablation_figures():
@@ -866,7 +878,9 @@ def generate_ablation_figures():
     print("✅ Ablation study figures complete!")
     print("="*70)
     print("\nFile generati in results/figures/:")
-    print("  - figure12_ablation_study.png")
+    print("  - figure12_ablation_slr.png")
+    print("  - figure12_ablation_avu.png")
+    print("  - figure12_ablation_vf.png")
 
 # ============================================================================
 # FUNZIONE PRINCIPALE
@@ -953,21 +967,6 @@ def generate_all_figures():
     print("  - figure_vf_vs_vms.png")
     print("  - figure_vf_large.png")
     print("  - figure_metrics_comparison_large.png")
-
-def generate_ablation_figures():
-    """Genera Figure 12 (line plot) come nel paper."""
-
-    print("\n" + "="*70)
-    print("GENERAZIONE FIGURE 12: Ablation Study")
-    print("="*70)
-
-    plot_ablation_figure12(output_filename='figure12_ablation_study.png')
-
-    print("\n" + "="*70)
-    print("✅ Ablation study figures complete!")
-    print("="*70)
-    print("\nFile generati in results/figures/:")
-    print("  - figure12_ablation_study.png")
 
 # ============================================================================
 # FUNZIONI AGGIUNTIVE - STATISTICHE E VERIFICA
