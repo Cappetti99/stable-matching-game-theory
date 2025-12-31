@@ -15,9 +15,6 @@ import java.util.*;
  * 3. Add duplicates to VM schedules (real tasks, not phantom)
  * 4. Recalculate schedule timing with duplicates
  * 5. Return optimized schedule with duplicates included
- * 
- * @author Lorenzo Cappetti
- * @version 4.1 - Entry Task Duplication with Real Task Accounting
  */
 public class LOTD {
 

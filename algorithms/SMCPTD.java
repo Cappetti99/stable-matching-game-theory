@@ -1,52 +1,76 @@
-import java.util.*;
-import java.io.*;
-
 /**
  * SM-CPTD: Stable Matching Cloud-based Parallel Task Duplication Algorithm
- * 
- * Pipeline dell'algoritmo (come da paper):
- * 1. DCP (Dynamic Critical Path) - Identifica il Critical Path del DAG
- * 2. SMGT (Stable Matching Game Theory) - Scheduling completo con stable matching
- * 3. LOTD (List of Task Duplication) - Ottimizzazione tramite duplicazione task
- * 
- * Input (da ExperimentRunner):
- * - List<task> tasks: task del workflow con dipendenze (DAG)
- * - List<VM> vms: virtual machines disponibili
- * - Map<String, Double> communicationCosts: costi comunicazione tra task
- * - double CCR: Communication to Computation Ratio
- * 
+ *
+ * This class implements the full SM-CPTD pipeline as described in the paper.
+ * The algorithm combines three main components:
+ *
+ * 1. DCP (Dynamic Critical Path):
+ *    - Computes task ranks recursively
+ *    - Identifies the Critical Path of the DAG
+ *
+ * 2. SMGT (Stable Matching Game Theory):
+ *    - Performs the main scheduling phase
+ *    - Assigns tasks to VMs using stable matching
+ *    - Gives priority to Critical Path tasks
+ *
+ * 3. LOTD (List of Task Duplication):
+ *    - Applies task duplication heuristics
+ *    - Reduces communication delays and overall makespan
+ *
+ * Input (provided by ExperimentRunner):
+ * - List<task> tasks: workflow tasks with precedence constraints (DAG)
+ * - List<VM> vms: available virtual machines
+ * - Map<String, Double> communicationCosts: inter-task communication costs
+ * - double CCR: Communication-to-Computation Ratio
+ *
  * Output:
- * - Map<Integer, List<Integer>>: assegnamento finale vmID -> [taskIDs]
- * - Metriche: makespan, SLR, AVU, VF
- * 
- * @author Lorenzo Cappetti
- * @version 2.0 - Refactored
+ * - Map<Integer, List<Integer>>: final VM → task assignment
+ * - Performance metrics: makespan, SLR, AVU, VF
  */
 public class SMCPTD {
 
-    // Componenti dell'algoritmo
+    // ==================== ALGORITHM COMPONENTS ====================
+
+    /** SMGT scheduler (core scheduling phase) */
     private SMGT smgt;
+
+    /** LOTD optimizer (task duplication phase) */
     private LOTD lotd;
 
-    // Risultati intermedi
-    private Set<Integer> criticalPath;           // Output DCP
-    private Map<Integer, List<Integer>> smgtSchedule;  // Output SMGT
-    private Map<Integer, List<Integer>> finalSchedule; // Output LOTD
+    // ==================== INTERMEDIATE RESULTS ====================
 
-    // Metriche finali
+    /** Set of task IDs belonging to the Critical Path (output of DCP) */
+    private Set<Integer> criticalPath;
+
+    /** Schedule produced by SMGT (before duplication) */
+    private Map<Integer, List<Integer>> smgtSchedule;
+
+    /** Final schedule after LOTD optimization */
+    private Map<Integer, List<Integer>> finalSchedule;
+
+    // ==================== FINAL METRICS ====================
+
+    /** Overall workflow makespan */
     private double makespan;
 
-    // Dati necessari per il calcolo
-    private task exitTask;
+    /** Mapping of DAG levels: level → list of task IDs */
     private Map<Integer, List<Integer>> taskLevels;
 
-    // Gantt chart settings
+    /** Enable/disable Gantt chart generation */
     private boolean generateGanttChart = false;
+
+    /** Workflow name used in Gantt chart output */
     private String ganttChartWorkflow = "";
+
+    /** CCR value associated with the Gantt chart */
     private double ganttChartCCR = 0.0;
 
     /**
-     * Costruttore
+     * Default constructor.
+     *
+     * Initializes internal components and resets all intermediate
+     * and final results. The actual input data must be provided
+     * via setInputData() before executing the algorithm.
      */
     public SMCPTD() {
         this.smgt = new SMGT();
@@ -57,11 +81,13 @@ public class SMCPTD {
     }
 
     /**
-     * Imposta i dati di input dall'ExperimentRunner
-     * Questo metodo DEVE essere chiamato prima di executeSMCPTD()
-     * 
-     * @param tasks Lista dei task con dipendenze (DAG)
-     * @param vms Lista delle VM disponibili
+     * Sets input data coming from the ExperimentRunner.
+     *
+     * This method MUST be called before executeSMCPTD(),
+     * as it initializes tasks, VMs, and DAG levels.
+     *
+     * @param tasks List of workflow tasks with dependencies (DAG)
+     * @param vms   List of available virtual machines
      */
     public void setInputData(List<task> tasks, List<VM> vms) {
         if (tasks == null || tasks.isEmpty()) {
@@ -71,12 +97,14 @@ public class SMCPTD {
             throw new IllegalArgumentException("vms must be non-empty");
         }
 
-        // Imposta dati in SMGT
+        // Pass input data to SMGT
         smgt.setTasks(tasks);
         smgt.setVMs(vms);
-        smgt.calculateTaskLevels(); // Calcola livelli del DAG
 
-        // Reset stato precedente
+        // Precompute DAG levels for scheduling
+        smgt.calculateTaskLevels();
+
+        // Reset any previous execution state
         this.criticalPath = new HashSet<>();
         this.smgtSchedule = new HashMap<>();
         this.finalSchedule = new HashMap<>();
@@ -84,37 +112,23 @@ public class SMCPTD {
         this.taskLevels = null;
         this.exitTask = null;
 
-        System.out.println("✅ Input data set: " + tasks.size() + " tasks, " + vms.size() + " VMs");
+        System.out.println("✅ Input data set: " + tasks.size() +
+                " tasks, " + vms.size() + " VMs");
     }
 
     /**
-     * Carica dati da file CSV (alternativa a setInputData)
-     * Usato per testing standalone
-     */
-    public void loadData(String dagFilename, String taskFilename, String vmFilename) throws IOException {
-        System.out.println("🚀 SM-CPTD: Loading data from CSV files...");
-
-        List<task> tasks = DataLoader.loadTasksFromCSV(dagFilename, taskFilename);
-        List<VM> vms = DataLoader.loadVMsFromCSV(vmFilename);
-
-        setInputData(tasks, vms);
-
-        System.out.println("✅ Data loaded successfully");
-    }
-
-    /**
-     * ALGORITMO PRINCIPALE: Esegue SM-CPTD completo
+     * MAIN ALGORITHM: Executes the full SM-CPTD (Stable Matching - Critical Path Task Duplication)
+     * * Workflow:
+     * 1. DCP: Identifies the Critical Path within the DAG.
+     * 2. SMGT: Performs complete scheduling using Stable Matching Game Theory.
+     * 3. LOTD: Optimizes the schedule through task duplication.
+     * 4. Metrics: Calculates final performance metrics (e.g., Makespan).
      * 
-     * Sequenza:
-     * 1. DCP: identifica Critical Path
-     * 2. SMGT: scheduling completo con stable matching
-     * 3. LOTD: ottimizzazione con duplicazione
-     * 4. Calcolo metriche finali
-     * 
-     * @param communicationCosts Costi di comunicazione tra task (key: "taskId_succId")
-     * @param vmMapping Mapping vmID -> VM object
-     * @return Scheduling finale ottimizzato (vmID -> taskIDs)
+     * @param communicationCosts Communication costs between tasks (key format: "taskId_succId")
+     * @param vmMapping Mapping of VM IDs to their respective VM objects
+     * @return The final optimized scheduling map (vmID -> list of taskIDs)
      */
+
     public Map<Integer, List<Integer>> executeSMCPTD(
             Map<String, Double> communicationCosts,
             Map<Integer, VM> vmMapping) {
@@ -123,16 +137,14 @@ public class SMCPTD {
         System.out.println("🎯 EXECUTING SM-CPTD ALGORITHM");
         System.out.println("=".repeat(70));
 
-        // Validazione input
+        // Input data validation
         if (smgt.getTasks() == null || smgt.getTasks().isEmpty()) {
             throw new IllegalStateException(
                 "Input data not set. Call setInputData() or loadData() first!");
         }
 
         try {
-            // ============================================================
             // STEP 1: DCP - Dynamic Critical Path
-            // ============================================================
             System.out.println("\n📍 STEP 1: DCP - Identifying Critical Path");
             System.out.println("-".repeat(70));
             
@@ -142,9 +154,7 @@ public class SMCPTD {
             System.out.println("   Size: " + criticalPath.size() + " tasks");
             System.out.println("   Tasks: " + criticalPath);
 
-            // ============================================================
             // STEP 2: SMGT - Stable Matching Scheduling
-            // ============================================================
             System.out.println("\n🎮 STEP 2: SMGT - Stable Matching Scheduling");
             System.out.println("-".repeat(70));
             System.out.println("SMGT processes each level:");
@@ -157,9 +167,7 @@ public class SMCPTD {
             System.out.println("\n✅ SMGT scheduling completed:");
             printScheduleSummary(smgtSchedule, "SMGT");
 
-            // ============================================================
             // STEP 3: LOTD - Task Duplication Optimization
-            // ============================================================
             System.out.println("\n📋 STEP 3: LOTD - Task Duplication Optimization");
             System.out.println("-".repeat(70));
             
@@ -168,7 +176,7 @@ public class SMCPTD {
             System.out.println("\n✅ LOTD optimization completed:");
             printScheduleSummary(finalSchedule, "LOTD");
             
-            // Mostra duplicazioni
+            // Log task duplication statistics
             if (lotd != null) {
                 Map<Integer, Set<Integer>> duplicates = lotd.getDuplicatedTasks();
                 int totalDups = duplicates.values().stream()
@@ -185,25 +193,19 @@ public class SMCPTD {
                 }
             }
 
-            // ============================================================
-            // STEP 4: Calcolo Makespan
-            // ============================================================
+            // STEP 4: Makespan Calculation
             System.out.println("\n📊 STEP 4: Calculating Makespan");
             System.out.println("-".repeat(70));
             
             calculateMakespan(vmMapping);
 
-            // ============================================================
-            // RISULTATI FINALI
-            // ============================================================
+            // FINAL RESULTS SUMMARY
             System.out.println("\n" + "=".repeat(70));
             System.out.println("🎉 SM-CPTD COMPLETED SUCCESSFULLY!");
             System.out.println("=".repeat(70));
             printFinalResults();
 
-            // ============================================================
-            // GANTT CHART GENERATION (if enabled)
-            // ============================================================
+            // Gantt chart generation (if enabled) 
             if (generateGanttChart) {
                 System.out.println("\n📊 Generating Gantt chart JSON...");
                 GanttChartGenerator.generateGanttChart(
@@ -229,14 +231,16 @@ public class SMCPTD {
         } catch (Exception e) {
             System.err.println("\n❌ ERROR during SM-CPTD execution: " + e.getMessage());
             e.printStackTrace();
-            // Fallback: ritorna risultati SMGT se LOTD fallisce
+            // Fallback: return initial SMGT results if duplication optimization fails
             return smgtSchedule != null ? smgtSchedule : new HashMap<>();
         }
     }
 
     /**
-     * STEP 1: Esecuzione DCP
-     * Identifica il Critical Path del DAG
+     * DCP Execution.
+     * Organizes tasks by levels and identifies the Critical Path of the DAG.
+     * 
+     * @return Set of task IDs identified as Critical Path.
      */
     private Set<Integer> executeDCP(
             Map<String, Double> communicationCosts,
@@ -258,30 +262,7 @@ public class SMCPTD {
     }
     
     /**
-     * Calcola il peso computazionale di un task (avg execution time su tutte le VM)
-     */
-    private double calculateTaskWeight(task t) {
-        if (smgt.getVMs() == null || smgt.getVMs().isEmpty()) {
-            return t.getSize();
-        }
-        
-        double totalTime = 0.0;
-        int count = 0;
-        
-        for (VM vm : smgt.getVMs()) {
-            double et = Metrics.ET(t, vm, "processingCapacity");
-            if (et != Double.POSITIVE_INFINITY) {
-                totalTime += et;
-                count++;
-            }
-        }
-        
-        return count > 0 ? totalTime / count : t.getSize();
-    }
-
-    /**
-     * STEP 3: Esecuzione LOTD
-     * Ottimizza lo scheduling SMGT tramite duplicazione task
+     * Optimizes the SMGT schedule via task duplication
      */
     private Map<Integer, List<Integer>> executeLOTD(
             Map<String, Double> communicationCosts) {
@@ -303,13 +284,13 @@ public class SMCPTD {
             System.err.println("   ↪ Falling back to SMGT schedule");
             e.printStackTrace();
             
-            // Fallback: usa scheduling SMGT
+            // Fallback: use SMGT scheduling
             return new HashMap<>(smgtSchedule);
         }
     }
 
     /**
-     * STEP 4: Calcolo Makespan (Paper Formula)
+     * STEP 4: Makespan calculation (Paper Formula)
      * 
      * makespan = max{MS(VM_k)} for k in {0,...,m-1}
      * where MS(VM_k) is the finish time of the last task assigned to VM_k
@@ -344,15 +325,13 @@ public class SMCPTD {
                 System.out.println("   ⚠️  Warning: Task AFT data not available from LOTD, " +
                     "using fallback calculation based on ET sums.");
             }
-            
             System.out.println("      VM" + vmId + ": MS = " + String.format("%.3f", vmFinishTime));
             
             // makespan = max{MS(VM_k)}
             maxVMFinishTime = Math.max(maxVMFinishTime, vmFinishTime);
         }
-        
         makespan = maxVMFinishTime;
-        
+
         // Validation
         if (Double.isNaN(makespan) || makespan <= 0) {
             throw new IllegalStateException("Invalid makespan: " + makespan);
@@ -362,7 +341,7 @@ public class SMCPTD {
     }
 
     /**
-     * Stampa sommario di uno schedule
+     * Prints a schedule summary
      */
     private void printScheduleSummary(Map<Integer, List<Integer>> schedule, String phase) {
         int totalTasks = schedule.values().stream()
@@ -378,7 +357,7 @@ public class SMCPTD {
     }
 
     /**
-     * Stampa risultati finali
+     * Prints final results
      */
     private void printFinalResults() {
         System.out.println("\n📋 FINAL RESULTS:");
@@ -434,6 +413,7 @@ public class SMCPTD {
 
     /**
      * Configure Gantt chart generation settings
+     * 
      * @param generate Whether to generate Gantt charts
      * @param workflow Workflow name for chart title
      * @param ccr CCR value for chart title
@@ -446,6 +426,7 @@ public class SMCPTD {
 
     /**
      * Enable or disable Gantt chart generation
+     * 
      * @param generate Whether to generate Gantt charts
      */
     public void setGenerateGanttChart(boolean generate) {
