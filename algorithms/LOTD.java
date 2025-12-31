@@ -45,7 +45,7 @@ public class LOTD {
     private Map<String, Double> duplicateAST; // Duplicate Actual Start Time per VM
     private Map<String, Double> duplicateAFT; // Duplicate Actual Finish Time per VM
 
-    private static final boolean VERBOSE = false;
+    private static final boolean VERBOSE = false;  // Set to true for debugging
 
     /**
      * Represents a scheduled execution slot on a VM.
@@ -177,20 +177,24 @@ public class LOTD {
     }
 
     /**
-     * Step 2: Calculate initial timing using topological order
+     * Step 2: Calculate initial timing using waitingList order within each level.
+     * 
+     * This ensures that critical path tasks (added first to waitingList) are
+     * scheduled to execute first on their assigned VM at each level.
      */
     private void calculateInitialTiming() {
         taskAST.clear();
         taskAFT.clear();
 
-        List<task> sorted = topologicalSort();
+        // Use waitingList order instead of arbitrary topological sort
+        List<task> sorted = getTasksInWaitingListOrder();
 
         for (task t : sorted) {
             calculateTaskTiming(t.getID());
         }
 
         if (VERBOSE) {
-            System.out.println("\nInitial timing:");
+            System.out.println("\nInitial timing (waitingList order):");
             for (task t : sorted) {
                 System.out.printf("  t%d: AST=%.2f, AFT=%.2f\n",
                         t.getID(), taskAST.get(t.getID()), taskAFT.get(t.getID()));
@@ -272,7 +276,16 @@ public class LOTD {
                     double commCost = (predVM != null && !predVM.equals(vmId))
                             ? getCommunicationCost(predId, t.getID(), predVM, vmId)
                             : 0.0;
-                    drt = Math.max(drt, predAFT + commCost);
+                    
+                    double newDRT = predAFT + commCost;
+                    
+                    // DEBUG: Log when communication cost causes large delays
+                    if (commCost > 1000 && VERBOSE) {
+                        System.out.println("DEBUG DRT: t" + t.getID() + " waiting for pred t" + predId +
+                            " predAFT=" + predAFT + " commCost=" + commCost + " newDRT=" + newDRT);
+                    }
+                    
+                    drt = Math.max(drt, newDRT);
                 }
             }
         }
@@ -283,20 +296,27 @@ public class LOTD {
     /**
      * Calculate Machine Ready Time (MRT) for a task.
      * 
-     * MRT is the earliest time the VM can execute this task, considering:
-     * 1. All tasks that must execute before this one (based on their AST < this task's DRT)
+     * MRT is the earliest time the VM can start executing this task, considering:
+     * 1. When all currently scheduled tasks on this VM will be done
      * 2. Finding a gap in the execution schedule if possible (insertion-based scheduling)
+     * 
+     * The actual start time will be max(DRT, MRT) where DRT is the data ready time.
+     * 
+     * IMPORTANT: This method finds the earliest slot where the task can execute
+     * without overlapping with existing tasks. It returns the VM availability time,
+     * not the actual task start time (which depends on data readiness).
      * 
      * @param vmId The VM where the task will execute
      * @param taskId The task being scheduled
      * @param drt The Data Ready Time (earliest this task's data is available)
-     * @return The Machine Ready Time
+     * @return The earliest time the VM can start this task (may still need to wait for data)
      */
     private double calculateMachineReadyTime(int vmId, int taskId, double drt) {
         List<ExecutionSlot> slots = vmExecutionOrder.get(vmId);
         
         if (slots == null || slots.isEmpty()) {
-            return 0.0;  // VM is idle, can start immediately
+            // VM is idle, can start immediately (at time 0)
+            return 0.0;
         }
 
         // Calculate execution time for this task
@@ -304,15 +324,16 @@ public class LOTD {
         double et = (t != null) ? calculateExecutionTime(t, vmId) : 0.0;
 
         // Try insertion-based scheduling: find the earliest slot where this task fits
-        // The task can start at max(drt, previous_task_finish) and must not overlap with next task
+        // Task needs a contiguous time window of size 'et' that doesn't overlap with existing tasks
 
-        // First, try to fit before the first scheduled task
-        if (!slots.isEmpty()) {
-            ExecutionSlot first = slots.get(0);
-            if (drt + et <= first.ast) {
-                // Can fit before first task
-                return 0.0;  // VM ready at time 0, task will start at max(0, drt) = drt
-            }
+        // First, check if we can fit before the first scheduled task
+        ExecutionSlot first = slots.get(0);
+        // Task would start at max(0, drt) = drt (since drt >= 0)
+        // Task would end at drt + et
+        // This fits before first task if drt + et <= first.ast
+        if (drt + et <= first.ast) {
+            // Can fit before first task
+            return 0.0;  // VM is ready at time 0
         }
 
         // Try to fit in gaps between existing tasks
@@ -320,12 +341,16 @@ public class LOTD {
             ExecutionSlot current = slots.get(i);
             ExecutionSlot next = slots.get(i + 1);
             
-            double gapStart = Math.max(drt, current.aft);
-            double gapEnd = next.ast;
+            // The earliest this task can start in this gap is max(drt, current.aft)
+            // because we need data AND the previous task to finish
+            double earliestStartInGap = Math.max(drt, current.aft);
+            // The task would end at earliestStartInGap + et
+            // This fits in the gap if earliestStartInGap + et <= next.ast
             
-            if (gapEnd - gapStart >= et) {
+            if (earliestStartInGap + et <= next.ast) {
                 // Found a gap where this task fits
-                return current.aft;  // MRT is when current task finishes
+                // Return when VM is ready (after current task finishes)
+                return current.aft;
             }
         }
 
@@ -410,6 +435,13 @@ public class LOTD {
             System.out.println("\n--- Analyzing entry task t" + entryTaskId + " ---");
             System.out.println("Currently on VM" + originalVM);
             System.out.println("Successors: " + entryTask.getSucc());
+            // DEBUG: Show current state of vmExecutionOrder for each VM
+            System.out.println("DEBUG: Current vmExecutionOrder state:");
+            for (Map.Entry<Integer, List<ExecutionSlot>> entry : vmExecutionOrder.entrySet()) {
+                if (!entry.getValue().isEmpty()) {
+                    System.out.println("  VM" + entry.getKey() + ": " + entry.getValue());
+                }
+            }
         }
 
         // For each successor, check if duplication helps
@@ -600,6 +632,13 @@ public class LOTD {
      * @param dupAFT Actual Finish Time for this duplicate on targetVM
      */
     private void performDuplication(int taskId, int targetVM, double dupAST, double dupAFT) {
+        if (VERBOSE) {
+            System.out.println("DEBUG performDuplication: t" + taskId + " -> VM" + targetVM + 
+                " AST=" + dupAST + ", AFT=" + dupAFT);
+            System.out.println("  Before update, VM" + targetVM + " execution order: " + 
+                vmExecutionOrder.get(targetVM));
+        }
+        
         // Mark as duplicated (this affects future timing calculations)
         duplicatedTasks.get(targetVM).add(taskId);
         totalDuplicationCount++; // Increment counter
@@ -618,6 +657,11 @@ public class LOTD {
         // Add duplicate to VM execution order
         // Use a special key format for duplicates to distinguish from original
         updateVMExecutionOrder(targetVM, taskId, dupAST, dupAFT);
+        
+        if (VERBOSE) {
+            System.out.println("  After update, VM" + targetVM + " execution order: " + 
+                vmExecutionOrder.get(targetVM));
+        }
 
         // Recalculate timing for affected successors
         task t = getTaskById(taskId);
@@ -668,6 +712,12 @@ public class LOTD {
      * 
      * Performs a complete recalculation of all task timings with duplicates in place.
      * This ensures consistency after all duplications have been performed.
+     * 
+     * IMPORTANT: Duplicates must be added to vmExecutionOrder FIRST, so that when
+     * we recalculate original task timing, the duplicates are already "reserved"
+     * in the schedule and original tasks won't overlap with them.
+     * 
+     * Uses waitingList order to ensure CP tasks execute first on their VM.
      */
     private void calculateFinalTiming() {
         // Clear execution order for fresh recalculation
@@ -675,14 +725,8 @@ public class LOTD {
             slots.clear();
         }
 
-        // Full recalculation with duplicates in place
-        List<task> sorted = topologicalSort();
-
-        for (task t : sorted) {
-            calculateTaskTiming(t.getID());
-        }
-
-        // Also recalculate timing for duplicated tasks
+        // STEP 1: Add all duplicates to vmExecutionOrder FIRST
+        // This reserves their time slots before we calculate original task timing
         for (Map.Entry<Integer, Set<Integer>> entry : duplicatedTasks.entrySet()) {
             int vmId = entry.getKey();
             for (Integer taskId : entry.getValue()) {
@@ -690,10 +734,18 @@ public class LOTD {
                 Double dupAST = duplicateAST.get(key);
                 Double dupAFT = duplicateAFT.get(key);
                 if (dupAST != null && dupAFT != null) {
-                    // Ensure duplicate is in execution order
+                    // Add duplicate to execution order to reserve its slot
                     updateVMExecutionOrder(vmId, taskId, dupAST, dupAFT);
                 }
             }
+        }
+
+        // STEP 2: Full recalculation of original tasks with duplicates already in place
+        // Use waitingList order to ensure CP tasks execute first on their VM
+        List<task> sorted = getTasksInWaitingListOrder();
+
+        for (task t : sorted) {
+            calculateTaskTiming(t.getID());
         }
 
         // Validate final schedule
@@ -805,7 +857,17 @@ public class LOTD {
         double commTimeAtAvg = communicationCosts.getOrDefault(key, 0.0);
 
         // Scale by actual bandwidth
-        return commTimeAtAvg * 25.0 / bandwidth;
+        double result = commTimeAtAvg * 25.0 / bandwidth;
+        
+        // DEBUG: Log large communication costs
+        if (result > 1000 && VERBOSE) {
+            System.out.println("DEBUG getCommunicationCost: " + key + 
+                " commTimeAtAvg=" + commTimeAtAvg + 
+                " bandwidth=" + bandwidth + 
+                " result=" + result);
+        }
+        
+        return result;
     }
 
     /**
@@ -889,6 +951,81 @@ public class LOTD {
         if (t != null) {
             result.add(t);
         }
+    }
+
+    /**
+     * Get tasks ordered by waitingList order within each DAG level.
+     * 
+     * This ensures that:
+     * 1. Tasks are processed level by level (respecting DAG dependencies)
+     * 2. Within each level, tasks on each VM are processed in the order
+     *    they were added to the VM's waitingList (CP tasks first, then non-CP)
+     * 
+     * This guarantees that critical path tasks execute first on their assigned VM.
+     * 
+     * @return List of tasks in the correct execution order
+     */
+    private List<task> getTasksInWaitingListOrder() {
+        List<task> result = new ArrayList<>();
+        Set<Integer> processed = new HashSet<>();
+        
+        // Get task levels using Utility
+        Map<Integer, List<Integer>> levelTasks = Utility.organizeTasksByLevels(tasks);
+        
+        // Sort levels in ascending order (0, 1, 2, ...)
+        List<Integer> sortedLevels = new ArrayList<>(levelTasks.keySet());
+        Collections.sort(sortedLevels);
+        
+        // Build taskId -> level mapping for quick lookup
+        Map<Integer, Integer> taskToLevel = new HashMap<>();
+        for (Map.Entry<Integer, List<Integer>> entry : levelTasks.entrySet()) {
+            int level = entry.getKey();
+            for (Integer taskId : entry.getValue()) {
+                taskToLevel.put(taskId, level);
+            }
+        }
+        
+        // Process each level
+        for (Integer level : sortedLevels) {
+            // For each VM, get tasks from this level in waitingList order
+            for (VM vm : vms) {
+                List<Integer> waitingList = vm.getWaitingList();
+                
+                // Process tasks from this VM's waitingList that belong to current level
+                for (Integer taskId : waitingList) {
+                    if (processed.contains(taskId)) {
+                        continue;
+                    }
+                    
+                    Integer taskLevel = taskToLevel.get(taskId);
+                    if (taskLevel != null && taskLevel.equals(level)) {
+                        task t = getTaskById(taskId);
+                        if (t != null) {
+                            result.add(t);
+                            processed.add(taskId);
+                        }
+                    }
+                }
+            }
+            
+            // Safety: add any tasks from this level not in any waitingList
+            // (shouldn't happen, but defensive programming)
+            for (Integer taskId : levelTasks.get(level)) {
+                if (!processed.contains(taskId)) {
+                    task t = getTaskById(taskId);
+                    if (t != null) {
+                        result.add(t);
+                        processed.add(taskId);
+                        if (VERBOSE) {
+                            System.out.println("WARNING: Task t" + taskId + 
+                                " at level " + level + " not found in any VM waitingList");
+                        }
+                    }
+                }
+            }
+        }
+        
+        return result;
     }
 
     /**

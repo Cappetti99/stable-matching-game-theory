@@ -153,7 +153,7 @@ public class Metrics {
             }
 
             if (Double.isFinite(fastestET) && fastestET > 0) {
-                double satisfaction = actualET / fastestET;
+                double satisfaction =  fastestET / actualET ;
                 if (Double.isFinite(satisfaction)) {
                     satisfactions.add(satisfaction);
                 }
@@ -175,7 +175,7 @@ public class Metrics {
         }
 
         // population variance
-        return sumSq / satisfactions.size();
+        return avg;
     }
 
 
