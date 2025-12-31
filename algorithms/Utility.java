@@ -6,36 +6,6 @@ import java.util.*;
 public class Utility {
 
     /**
-     * Finds all exit tasks (tasks with no successors).
-     * <p>
-     * A workflow may contain multiple exit tasks.
-     *
-     * @param tasks the list of tasks to analyze
-     * @return a list of exit tasks
-     * @throws IllegalArgumentException if the task list is null or empty
-     * @throws NoSuchElementException if no exit task is found
-     */
-
-    public static List<task> findExitTasks(List<task> tasks) {
-        if (tasks == null || tasks.isEmpty()) {
-            throw new IllegalArgumentException("tasks must not be null or empty");
-        }
-
-        List<task> exits = new ArrayList<>();
-        for (task t : tasks) {
-            if (t != null && (t.getSucc() == null || t.getSucc().isEmpty())) {
-                exits.add(t);
-            }
-        }
-
-        if (exits.isEmpty()) {
-            throw new NoSuchElementException("No exit task found (no task with empty successors list).");
-        }
-
-        return exits;
-    }
-
-    /**
      * Organizes tasks into topological levels using BFS.
      *
      * Optimized algorithm with O(V + E) complexity instead of O(V²):

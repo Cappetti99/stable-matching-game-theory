@@ -242,10 +242,6 @@ public class SMCPTD {
             Map<String, Double> communicationCosts,
             Map<Integer, VM> vmMapping) {
 
-        System.out.println("   🔍 Finding exit task...");
-        exitTask = findExitTask(smgt.getTasks());
-        System.out.println("   ✓ Exit task: t" + exitTask.getID());
-
         System.out.println("   🔍 Organizing tasks by levels...");
         taskLevels = Utility.organizeTasksByLevels(smgt.getTasks());
         System.out.println("   ✓ DAG has " + taskLevels.size() + " levels");
@@ -259,44 +255,6 @@ public class SMCPTD {
         );
 
         return cp;
-    }
-
-    /**
-     * Helper: Trova exit task (deterministicamente)
-     * Se ci sono più exit task, sceglie quello con peso computazionale massimo.
-     * In caso di parità, sceglie quello con ID minimo per determinismo.
-     */
-    private task findExitTask(List<task> tasks) {
-        List<task> exits = Utility.findExitTasks(tasks);
-        
-        if (exits.isEmpty()) {
-            throw new IllegalStateException("No exit task found in DAG!");
-        }
-        
-        // Scegli deterministicamente: peso massimo (avg execution time su tutte le VM)
-        // In caso di parità, ID minimo
-        task exitTask = exits.get(0);
-        double maxWeight = calculateTaskWeight(exitTask);
-        
-        for (task t : exits) {
-            if (t == null) continue;
-            
-            double weight = calculateTaskWeight(t);
-            
-            // Priorità: peso massimo, poi ID minimo in caso di parità
-            if (weight > maxWeight || (weight == maxWeight && t.getID() < exitTask.getID())) {
-                maxWeight = weight;
-                exitTask = t;
-            }
-        }
-        
-        if (exits.size() > 1) {
-            System.out.println("   ⚠️  Multiple exit tasks found (" + exits.size() + "), " +
-                    "selected t" + exitTask.getID() + " with max weight: " + 
-                    String.format("%.3f", maxWeight));
-        }
-        
-        return exitTask;
     }
     
     /**
