@@ -178,5 +178,90 @@ public class Metrics {
         return avg;
     }
 
+    /**
+     * Communication Cost Calculator
+     * 
+     * Calculates the communication cost between two tasks when executed on different VMs.
+     * The cost is based on data transfer size and inter-VM bandwidth.
+     */
+    public static class CommunicationCostCalculator {
+        
+        /**
+         * Calculate communication cost between two tasks on different VMs.
+         * 
+         * Formula: cost = (taskSize × CCR) / bandwidth
+         * 
+         * @param srcTask Source task (sender)
+         * @param dstTask Destination task (receiver) - not used but kept for API consistency
+         * @param srcVM Source VM where srcTask executes
+         * @param dstVM Destination VM where dstTask executes
+         * @param ccr Communication-to-Computation Ratio (multiplier for data size)
+         * @return Communication time cost (0.0 if same VM)
+         */
+        public static double calculate(task srcTask, task dstTask, 
+                                       VM srcVM, VM dstVM, double ccr) {
+            if (srcVM == null || dstVM == null) {
+                return 0.0;
+            }
+            
+            if (srcVM.getID() == dstVM.getID()) {
+                return 0.0; // Same VM, no communication cost
+            }
+            
+            double dataSize = srcTask.getSize() * ccr;
+            double bandwidth = srcVM.getBandwidthToVM(dstVM.getID());
+            
+            if (bandwidth <= 0) {
+                throw new IllegalStateException(
+                    "Invalid bandwidth between VM" + srcVM.getID() + 
+                    " and VM" + dstVM.getID() + ": " + bandwidth);
+            }
+            
+            return dataSize / bandwidth;
+        }
+        
+        /**
+         * Calculate average communication cost over all VM pairs.
+         * 
+         * Used for DCP rank calculation where tasks aren't assigned yet.
+         * 
+         * Formula: avgCost = Σ[(taskSize × CCR) / B(k,l)] / (m × (m-1))
+         * where m = number of VMs, and k ≠ l
+         * 
+         * @param srcTask Source task
+         * @param dstTask Destination task (not used but kept for consistency)
+         * @param vms List of all available VMs
+         * @param ccr Communication-to-Computation Ratio
+         * @return Average communication cost across all VM pairs
+         */
+        public static double calculateAverage(task srcTask, task dstTask,
+                                             List<VM> vms, double ccr) {
+            if (vms == null || vms.size() < 2) {
+                return 0.0;
+            }
+            
+            double dataSize = srcTask.getSize() * ccr;
+            double sumCosts = 0.0;
+            int validPairs = 0;
+            
+            for (VM vmK : vms) {
+                for (VM vmL : vms) {
+                    if (vmK.getID() == vmL.getID()) continue; // Skip same VM
+                    
+                    double bandwidth = vmK.getBandwidthToVM(vmL.getID());
+                    if (bandwidth <= 0) {
+                        throw new IllegalStateException(
+                            "Invalid bandwidth between VM" + vmK.getID() + 
+                            " and VM" + vmL.getID() + ": " + bandwidth);
+                    }
+                    
+                    sumCosts += dataSize / bandwidth;
+                    validPairs++;
+                }
+            }
+            
+            return validPairs > 0 ? sumCosts / validPairs : 0.0;
+        }
+    }
 
 }

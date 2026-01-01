@@ -21,9 +21,7 @@ public class LOTD {
     private SMGT smgt;
     private List<VM> vms;
     private List<task> tasks;
-
-    // Communication costs model
-    private Map<String, Double> communicationCosts;
+    private double ccr; // Communication-to-Computation Ratio
 
     // Current schedule state
     private Map<Integer, Double> taskAST; // Actual Start Time
@@ -81,7 +79,7 @@ public class LOTD {
         this.smgt = smgt;
         this.vms = smgt.getVMs();
         this.tasks = smgt.getTasks();
-        this.communicationCosts = new HashMap<>();
+        this.ccr = 1.0; // Default CCR
         this.taskAST = new HashMap<>();
         this.taskAFT = new HashMap<>();
         this.vmSchedule = new HashMap<>();
@@ -99,12 +97,10 @@ public class LOTD {
     }
 
     /**
-     * Sets communication costs (from ExperimentRunner)
+     * Sets the Communication-to-Computation Ratio (CCR)
      */
-    public void setCommunicationCosts(Map<String, Double> communicationCosts) {
-        this.communicationCosts = (communicationCosts != null)
-                ? communicationCosts
-                : new HashMap<>();
+    public void setCCR(double ccr) {
+        this.ccr = ccr;
     }
 
     /**
@@ -829,27 +825,17 @@ public class LOTD {
      * Get communication cost between two tasks on different VMs
      */
     private double getCommunicationCost(int srcTaskId, int dstTaskId,
-            int srcVM, int dstVM) {
-        if (srcVM == dstVM)
+            int srcVMId, int dstVMId) {
+        task srcTask = Utility.getTaskById(srcTaskId, tasks);
+        task dstTask = Utility.getTaskById(dstTaskId, tasks);
+        VM srcVM = Utility.getVMById(srcVMId, vms);
+        VM dstVM = Utility.getVMById(dstVMId, vms);
+        
+        if (srcTask == null || dstTask == null || srcVM == null || dstVM == null) {
             return 0.0;
-
-        // Get bandwidth
-        VM src = Utility.getVMById(srcVM, vms);
-        if (src == null)
-            return 0.0;
-
-        double bandwidth = src.getBandwidthToVM(dstVM);
-        if (bandwidth <= 0)
-            bandwidth = 25.0; // Default
-
-        // Get communication cost from map (stored at avgBandwidth=25)
-        String key = srcTaskId + "_" + dstTaskId;
-        double commTimeAtAvg = communicationCosts.getOrDefault(key, 0.0);
-
-        // Scale by actual bandwidth
-        double result = commTimeAtAvg * 25.0 / bandwidth;
-    
-        return result;
+        }
+        
+        return Metrics.CommunicationCostCalculator.calculate(srcTask, dstTask, srcVM, dstVM, ccr);
     }
 
     /**

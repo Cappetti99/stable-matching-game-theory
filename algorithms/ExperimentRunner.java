@@ -343,7 +343,7 @@ public class ExperimentRunner {
             Map<String, Double> commCosts = calculateCommunicationCostsForDCP(smgt, ccr);
             
             // Execute SM-CPTD algorithm (DCP → SMGT → LOTD)
-            Map<Integer, List<Integer>> assignments = smcptd.executeSMCPTD(commCosts, vmMapping);
+            Map<Integer, List<Integer>> assignments = smcptd.executeSMCPTD(commCosts, vmMapping, ccr);
             
             // ============================================================================
 
@@ -565,76 +565,18 @@ public class ExperimentRunner {
         Map<String, Double> costs = new HashMap<>();
         
         List<VM> vms = smgt.getVMs();
-        int m = vms.size();
-        
-        // Edge case: if only 1 VM or no VMs, communication cost is 0
-        if (m <= 1) {
-            for (task t : smgt.getTasks()) {
-                for (int succId : t.getSucc()) {
-                    String key = t.getID() + "_" + succId;
-                    costs.put(key, 0.0);
-                }
-            }
-            return costs;
-        }
-        
-        // Calculate expected number of VM pairs: m(m-1)
-        int expectedPairs = m * (m - 1);
         
         // For each edge in the task graph
         for (task t : smgt.getTasks()) {
             for (int succId : t.getSucc()) {
                 String key = t.getID() + "_" + succId;
+                task succ = Utility.getTaskById(succId, smgt.getTasks());
                 
-                // Calculate TTi,j = sti × CCR
-                double TTij = t.getSize() * ccr;
+                // Use CommunicationCostCalculator to compute average cost
+                double avgCost = Metrics.CommunicationCostCalculator.calculateAverage(
+                    t, succ, vms, ccr);
                 
-                // Sum over all VM pairs (k ≠ l)
-                double sumCosts = 0.0;
-                int validPairs = 0;
-                
-                for (int k = 0; k < m; k++) {
-                    VM vmK = vms.get(k);
-                    
-                    for (int l = 0; l < m; l++) {
-                        if (k == l) continue; // Skip same VM (k ≠ l constraint)
-                        
-                        VM vmL = vms.get(l);
-                        int vmLId = vmL.getID();
-                        
-                        // Get bandwidth B(VMk, VMl)
-                        if (!vmK.hasBandwidthToVM(vmLId)) {
-                            throw new IllegalStateException(
-                                "Missing bandwidth data: VM" + vmK.getID() + 
-                                " -> VM" + vmLId + ". Cannot calculate DCP communication costs.");
-                        }
-                        
-                        double bandwidth = vmK.getBandwidthToVM(vmLId);
-                        
-                        // Validate bandwidth is positive
-                        if (bandwidth <= 0.0) {
-                            throw new IllegalStateException(
-                                "Invalid bandwidth (≤ 0): VM" + vmK.getID() + 
-                                " -> VM" + vmLId + " = " + bandwidth + 
-                                ". Cannot calculate DCP communication costs.");
-                        }
-                        
-                        // Calculate TTi,j / B(VMk, VMl)
-                        sumCosts += TTij / bandwidth;
-                        validPairs++;
-                    }
-                }
-                
-                // Verify we processed all expected pairs
-                if (validPairs != expectedPairs) {
-                    throw new IllegalStateException(
-                        "Expected " + expectedPairs + " VM pairs but only processed " + 
-                        validPairs + ". Bandwidth matrix may be incomplete.");
-                }
-                
-                // Calculate average: ci,j = (1 / m(m-1)) × Σ [TTi,j / B(VMk, VMl)]
-                double cij = sumCosts / expectedPairs;
-                costs.put(key, cij);
+                costs.put(key, avgCost);
             }
         }
         

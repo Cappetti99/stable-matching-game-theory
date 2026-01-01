@@ -341,12 +341,12 @@ public class AblationExperimentRunner {
         smgt.setTasks(tasks);
         smgt.setVMs(vms);
         smgt.calculateTaskLevels();
-        Map<String, Double> commCostsPass2 = calculateCommunicationCostsVMSpecific(smgt, taskToVM);
+        Map<String, Double> commCostsPass2 = calculateCommunicationCostsVMSpecific(smgt, taskToVM, ccr);
         
         // Execute full pipeline with refined costs
         SMCPTD smcptd = new SMCPTD();
         smcptd.setInputData(tasks, vms);
-        return smcptd.executeSMCPTD(commCostsPass2, vmMapping);
+        return smcptd.executeSMCPTD(commCostsPass2, vmMapping, ccr);
     }
     
     // ============================================================================
@@ -358,34 +358,16 @@ public class AblationExperimentRunner {
         List<VM> vms = smgt.getVMs();
         int m = vms.size();
         
-        if (m <= 1) {
-            for (task t : smgt.getTasks()) {
-                for (int succId : t.getSucc()) {
-                    costs.put(t.getID() + "_" + succId, 0.0);
-                }
-            }
-            return costs;
-        }
-        
-        int expectedPairs = m * (m - 1);
-        
         for (task t : smgt.getTasks()) {
             for (int succId : t.getSucc()) {
                 String key = t.getID() + "_" + succId;
-                double TTij = t.getSize() * ccr;
-                double sumCosts = 0.0;
+                task succ = Utility.getTaskById(succId, smgt.getTasks());
                 
-                for (int k = 0; k < m; k++) {
-                    VM vmK = vms.get(k);
-                    for (int l = 0; l < m; l++) {
-                        if (k == l) continue;
-                        VM vmL = vms.get(l);
-                        double bandwidth = vmK.getBandwidthToVM(vmL.getID());
-                        sumCosts += TTij / bandwidth;
-                    }
-                }
+                // Use CommunicationCostCalculator
+                double avgCost = Metrics.CommunicationCostCalculator.calculateAverage(
+                    t, succ, vms, ccr);
                 
-                costs.put(key, sumCosts / expectedPairs);
+                costs.put(key, avgCost);
             }
         }
         
@@ -397,7 +379,7 @@ public class AblationExperimentRunner {
      * Used after initial assignment to refine costs based on actual VM pairs
      */
     private static Map<String, Double> calculateCommunicationCostsVMSpecific(
-            SMGT smgt, Map<Integer, Integer> taskToVMIdx) {
+            SMGT smgt, Map<Integer, Integer> taskToVMIdx, double ccr) {
         
         Map<String, Double> costs = new HashMap<>();
         List<VM> vms = smgt.getVMs();
@@ -408,48 +390,33 @@ public class AblationExperimentRunner {
             vmMap.put(i, vms.get(i));
         }
         
-        // Calculate average bandwidth as fallback
-        double avgBandwidth = 0.0;
-        int pairCount = 0;
-        for (int i = 0; i < vms.size(); i++) {
-            VM vmI = vms.get(i);
-            for (int j = 0; j < vms.size(); j++) {
-                if (i == j) continue;
-                VM vmJ = vms.get(j);
-                avgBandwidth += vmI.getBandwidthToVM(vmJ.getID());
-                pairCount++;
-            }
-        }
-        if (pairCount > 0) avgBandwidth /= pairCount;
-        
         // Calculate costs using VM-pair-specific bandwidth when available
         for (task t : smgt.getTasks()) {
             for (int succId : t.getSucc()) {
                 String key = t.getID() + "_" + succId;
-                double dataSize = t.getSize(); // Already includes CCR from task size
+                task succ = Utility.getTaskById(succId, smgt.getTasks());
                 
                 // Get VM indices for source and destination tasks
                 Integer sourceVMIdx = taskToVMIdx.get(t.getID());
                 Integer destVMIdx = taskToVMIdx.get(succId);
                 
                 if (sourceVMIdx != null && destVMIdx != null) {
-                    if (sourceVMIdx.equals(destVMIdx)) {
-                        // Same VM: no communication cost
-                        costs.put(key, 0.0);
-                        continue;
-                    }
-                    
                     VM sourceVM = vmMap.get(sourceVMIdx);
                     VM destVM = vmMap.get(destVMIdx);
-                    if (sourceVM != null && destVM != null && sourceVM.hasBandwidthToVM(destVM.getID())) {
-                        double bandwidth = sourceVM.getBandwidthToVM(destVM.getID());
-                        costs.put(key, dataSize / bandwidth);
+                    
+                    if (sourceVM != null && destVM != null) {
+                        // Use CommunicationCostCalculator
+                        double cost = Metrics.CommunicationCostCalculator.calculate(
+                            t, succ, sourceVM, destVM, ccr);
+                        costs.put(key, cost);
                         continue;
                     }
                 }
                 
-                // Fallback: use average bandwidth
-                costs.put(key, dataSize / avgBandwidth);
+                // Fallback: use average cost
+                double avgCost = Metrics.CommunicationCostCalculator.calculateAverage(
+                    t, succ, vms, ccr);
+                costs.put(key, avgCost);
             }
         }
         

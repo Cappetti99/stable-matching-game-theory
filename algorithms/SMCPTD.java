@@ -118,7 +118,8 @@ public class SMCPTD {
 
     /**
      * MAIN ALGORITHM: Executes the full SM-CPTD (Stable Matching - Critical Path Task Duplication)
-     * * Workflow:
+     * 
+     * Workflow:
      * 1. DCP: Identifies the Critical Path within the DAG.
      * 2. SMGT: Performs complete scheduling using Stable Matching Game Theory.
      * 3. LOTD: Optimizes the schedule through task duplication.
@@ -126,12 +127,13 @@ public class SMCPTD {
      * 
      * @param communicationCosts Communication costs between tasks (key format: "taskId_succId")
      * @param vmMapping Mapping of VM IDs to their respective VM objects
+     * @param ccr Communication-to-Computation Ratio
      * @return The final optimized scheduling map (vmID -> list of taskIDs)
      */
-
     public Map<Integer, List<Integer>> executeSMCPTD(
             Map<String, Double> communicationCosts,
-            Map<Integer, VM> vmMapping) {
+            Map<Integer, VM> vmMapping,
+            double ccr) {
 
         System.out.println("\n" + "=".repeat(70));
         System.out.println("🎯 EXECUTING SM-CPTD ALGORITHM");
@@ -171,7 +173,7 @@ public class SMCPTD {
             System.out.println("\n📋 STEP 3: LOTD - Task Duplication Optimization");
             System.out.println("-".repeat(70));
             
-            finalSchedule = executeLOTD(communicationCosts);
+            finalSchedule = executeLOTD(ccr);
             
             System.out.println("\n✅ LOTD optimization completed:");
             printScheduleSummary(finalSchedule, "LOTD");
@@ -264,14 +266,13 @@ public class SMCPTD {
     /**
      * Optimizes the SMGT schedule via task duplication
      */
-    private Map<Integer, List<Integer>> executeLOTD(
-            Map<String, Double> communicationCosts) {
+    private Map<Integer, List<Integer>> executeLOTD(double ccr) {
 
         try {
             System.out.println("   🔧 Initializing LOTD with SMGT schedule...");
             
             lotd = new LOTD(smgt);
-            lotd.setCommunicationCosts(communicationCosts);
+            lotd.setCCR(ccr);
 
             System.out.println("   🔧 Running LOTD optimization...");
             Map<Integer, List<Integer>> optimizedSchedule = 
