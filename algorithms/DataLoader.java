@@ -205,8 +205,8 @@ public class DataLoader {
                     int succId = Integer.parseInt(parts[1].replace("t", "").trim());
 
                     // BUG FIX: Add null checks to prevent NullPointerException
-                    task predTask = getTaskById(predId, tasks);
-                    task succTask = getTaskById(succId, tasks);
+                    task predTask = Utility.getTaskById(predId, tasks);
+                    task succTask = Utility.getTaskById(succId, tasks);
                     
                     if (predTask != null && succTask != null) {
                         // Add relationships
@@ -224,16 +224,6 @@ public class DataLoader {
                 }
             }
         }
-    }
-
-    /**
-     * Finds a task by ID in the list
-     */
-    private static task getTaskById(int taskId, List<task> tasks) {
-        return tasks.stream()
-                .filter(t -> t.getID() == taskId)
-                .findFirst()
-                .orElse(null);
     }
 
     /**

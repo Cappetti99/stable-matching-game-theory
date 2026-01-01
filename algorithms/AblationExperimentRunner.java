@@ -508,7 +508,7 @@ public class AblationExperimentRunner {
                 if (vm == null) continue;
                 
                 // Calculate execution time
-                double execTime = Metrics.ET(t, vm, "processingCapacity");
+                double execTime = Metrics.ET(t, vm);
                 if (execTime == Double.POSITIVE_INFINITY) continue;
                 
                 // Find Data Ready Time (DRT): max finish time of predecessors + communication
@@ -551,13 +551,6 @@ public class AblationExperimentRunner {
             .mapToDouble(Double::doubleValue)
             .max()
             .orElse(0.0);
-    }
-    
-    private static task getTaskById(int taskId, List<task> tasks) {
-        return tasks.stream()
-                .filter(t -> t.getID() == taskId)
-                .findFirst()
-                .orElse(null);
     }
     
     private static double calculateAVU(SMGT smgt, Map<Integer, List<Integer>> assignments, double makespan) {

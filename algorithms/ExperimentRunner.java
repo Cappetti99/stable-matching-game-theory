@@ -1042,49 +1042,4 @@ public class ExperimentRunner {
         System.out.println("\nComplete");
     }
 
-    /**
-     * Test singolo per debug - CyberShake Small con CCR variabili RIMOVIBILE
-     * INUTILE!!! SOLO PER DEBUG VELOCE
-     */
-    private static void runTestSingle() {
-        System.out.println("Test Mode: CyberShake 30 tasks, 5 VMs");
-        System.out.println("Testing CCR values: 0.4, 0.8, 1.2, 1.6, 2.0\n");
-
-        double[] testCCRs = { 0.4, 0.8, 1.2, 1.6, 2.0 };
-
-        System.out.println("CCR\tSLR\tAVU\tVF\tMakespan");
-        System.out.println("---\t---\t---\t--\t--------");
-
-        for (double ccr : testCCRs) {
-            try {
-                ExperimentResult result = runSingleExperiment(
-                        "cybershake", // workflow
-                        30, // numTasks
-                        5, // numVMs
-                        ccr, // ccr
-                        "TEST_SMALL", // expName
-                        NUM_RUNS, // numRuns
-                        WARMUP_RUNS // warmupRuns
-                );
-
-                if (result == null) {
-                    System.out.println(" Skipped");
-                    continue;
-                }
-
-                System.out.printf(Locale.US, "%.1f\t%.3f\t%.1f%%\t%.6f\t%.2f%n",
-                        result.ccr,
-                        result.slr,
-                        result.avu * 100,
-                        result.vf,
-                        result.makespan);
-
-            } catch (Exception e) {
-                System.err.println("Error at CCR=" + ccr + ": " + e.getMessage());
-            }
-        }
-
-        System.out.println("\nExpected from paper: CCR=0.4 SLR~1.1-1.2, CCR=2.0 SLR~1.5-1.8, AVU 40-70%");
-        System.out.println("Test complete");
-    }
 }

@@ -270,7 +270,7 @@ public class DCP {
 
         // Compute average execution time using Metrics.ET
         for (VM vm : vmMapping.values()) {
-            double computationTime = Metrics.ET(t, vm, "processingCapacity");
+            double computationTime = Metrics.ET(t, vm);
 
             if (computationTime != Double.POSITIVE_INFINITY) {
                 totalComputationTime += computationTime;

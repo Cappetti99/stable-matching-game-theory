@@ -56,19 +56,7 @@ public class SMGT {
     }
 
     /**
-     * Retrieves a task by its unique identifier.
-     *
-     * @param taskId the task ID
-     * @return the corresponding task, or null if not found
-     */
-    public task getTaskById(int taskId) {
-        return tasks.stream()
-                .filter(t -> t.getID() == taskId)
-                .findFirst()
-                .orElse(null);
-    }
 
-    /**
      * Computes the topological level of each task in the workflow DAG.
      *
      * Tasks at level 0 have no predecessors (entry tasks).
@@ -468,9 +456,9 @@ public class SMGT {
      * Calculates finish time of a task on a VM using Metrics.ET
      */
     private double calculateFinishTime(int taskId, int vmIdx) {
-        task t = getTaskById(taskId);
+        task t = Utility.getTaskById(taskId, tasks);
         if (t == null || vmIdx >= vms.size()) return Double.MAX_VALUE;
-        return Metrics.ET(t, vms.get(vmIdx), "processingCapacity");
+        return Metrics.ET(t, vms.get(vmIdx));
     }
 
     /**

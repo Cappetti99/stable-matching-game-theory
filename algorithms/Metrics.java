@@ -13,7 +13,7 @@ public class Metrics {
      * 
      * VALIDATED: Returns POSITIVE_INFINITY if VM capacity ≤ 0 or task size ≤ 0
      */
-    public static double ET(task ti, VM vmK, String capabilityType) {
+    public static double ET(task ti, VM vmK) {
         // VALIDATION: Check task size
         if (ti.getSize() <= 0) {
             return Double.POSITIVE_INFINITY;
@@ -44,7 +44,7 @@ public class Metrics {
         double sumMinET = 0.0;
         for (task t : criticalPathTasks) {
             double minET = Double.POSITIVE_INFINITY;
-            for (VM vm : vms.values()) minET = Math.min(minET, ET(t, vm, "processingCapacity"));
+            for (VM vm : vms.values()) minET = Math.min(minET, ET(t, vm));
             if (minET != Double.POSITIVE_INFINITY) sumMinET += minET;
             else {
                 // If any critical path task cannot be executed, SLR return error 
@@ -67,7 +67,7 @@ public class Metrics {
         if (makespan <= 0 || assignedTasks == null || assignedTasks.isEmpty()) return 0.0;
         double sumET = 0.0;
         for (task t : assignedTasks) {
-            double et = ET(t, vmK, capabilityName);
+            double et = ET(t, vmK);
             if (et != Double.POSITIVE_INFINITY) sumET += et;
         }
         return sumET / makespan;
@@ -134,7 +134,7 @@ public class Metrics {
             }
 
             // --------- ACTUAL EXECUTION TIME ---------
-            double actualET = ET(t, assignedVM, capabilityName);
+            double actualET = ET(t, assignedVM);
             if (!Double.isFinite(actualET) || actualET <= 0) {
                 System.err.println("⚠️  Warning: Invalid actualET for task " + t.getID()
                         + " on VM " + assignedVM.getID() + ": " + actualET);
@@ -146,7 +146,7 @@ public class Metrics {
             for (VM vm : vms.values()) {
                 if (vm == null) continue;
 
-                double et = ET(t, vm, capabilityName);
+                double et = ET(t, vm);
                 if (Double.isFinite(et) && et > 0) {
                     fastestET = Math.min(fastestET, et);
                 }

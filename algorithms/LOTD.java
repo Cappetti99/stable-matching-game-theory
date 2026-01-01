@@ -12,7 +12,7 @@ import java.util.*;
  * - Find VMs hosting its successor tasks
  * - Check if VM has available time before successor starts
  * - Duplicate if: duplicate_finish < original_finish + comm_cost
- * 3. Add duplicates to VM schedules (real tasks, not phantom)
+ * 3. Add duplicates to VM schedules
  * 4. Recalculate schedule timing with duplicates
  * 5. Return optimized schedule with duplicates included
  */
@@ -212,7 +212,7 @@ public class LOTD {
      * correct MRT calculation for subsequent tasks.
      */
     private void calculateTaskTiming(int taskId) {
-        task t = getTaskById(taskId);
+        task t = Utility.getTaskById(taskId, tasks);
         Integer vmId = taskToVM.get(taskId);
 
         if (t == null || vmId == null) {
@@ -274,14 +274,7 @@ public class LOTD {
                             ? getCommunicationCost(predId, t.getID(), predVM, vmId)
                             : 0.0;
                     
-                    double newDRT = predAFT + commCost;
-                    
-                    // DEBUG: Log when communication cost causes large delays
-                    if (commCost > 1000 && VERBOSE) {
-                        System.out.println("DEBUG DRT: t" + t.getID() + " waiting for pred t" + predId +
-                            " predAFT=" + predAFT + " commCost=" + commCost + " newDRT=" + newDRT);
-                    }
-                    
+                    double newDRT = predAFT + commCost;                  
                     drt = Math.max(drt, newDRT);
                 }
             }
@@ -317,7 +310,7 @@ public class LOTD {
         }
 
         // Calculate execution time for this task
-        task t = getTaskById(taskId);
+        task t = Utility.getTaskById(taskId, tasks);
         double et = (t != null) ? calculateExecutionTime(t, vmId) : 0.0;
 
         // Try insertion-based scheduling: find the earliest slot where this task fits
@@ -420,7 +413,7 @@ public class LOTD {
      * Step 4: Try to duplicate an entry task onto VMs with its children
      */
     private void tryDuplicateEntryTask(int entryTaskId) {
-        task entryTask = getTaskById(entryTaskId);
+        task entryTask = Utility.getTaskById(entryTaskId, tasks);
         if (entryTask == null || entryTask.getSucc() == null)
             return;
 
@@ -484,7 +477,7 @@ public class LOTD {
      * @return double[] {AST, AFT} if beneficial, null otherwise
      */
     private double[] shouldDuplicate(int entryTaskId, int targetVM, int succId) {
-        task entryTask = getTaskById(entryTaskId);
+        task entryTask = Utility.getTaskById(entryTaskId, tasks);
         Integer originalVM = taskToVM.get(entryTaskId);
 
         if (entryTask == null || originalVM == null)
@@ -661,7 +654,7 @@ public class LOTD {
         }
 
         // Recalculate timing for affected successors
-        task t = getTaskById(taskId);
+        task t = Utility.getTaskById(taskId, tasks);
         if (t != null && t.getSucc() != null) {
             for (Integer succId : t.getSucc()) {
                 Integer succVM = taskToVM.get(succId);
@@ -694,7 +687,7 @@ public class LOTD {
 
             // If timing changed significantly, propagate to successors
             if (Math.abs(newAFT - oldAFT) > 1e-6) {
-                task t = getTaskById(taskId);
+                task t = Utility.getTaskById(taskId, tasks);
                 if (t != null && t.getSucc() != null) {
                     for (Integer succId : t.getSucc()) {
                         queue.offer(succId);
@@ -841,7 +834,7 @@ public class LOTD {
             return 0.0;
 
         // Get bandwidth
-        VM src = getVMById(srcVM);
+        VM src = Utility.getVMById(srcVM, vms);
         if (src == null)
             return 0.0;
 
@@ -855,15 +848,7 @@ public class LOTD {
 
         // Scale by actual bandwidth
         double result = commTimeAtAvg * 25.0 / bandwidth;
-        
-        // DEBUG: Log large communication costs
-        if (result > 1000 && VERBOSE) {
-            System.out.println("DEBUG getCommunicationCost: " + key + 
-                " commTimeAtAvg=" + commTimeAtAvg + 
-                " bandwidth=" + bandwidth + 
-                " result=" + result);
-        }
-        
+    
         return result;
     }
 
@@ -871,7 +856,7 @@ public class LOTD {
      * Calculate execution time of task on VM
      */
     private double calculateExecutionTime(task t, int vmId) {
-        VM vm = getVMById(vmId);
+        VM vm = Utility.getVMById(vmId, vms);
         if (vm == null)
             return t.getSize();
 
@@ -881,75 +866,7 @@ public class LOTD {
 
         return t.getSize() / capacity;
     }
-
-    /**
-     * Get when VM is ready for next task (legacy method, now delegates to execution order)
-     * 
-     * @param vmId          VM to check
-     * @param excludeTaskId Task to exclude from calculation (-1 for new task)
-     * @return The time when VM finishes all currently scheduled tasks
-     * @deprecated Use calculateMachineReadyTime() for proper insertion-based scheduling
-     */
-    @Deprecated
-    private double getVMReadyTime(int vmId, int excludeTaskId) {
-        List<ExecutionSlot> slots = vmExecutionOrder.get(vmId);
-        
-        if (slots == null || slots.isEmpty()) {
-            return 0.0;
-        }
-
-        // Return the finish time of the last scheduled task (excluding the specified task)
-        double maxFinish = 0.0;
-        for (ExecutionSlot slot : slots) {
-            if (slot.taskId != excludeTaskId) {
-                maxFinish = Math.max(maxFinish, slot.aft);
-            }
-        }
-
-        return maxFinish;
-    }
-
-    /**
-     * Topological sort of tasks
-     */
-    private List<task> topologicalSort() {
-        List<task> result = new ArrayList<>();
-        Set<Integer> visited = new HashSet<>();
-        Set<Integer> visiting = new HashSet<>();
-
-        for (task t : tasks) {
-            if (!visited.contains(t.getID())) {
-                topologicalVisit(t.getID(), visited, visiting, result);
-            }
-        }
-
-        Collections.reverse(result);
-        return result;
-    }
-
-    private void topologicalVisit(int taskId, Set<Integer> visited,
-            Set<Integer> visiting, List<task> result) {
-        if (visited.contains(taskId))
-            return;
-
-        visiting.add(taskId);
-        task t = getTaskById(taskId);
-
-        if (t != null && t.getSucc() != null) {
-            for (Integer succId : t.getSucc()) {
-                if (!visited.contains(succId)) {
-                    topologicalVisit(succId, visited, visiting, result);
-                }
-            }
-        }
-
-        visited.add(taskId);
-        visiting.remove(taskId);
-        if (t != null) {
-            result.add(t);
-        }
-    }
-
+    
     /**
      * Get tasks ordered by waitingList order within each DAG level.
      * 
@@ -996,7 +913,7 @@ public class LOTD {
                     
                     Integer taskLevel = taskToLevel.get(taskId);
                     if (taskLevel != null && taskLevel.equals(level)) {
-                        task t = getTaskById(taskId);
+                        task t = Utility.getTaskById(taskId, tasks);
                         if (t != null) {
                             result.add(t);
                             processed.add(taskId);
@@ -1009,7 +926,7 @@ public class LOTD {
             // (shouldn't happen, but defensive programming)
             for (Integer taskId : levelTasks.get(level)) {
                 if (!processed.contains(taskId)) {
-                    task t = getTaskById(taskId);
+                    task t = Utility.getTaskById(taskId, tasks);
                     if (t != null) {
                         result.add(t);
                         processed.add(taskId);
@@ -1025,23 +942,7 @@ public class LOTD {
         return result;
     }
 
-    /**
-     * Helper: get task by ID
-     */
-    private task getTaskById(int taskId) {
-        return smgt.getTaskById(taskId);
-    }
 
-    /**
-     * Helper: get VM by ID
-     */
-    private VM getVMById(int vmId) {
-        for (VM vm : vms) {
-            if (vm.getID() == vmId)
-                return vm;
-        }
-        return null;
-    }
 
     /**
      * Print final state for debugging

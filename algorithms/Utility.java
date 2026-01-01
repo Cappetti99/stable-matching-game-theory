@@ -100,4 +100,40 @@ public class Utility {
         return levelMap;
     }
 
+    /**
+     * Finds a task by ID in the list.
+     *
+     * @param taskId the task ID to search for
+     * @param tasks list of tasks
+     * @return the task with the given ID, or null if not found
+     */
+    public static task getTaskById(int taskId, List<task> tasks) {
+        if (tasks == null) {
+            return null;
+        }
+        return tasks.stream()
+                .filter(t -> t != null && t.getID() == taskId)
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Finds a VM by ID in the list.
+     *
+     * @param vmId the VM ID to search for
+     * @param vms list of VMs
+     * @return the VM with the given ID, or null if not found
+     */
+    public static VM getVMById(int vmId, List<VM> vms) {
+        if (vms == null) {
+            return null;
+        }
+        for (VM vm : vms) {
+            if (vm != null && vm.getID() == vmId) {
+                return vm;
+            }
+        }
+        return null;
+    }
+
 }
