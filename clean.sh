@@ -1,26 +1,26 @@
 #!/bin/bash
-# Script per pulire file compilati e temporanei
+# Script to clean compiled and generated files
 
-echo "🧹 Pulizia file compilati e temporanei..."
+echo "Cleaning compiled and generated files..."
 
-# Rimuovi file .class
-echo "  - Rimozione file .class..."
+# Remove .class files
+echo "  - Removing .class files..."
 find . -name "*.class" -type f -delete
 
-# Rimuovi directory CSV generate da XML (mantieni solo data/ vuoto)
-echo "  - Rimozione CSV generati..."
+# Remove generated CSV directories under data/
+echo "  - Removing generated CSV folders..."
 rm -rf ../data/cybershake_*
 rm -rf ../data/epigenomics_*
 rm -rf ../data/ligo_*
 rm -rf ../data/montage_*
 
-# Rimuovi file temporanei Python
-echo "  - Rimozione cache Python..."
+# Remove Python caches
+echo "  - Removing Python caches..."
 find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null
 find . -name "*.pyc" -type f -delete 2>/dev/null
 
-# Opzionale: rimuovi risultati (decommenta se vuoi)
-# echo "  - Rimozione risultati..."
+# Optional: remove results (uncomment if you want)
+# echo "  - Removing results..."
 # rm -f results/experiments_results.json
 # rm -f results/experiments_results.csv
 # rm -f results/figures/*.png
@@ -28,4 +28,4 @@ find . -name "*.pyc" -type f -delete 2>/dev/null
 # rm -f assets/*.png
 # rm -f assets/*.pdf
 
-echo "✅ Pulizia completata!"
+echo "Done."

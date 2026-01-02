@@ -1,283 +1,258 @@
-# SM-CPTD: Stable Matching Cloud-based Parallel Task Duplication
+# SM-CPTD — Stable Matching Cloud-based Parallel Task Duplication
 
-Implementation of the **SM-CPTD algorithm** for task scheduling in cloud computing environments, based on stable matching game theory.
+SM-CPTD is a three-phase workflow scheduler for heterogeneous clouds:
+1) **DCP** (Dynamic Critical Path) finds the critical path and ranks tasks; 2) **SMGT** (Stable Matching Game Theory) assigns tasks to VMs via stable matching; 3) **LOTD** (List of Task Duplication) duplicates tasks to cut communication delays.
 
-> 📄 **Reference Paper**: *"A stable matching-based algorithm for task scheduling in cloud computing"* - Springer, Journal of Supercomputing (2021)
-
----
-
-## 🎯 Overview
-
-SM-CPTD is a three-phase algorithm that optimizes task scheduling in heterogeneous cloud environments:
-
-1. **DCP** (Dynamic Critical Path) - Identifies and schedules critical path tasks
-2. **SMGT** (Stable Matching Game Theory) - Assigns remaining tasks using stable matching
-3. **LOTD** (List of Task Duplication) - Duplicates tasks to reduce communication overhead
-
-![Algorithm Flow](assets/algorithm_flow.png)
+📄 Reference: *A stable matching-based algorithm for task scheduling in cloud computing* (Journal of Supercomputing, 2021).
 
 ---
 
-## 📁 Project Structure
+# SM-CPTD — Stable Matching + Parallel Task Duplication
 
-```
-stable-matching-game-theory/
-├── algorithms/           # Java implementation
-│   ├── SMCPTD.java      # Main SM-CPTD algorithm
-│   ├── DCP.java         # Dynamic Critical Path
-│   ├── SMGT.java        # Stable Matching Game Theory
-│   ├── LOTD.java        # List of Task Duplication
-│   ├── Main.java        # Entry point
-│   ├── JavaCCRAnalysis.java  # CCR analysis tool
-│   ├── task.java        # Task model
-│   ├── VM.java          # Virtual Machine model
-│   └── Metrics.java     # Performance metrics
-├── generators/           # Python scripts
-│   ├── creareDAG.py     # Generate synthetic DAG
-│   ├── creareMontage.py # Montage workflow generator
-│   ├── creareEpigenomics.py
-│   ├── creareLIGO.py
-│   └── visualize_dag.py # DAG visualization
-├── data/                 # Default dataset
-├── data_test_cybershake/ # CyberShake workflow
-├── data_test_epigenomics/# Epigenomics workflow
-├── data_test_ligo/       # LIGO workflow
-├── data_test_montage/    # Montage workflow
-├── results/              # Analysis results (JSON)
-├── assets/               # Images for documentation
-├── docs/                 # Papers and documentation
-└── cleanup.sh            # Cleanup script
+This repository implements the SM-CPTD workflow scheduler and the experiment code used to reproduce the paper-style figures and metrics.
+
+SM-CPTD is a three-phase pipeline:
+1) DCP (Dynamic Critical Path): identifies a critical path / task priorities
+2) SMGT (Stable Matching Game Theory): assigns tasks to VMs using stable matching
+3) LOTD (List of Task Duplication): duplicates tasks to reduce communication delays
+
+Reference: “A stable matching-based algorithm for task scheduling in cloud computing” (Journal of Supercomputing, 2021).
+
+---
+
+## Quick Start (what to run)
+
+Recommended (one command):
+
+```bash
+./run.sh
 ```
 
+What that script does, in order:
+1) Compiles and runs `PegasusXMLParser` to (re)generate CSV workflows under `data/`
+2) Compiles `Main.java`
+3) Runs `java Main` (forwarding any CLI args)
+4) `Main` calls `ExperimentRunner` and then tries to generate figures using Python (if available)
+
+If you are on Windows, run the bash scripts via WSL or Git Bash, or run the Java commands manually (see below).
+
 ---
 
-## 🚀 Quick Start
+## Manual Run (no bash scripts)
 
-### Prerequisites
-- Java 8+ (JDK)
-- Python 3.x (for generators and visualization)
-
-### 1. Compile the algorithms
+Compile Java:
 
 ```bash
 cd algorithms
 javac *.java
 ```
 
-### 2. Run with default dataset
+Generate workflow CSVs (optional — runners also auto-generate as needed):
 
 ```bash
+cd algorithms
+java PegasusXMLParser
+```
+
+Run the main experiments:
+
+```bash
+cd algorithms
 java Main
 ```
 
-### 3. Run CCR Analysis on scientific workflows
+---
+
+## Data Flow (extremely explicit)
+
+When you run experiments, the data flows like this:
+
+1) XML workflows (input)
+	 - Stored in `workflow/<name>/*.xml`
+	 - Examples: `workflow/montage/Montage_100.xml`, `workflow/cybershake/CyberShake_50.xml`
+
+2) XML → CSV conversion
+	 - `algorithms/PegasusXMLParser.java` converts a chosen XML into a folder like:
+		 - `data/<workflow>_<tasks>/task.csv`
+		 - `data/<workflow>_<tasks>/dag.csv`
+		 - `data/<workflow>_<tasks>/processing_capacity.csv`
+		 - `data/<workflow>_<tasks>/bandwidth.csv`
+
+3) CSV → in-memory objects
+	 - `algorithms/DataLoader.java` loads:
+		 - task IDs + DAG edges (predecessors/successors)
+		 - VM IDs
+	 - Important: the numeric values in the CSVs are not used as “real” values by the Java runs.
+
+4) Randomized numeric model (important assumption)
+	 - Even though the CSVs contain numbers, `DataLoader` generates the numeric values uniformly at random:
+		 - task size in [500, 700]
+		 - VM capacity in [10, 20]
+		 - bandwidth in [20, 30]
+	 - This is deterministic by default due to `SeededRandom` (see “Reproducibility”).
+
+5) Scheduling + metrics
+	 - `SMCPTD.executeSMCPTD(...)` runs DCP → SMGT → LOTD
+	 - `Metrics` computes SLR, AVU, VF, etc.
+
+---
+
+## Reproducibility (seeded randomness)
+
+By default runs are deterministic.
+
+- Set the seed explicitly:
 
 ```bash
-# Available workflows: montage, cybershake, ligo, epigenomics
-java JavaCCRAnalysis montage
-java JavaCCRAnalysis cybershake
-java JavaCCRAnalysis ligo
-java JavaCCRAnalysis epigenomics
-```
-
----
-
-## 📊 Algorithm Details
-
-### Phase 1: DCP (Dynamic Critical Path)
-
-```
-1. Calculate rank(ti) = ET(ti) + max{rank(tj) + Ttrans(ti,tj)} for all tasks
-2. For each level l:
-   - Select task with maximum rank → Critical Path
-3. Schedule CP tasks to VM with minimum Finish Time
-```
-
-### Phase 2: SMGT (Stable Matching Game Theory)
-
-```
-1. For each level l:
-   - Tl = {tasks in level l} \ CP  (exclude Critical Path tasks)
-   - Calculate threshold θ = |Tl| / |V|
-   - Apply stable matching with threshold
-   - Tasks propose to VMs based on Execution Time
-```
-
-### Phase 3: LOTD (List of Task Duplication)
-
-```
-1. For each level 0 task ti:
-   - VM_candidates = {VMs where successors of ti are assigned}
-   - For each candidate VM:
-     - Find idle slot before successor's start time
-     - Verify Rule 2: AFT_new ≤ AFT_old (don't delay other tasks)
-     - If valid: duplicate ti to VM
-```
-
----
-
-## 📈 Performance Metrics
-
-| Metric | Formula | Description |
-|--------|---------|-------------|
-| **Makespan** | `max{FT(ti)}` | Total execution time |
-| **SLR** | `makespan / Σmin{ET(ti,VMk)}` | Schedule Length Ratio (lower = better) |
-| **Speedup** | `sequential_time / makespan` | Parallelization efficiency |
-| **AVU** | `Σ(busy_time/makespan) / num_VMs` | Average VM Utilization |
-| **VF** | `Variance(task_satisfaction)` | Variance of Fairness |
-
-### Key Formulas
-
-- **Execution Time**: `ET(ti, VMk) = si / pk` (task size / VM capacity)
-- **Start Time**: `ST(ti, VMk) = max{FT(predecessor) + Ttrans}`
-- **Finish Time**: `FT(ti, VMk) = ST + ET`
-- **Transfer Time**: `Ttrans(ti, tj) = 0` if same VM, else `data_size / bandwidth`
-
----
-
-## 🔍 NEW: CCR Sensitivity Analysis
-
-**Automatically analyze how CCR (Communication-to-Computation Ratio) affects algorithm behavior!**
-
-### What It Analyzes
-
-1. **Communication Costs** - How edge weights scale with CCR
-2. **Critical Path Stability** - Which tasks remain in CP across CCR values
-3. **Task Duplication Decisions** - LOTD duplication patterns
-4. **Metrics Elasticity** - SLR, AVU, Makespan sensitivity
-
-### Quick Start
-
-```bash
-# Step 1: Run experiments (CCR analysis auto-enabled)
 cd algorithms
-./run.sh
-
-# Step 2: Generate visualizations
-cd ../generators
-python3 analyze_ccr_sensitivity.py
+java Main --seed=123
 ```
 
-### Output
+- The experiment runners also vary a run index internally to create multiple runs with different generated values.
 
-The system generates **4 types of visualizations**:
+If you truly want non-deterministic randomness, `algorithms/Main.java` contains a commented line you can enable:
 
-1. **Communication Cost Distribution** - Shows min/max/mean costs vs CCR
-2. **Critical Path Stability Heatmap** - Reveals which tasks stay in CP
-3. **Duplication Sensitivity Plot** - Tracks duplication decisions
-4. **Sensitivity Scorecard** - Comprehensive metrics comparison
-
-**Example Output:**
+```java
+// SeededRandom.setUseSeed(false);
 ```
-📊 CYBERSHAKE (50 tasks, 5 VMs)
-   CP Stability: 100.0% ✅ (CP never changes)
-   SLR Change: 6.44% (CCR 0.4→2.0)
-   Duplication Increase: 0 tasks
-   Sensitivity Class: LOW
-```
-
-### Generated Files
-
-- `results/ccr_sensitivity/*.json` - Analysis data
-- `results/figures/ccr_comm_costs_distribution_*.png` - Cost plots
-- `results/figures/ccr_critical_path_stability_*.png` - CP heatmaps
-- `results/figures/ccr_duplication_analysis_*.png` - Duplication plots
-- `results/figures/ccr_sensitivity_scorecard_*.png` - Scorecards
-
-**📖 Full Documentation**: See [`docs/CCR_SENSITIVITY_ANALYSIS.md`](docs/CCR_SENSITIVITY_ANALYSIS.md)
 
 ---
 
-## 🔬 Supported Scientific Workflows
+## What Each Entry Point Does
 
-| Workflow | Domain | Structure | Tasks |
-|----------|--------|-----------|-------|
-| **Montage** | Astronomy | Pipeline + parallel | 50 |
-| **CyberShake** | Seismology | Fork-join | 50 |
-| **LIGO** | Gravitational waves | Pipeline | 50 |
-| **Epigenomics** | Bioinformatics | Complex DAG | 50 |
+### Main
 
-### Generate new workflow data
+- File: `algorithms/Main.java`
+- Calls `ExperimentRunner.main(args)`
+- Then attempts to run `generators/generate_paper_figures.py --auto` if Python + `pandas` are available
+
+### ExperimentRunner (paper reproduction)
+
+- File: `algorithms/ExperimentRunner.java`
+- Runs two experiment families and writes results to `results/`:
+
+Experiment 1 (CCR sweep; paper Figures 3–8 style):
+- For each workflow and each CCR in {0.4, 0.6, …, 2.0}, run SM-CPTD and record metrics.
+
+Experiment 2 (VM-count sweep; paper Figures 9–10 style):
+- Fix CCR = 1.0 and vary VM count in {30, 35, …, 70}.
+
+CLI flags:
+
+```bash
+cd algorithms
+java ExperimentRunner            # run both experiments
+java ExperimentRunner --exp1     # CCR sweep only
+java ExperimentRunner --exp2     # VM-count sweep only
+java ExperimentRunner --workflow=montage
+```
+
+CCR sensitivity snapshots:
+- During Experiment 1, `CCRAnalyzer` captures extra data per CCR value and writes JSON under:
+	- `results/ccr_sensitivity/<workflow>_<experiment>_analysis.json`
+
+### AblationExperimentRunner (component ablation)
+
+- File: `algorithms/AblationExperimentRunner.java`
+- Runs the same workflow with 4 variants:
+	1) SMGT only
+	2) DCP + SMGT
+	3) SMGT + LOTD
+	4) Full SM-CPTD
+
+```bash
+cd algorithms
+java AblationExperimentRunner
+```
+
+---
+
+## Metrics (what they mean in this code)
+
+- Makespan: total schedule length (max VM finish time)
+- SLR: makespan normalized by a critical-path baseline
+- AVU: Average VM Utilization across the makespan
+- VF: Variance of (per-task) satisfaction / fairness proxy (lower is “fairer”)
+
+Task duplication note:
+- LOTD can schedule the same logical task multiple times on different VMs.
+- In this project’s interpretation, duplicated executions are real work and should be counted as work when computing utilization/fairness.
+
+---
+
+## Outputs (what files you should expect)
+
+Generated data (created on demand):
+- `data/<workflow>_<tasks>/...` (CSV files generated from XML)
+
+Experiment results:
+- `results/experiments_results.json` (always)
+- `results/experiments_results.csv` (written by `ExperimentRunner`)
+- `results/ccr_sensitivity/` (created when running Experiment 1)
+
+Figures:
+- `results/figures/*.png` created by `generators/generate_paper_figures.py`
+
+---
+
+## Python Figure Generation
+
+Scripts are in `generators/`:
+- `generate_paper_figures.py`: reads `results/experiments_results.json` and writes plots under `results/figures/`
+- `analyze_ccr_sensitivity.py`: consumes `results/ccr_sensitivity/*.json`
+- `visualize_dag.py`: workflow visualization utility
+
+Install dependencies if needed:
+
+```bash
+pip3 install pandas matplotlib
+```
+
+Run manually:
 
 ```bash
 cd generators
-python3 creareMontage.py     # Generate Montage workflow
-python3 creareEpigenomics.py # Generate Epigenomics workflow
-python3 creareLIGO.py        # Generate LIGO workflow
+python3 generate_paper_figures.py --auto
 ```
 
 ---
 
-## 📋 Results
+## Repo Structure (as in this workspace)
 
-CCR Analysis results are stored in `results/` folder as JSON files:
-
-```json
-{
-  "workflow_type": "montage",
-  "parameters": { "target_tasks": 50, "target_vms": 5 },
-  "results": [
-    { "ccr": 0.4, "slr": 2.054, "makespan": 15.20 },
-    { "ccr": 1.0, "slr": 2.064, "makespan": 15.28 },
-    { "ccr": 2.0, "slr": 2.081, "makespan": 15.40 }
-  ]
-}
+```
+stable-matching-game-theory/
+├── algorithms/                 Java sources
+│   ├── Main.java               Entry point: runs ExperimentRunner and optional figures
+│   ├── ExperimentRunner.java   Paper experiments (CCR sweep + VM sweep)
+│   ├── AblationExperimentRunner.java  Ablation study runner
+│   ├── SMCPTD.java             Full pipeline (DCP → SMGT → LOTD)
+│   ├── DCP.java, SMGT.java, LOTD.java Core algorithms
+│   ├── CCRAnalyzer.java        CCR sensitivity capture + JSON output
+│   ├── DataLoader.java         Loads DAG structure; generates random sizes/capacities/bw
+│   ├── PegasusXMLParser.java   Converts Pegasus XML → CSV folders under data/
+│   ├── Metrics.java            SLR/AVU/VF and communication cost helpers
+│   ├── VM.java, task.java      Core models
+│   └── Utility.java            Shared helpers
+├── generators/                 Python plotting and analysis
+├── workflow/                   Input XML workflows
+├── results/                    Saved results and generated figures
+├── run.sh                      Bash: generate data → compile → run Main
+└── clean.sh                    Bash: remove .class and generated data folders
 ```
 
-### CCR Analysis Results
+---
 
-![SM-CPTD Results](assets/smcptd_real_results.png)
+## Maintenance
 
-The plot shows **SLR (Schedule Length Ratio)** vs **CCR (Communication-to-Computation Ratio)** for all 4 scientific workflows. Key observations:
-
-- **Epigenomics** achieves the best SLR (~1.85) due to its complex structure allowing better parallelization
-- All workflows show **linear correlation** between CCR and SLR (expected behavior)
-- SLR increase is contained to **1-2%** even when doubling CCR, demonstrating SM-CPTD's robustness
-
-### Results Summary
-
-| Workflow | SLR Range | Makespan Range | SLR Increase |
-|----------|-----------|----------------|--------------|
-| Montage | 2.05 → 2.08 | 15.2 → 15.4 | +1.3% |
-| CyberShake | 2.12 → 2.15 | 11.8 → 11.9 | +1.5% |
-| LIGO | 2.03 → 2.07 | 12.0 → 12.2 | +1.7% |
-| Epigenomics | 1.85 → 1.87 | 18.0 → 18.2 | +1.0% |
-
-### Regenerate plots
+Remove compiled Java classes and generated CSV workflow folders:
 
 ```bash
-python3 generators/plot_ccr_comparison.py
+./clean.sh
 ```
 
 ---
 
-## 🧹 Maintenance
+## References
 
-Clean compiled files and generated outputs:
-
-```bash
-./cleanup.sh
-```
-
----
-
-## 📚 References
-
-- Original Paper: `docs/s11227-021-03742-3.pdf`
-- QESM Paper: `docs/QESM.pdf`
-
----
-
-## 👤 Author
-
-**Lorenzo Cappetti**
-
----
-
-## 📝 License
-
-This project is for educational and research purposes.
-
-## 🛠️ Sviluppo
-
-Per contribuire al progetto, seguire la struttura delle cartelle e documentare le modifiche.
+- docs/s11227-021-03742-3.pdf
+- docs/QESM.pdf

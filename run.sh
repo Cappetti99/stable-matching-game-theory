@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-# Esegui sempre dalla root del repo (indipendente dalla cwd)
+# Always run from the repo root (independent of current working directory)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$SCRIPT_DIR"
 
@@ -11,45 +11,44 @@ echo "║     SM-CPTD PAPER EXPERIMENTS - Full Benchmark Suite          ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 
-# Vai nella directory degli algoritmi
+# Go to the algorithms directory
 cd "$REPO_ROOT/algorithms"
 
-echo "📊 Generazione dati workflow con parametri del paper..."
-echo "   - Task sizes: [500, 700] distribuzione uniforme"
-echo "   - VM capacities: [10, 20] distribuzione uniforme"
-echo "   - Bandwidth: [20, 30] distribuzione uniforme"
+echo "Generating workflow data with the paper parameters..."
+echo "   - Task sizes: [500, 700] uniform"
+echo "   - VM capacities: [10, 20] uniform"
+echo "   - Bandwidth: [20, 30] uniform"
 echo ""
 
 javac PegasusXMLParser.java
 java PegasusXMLParser > /dev/null 2>&1
 
 if [ $? -ne 0 ]; then
-    echo "❌ Errore nella generazione dei dati!"
+    echo "Error generating data."
     exit 1
 fi
 
-echo "✅ Dati generati con successo!"
+echo "Data generated successfully."
 echo ""
 
-echo "🔨 Compilazione in corso..."
+echo "Compiling..."
 javac Main.java 2>&1
 
 if [ $? -ne 0 ]; then
-    echo "❌ Errore di compilazione!"
+    echo "Compilation error."
     exit 1
 fi
 
-echo "✅ Compilazione completata!"
+echo "Compilation completed."
 echo ""
-echo "🚀 Avvio esperimenti..."
+echo "Running experiments..."
 echo ""
 
 # Entry point: Main -> ExperimentRunner
-# Puoi passare parametri, ad es:
+# You can pass parameters, e.g.:
 #   ./run.sh --exp1
 #   ./run.sh --exp2
 #   ./run.sh --workflow=cybershake
-#   ./run.sh test_single
 #   ./run.sh --seed 123
 java Main "$@"
 
@@ -57,14 +56,14 @@ exit_code=$?
 
 echo ""
 if [ $exit_code -eq 0 ]; then
-    echo "✅ Esecuzione completata con successo!"
+    echo "Run completed successfully."
     echo ""
-    echo "📁 Risultati salvati in:"
+    echo "Outputs written to:"
     echo "   - results/experiments_results.csv"
     echo "   - results/experiments_results.json"
-    echo "   - results/figures/ (grafici, opzionale: richiede dipendenze Python)"
+    echo "   - results/figures/ (optional; requires Python dependencies)"
 else
-    echo "⚠️  Esecuzione completata con codice $exit_code"
+    echo "Run finished with exit code $exit_code"
 fi
 
 exit $exit_code

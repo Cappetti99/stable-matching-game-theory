@@ -4,20 +4,20 @@ import javax.xml.parsers.*;
 import org.w3c.dom.*;
 
 /**
- * Parser per file XML Pegasus DAX
- * Converte workflow CyberShake ed Epigenomics in formato CSV per SM-CPTD
- * 
- * IMPORTANTE: I valori numerici nei CSV generati (task sizes, VM capacities, bandwidth)
- * vengono IGNORATI da DataLoader, che genera valori con distribuzione uniforme:
+ * Parser for Pegasus DAX XML files.
+ * Converts CyberShake and Epigenomics workflows to CSV for SM-CPTD.
+ *
+ * IMPORTANT: The numeric values in the generated CSVs (task sizes, VM capacities, bandwidth)
+ * are ignored by DataLoader, which produces uniform random values:
  * - Task sizes: [500, 700] MIPS (uniform)
  * - VM capacities: [10, 20] MIPS (uniform)
  * - Bandwidth: [20, 30] Mbps (uniform)
- * 
- * I CSV sono usati SOLO per:
- * - Struttura del DAG (predecessori/successori)
- * - Numero e ID di task e VM
- * 
- * Input: file .xml Pegasus DAX
+ *
+ * The CSVs are used ONLY for:
+ * - DAG structure (predecessors/successors)
+ * - Task and VM counts/IDs
+ *
+ * Input: Pegasus DAX .xml file
  * Output: task.csv, dag.csv, vm.csv, processing_capacity.csv, bandwidth.csv
  */
 public class PegasusXMLParser {
@@ -41,10 +41,10 @@ public class PegasusXMLParser {
         Document doc = builder.parse(new File(xmlFile));
         doc.getDocumentElement().normalize();
         
-        // Estrai nome workflow
+        // Extract workflow name
         String workflowName = new File(xmlFile).getName().replace(".xml", "");
         
-        // Estrai job
+        // Extract jobs
         NodeList jobNodes = doc.getElementsByTagName("job");
         Map<String, Job> jobs = new HashMap<>();
         Map<String, Integer> jobIdToTaskId = new HashMap<>();
@@ -59,7 +59,7 @@ public class PegasusXMLParser {
             String runtimeStr = jobElement.getAttribute("runtime");
             job.runtime = runtimeStr.isEmpty() ? 10.0 : Double.parseDouble(runtimeStr);
             
-            // Estrai file uses
+            // Extract file uses
             NodeList usesNodes = jobElement.getElementsByTagName("uses");
             for (int j = 0; j < usesNodes.getLength(); j++) {
                 Element useElement = (Element) usesNodes.item(j);
@@ -83,7 +83,7 @@ public class PegasusXMLParser {
         
         System.out.println("  ✓ Jobs parsed: " + jobs.size());
         
-        // Costruisci DAG dalle dipendenze implicite (output-input)
+        // Build DAG from implicit dependencies (producer output -> consumer input)
         Map<String, List<String>> fileProducers = new HashMap<>();
         Map<String, List<String>> fileConsumers = new HashMap<>();
         
@@ -98,12 +98,12 @@ public class PegasusXMLParser {
             }
         }
         
-        // Estrai child dependencies (se presenti)
+        // Extract child dependencies if present
         List<int[]> edges = new ArrayList<>();
         NodeList childNodes = doc.getElementsByTagName("child");
         
         if (childNodes.getLength() > 0) {
-            // Usa le dipendenze esplicite dal XML
+            // Use explicit dependencies from the XML
             for (int i = 0; i < childNodes.getLength(); i++) {
                 Element childElement = (Element) childNodes.item(i);
                 String childId = childElement.getAttribute("ref");
@@ -122,7 +122,7 @@ public class PegasusXMLParser {
                 }
             }
         } else {
-            // Ricostruisci dipendenze da file input/output
+            // Reconstruct dependencies from input/output file relationships
             for (Map.Entry<String, List<String>> entry : fileProducers.entrySet()) {
                 String file = entry.getKey();
                 List<String> producers = entry.getValue();
@@ -146,29 +146,29 @@ public class PegasusXMLParser {
         // Crea directory output
         new File(outputDir).mkdirs();
         
-        // Scrivi task.csv
+        // Write task.csv
         // Paper: task sizes uniformly distributed in [500, 700]
         Random taskRand = SeededRandom.forScope("PegasusXMLParser.taskSizes:" + xmlFile + ":" + numVMs);
         try (PrintWriter writer = new PrintWriter(new FileWriter(outputDir + "/task.csv"))) {
             writer.println("id,size");
             for (Map.Entry<String, Job> entry : jobs.entrySet()) {
                 int id = jobIdToTaskId.get(entry.getKey());
-                // Genera size secondo paper: [500, 700] uniforme
+                // Generate sizes per paper: uniform in [500, 700]
                 double size = 500.0 + taskRand.nextDouble() * 200.0;
                 writer.printf(Locale.US, "%.0f,%.2f\n", (double)id, size);
             }
         }
         
-        // Scrivi dag.csv con costi comunicazione basati su file size
+        // Write dag.csv with communication costs based on file size
         Set<String> edgeSet = new HashSet<>();
         try (PrintWriter writer = new PrintWriter(new FileWriter(outputDir + "/dag.csv"))) {
             writer.println("pred,succ,data");
             
-            // Rimuovi duplicati
+            // Remove duplicates
             for (int[] edge : edges) {
                 String edgeKey = edge[0] + "-" + edge[1];
                 if (edgeSet.add(edgeKey)) {
-                    // Calcola data transfer (usa media file size / 1MB come unità)
+                    // Compute data transfer (average file size divided by 1MB as unit)
                     Job predJob = jobs.values().stream()
                         .filter(j -> jobIdToTaskId.get(j.id) == edge[0])
                         .findFirst().orElse(null);
@@ -183,7 +183,7 @@ public class PegasusXMLParser {
             }
         }
         
-        // Scrivi vm.csv
+        // Write vm.csv
         try (PrintWriter writer = new PrintWriter(new FileWriter(outputDir + "/vm.csv"))) {
             writer.println("id");
             for (int i = 0; i < numVMs; i++) {
@@ -191,7 +191,7 @@ public class PegasusXMLParser {
             }
         }
         
-        // Scrivi processing_capacity.csv
+        // Write processing_capacity.csv
         // VM processing capacities uniformly distributed in [10, 20]
         Random vmRand = SeededRandom.forScope("PegasusXMLParser.vmCapacity:" + xmlFile + ":" + numVMs);
         try (PrintWriter writer = new PrintWriter(new FileWriter(outputDir + "/processing_capacity.csv"))) {
@@ -202,7 +202,7 @@ public class PegasusXMLParser {
             }
         }
         
-        // Scrivi bandwidth.csv
+        // Write bandwidth.csv
         // Paper: bandwidth between VMs uniformly distributed in [20, 30]
         Random bwRand = SeededRandom.forScope("PegasusXMLParser.bandwidth:" + xmlFile + ":" + numVMs);
         try (PrintWriter writer = new PrintWriter(new FileWriter(outputDir + "/bandwidth.csv"))) {
@@ -213,7 +213,7 @@ public class PegasusXMLParser {
                         // Bandwidth to self = 0 (no communication needed)
                         writer.printf(Locale.US, "%d,%d,0.00\n", i, j);
                     } else {
-                        // [20, 30] uniforme
+                        // [20, 30] uniform
                         double bandwidth = 20.0 + bwRand.nextDouble() * 10.0;
                         writer.printf(Locale.US, "%d,%d,%.2f\n", i, j, bandwidth);
                     }

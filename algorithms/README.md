@@ -1,56 +1,56 @@
-# Algoritmi di Stable Matching
+# Stable Matching Algorithms
 
-Questa cartella contiene l'implementazione degli algoritmi di stable matching per workflow scheduling.
+This folder contains the stable-matching-based workflow scheduling algorithms.
 
-## 📋 File Principali
+## 📋 Key Files
 
-- `Main.java` - Programma principale e coordinatore algoritmi
-- `DCP.java` - Algoritmo Dominant Critical Path
-- `SMGT.java` - Algoritmo Stable Matching Game Theory
-- `LOTD.java` - Algoritmo List of Task Duplication
-- `Metrics.java` - Calcolo metriche di performance
-- `VM.java` - Classe per gestione Virtual Machine
-- `task.java` - Classe per gestione task
+- `Main.java` - Entry point and algorithm coordinator
+- `DCP.java` - Dominant Critical Path algorithm
+- `SMGT.java` - Stable Matching Game Theory scheduler
+- `LOTD.java` - List of Task Duplication optimizer
+- `Metrics.java` - Performance metrics
+- `VM.java` - Virtual Machine model
+- `task.java` - Task model
 
-## 🚀 Esecuzione
+## 🚀 Running
 
 ```bash
-# Compilazione
+# Compile
 javac *.java
 
-# Esecuzione
+# Run
 java Main
 ```
 
-## 📊 Algoritmi Implementati
+## 📊 Implemented Algorithms
 
 ### DCP (Dominant Critical Path)
-- Identifica il cammino critico del DAG
-- Calcola task priority tramite rank
-- Ottimizza il makespan del workflow
+- Identifies the DAG critical path
+- Ranks tasks by priority
+- Minimizes workflow makespan
 
 ### SMGT (Stable Matching Game Theory)
-- Approccio basato su teoria dei giochi
-- Matching stabile tra task e VM
-- Considera preferenze reciproche
+- Game-theory-based matching
+- Stable matching between tasks and VMs
+- Respects mutual preferences
 
 ### LOTD (List of Task Duplication)
-- Duplicazione intelligente dei task
-- Riduzione tempo comunicazione
-- Ottimizzazione scheduling
+- Intelligent task duplication
+- Reduces communication time
+- Improves schedule quality
 
-## 📈 Metriche Calcolate
+## 📈 Metrics
 
-- **Makespan** - Tempo totale di esecuzione
+- **Makespan** - Total execution time
 - **SLR** - Scheduling Length Ratio
 - **AVU** - Average VM Utilization
 - **VF** - Variance of Fairness
 
-## 📁 Input Richiesti
+## 📁 Required Inputs
 
-Gli algoritmi leggono i seguenti file CSV dalla cartella `../data/`:
+Algorithms read the following CSV files from `../data/`:
 
-- `task.csv` - Lista task con dimensioni
-- `dag.csv` - Dipendenze tra task
-- `vm.csv` - Matrice bandwidth tra VM
-- `processing_capacity.csv` - Capacità elaborazione VM
+- `task.csv` - Task list with sizes
+- `dag.csv` - Task dependencies
+- `vm.csv` - Bandwidth matrix between VMs
+- `processing_capacity.csv` - VM processing capacities

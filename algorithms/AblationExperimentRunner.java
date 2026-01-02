@@ -552,7 +552,7 @@ public class AblationExperimentRunner {
             taskAssignments.put(vmIdx, vmTasks);
         }
         
-        return Metrics.AVU(vmMap, taskAssignments, makespan, "processingCapacity");
+        return Metrics.AVU(vmMap, taskAssignments, makespan);
     }
     
     private static double calculateVF(SMGT smgt, Map<Integer, List<Integer>> assignments, double makespan) {
@@ -588,7 +588,7 @@ public class AblationExperimentRunner {
             taskAssignments.put(vmIdx, tasks);
         }
         
-        double vf = Metrics.VF(smgt.getTasks(), vmMap, taskAssignments, "processingCapacity");
+        double vf = Metrics.VF(smgt.getTasks(), vmMap, taskAssignments);
         return Double.isNaN(vf) || Double.isInfinite(vf) ? Double.NaN : vf;
     }
     

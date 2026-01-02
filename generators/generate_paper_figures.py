@@ -6,10 +6,10 @@ import sys
 from pathlib import Path
 
 # ============================================================================
-# CONFIGURAZIONE
+# CONFIGURATION
 # ============================================================================
 
-# Stili per gli algoritmi (quando avrai più algoritmi)
+# Styles for algorithms (useful if/when adding more algorithms)
 ALGO_STYLES = {
     'SM-CPTD': {'color': '#1f77b4', 'marker': 'o', 'linewidth': 2.5, 
                 'markersize': 8, 'linestyle': '-', 'zorder': 5, 'label': 'SM-CPTD'},
@@ -23,7 +23,7 @@ ALGO_STYLES = {
                 'markersize': 9, 'linestyle': '--', 'zorder': 2, 'label': 'Min-Min'}
 }
 
-# Stili per gli algoritmi dell'ablation study (Figure 12)
+# Styles for ablation study (Figure 12)
 ABLATION_STYLES = {
     'SM_CPTD': {'color': '#1f77b4', 'marker': 'o', 'linewidth': 2.0,
                 'markersize': 7, 'linestyle': '-', 'zorder': 4, 'label': 'SM-CPTD'},
@@ -46,17 +46,17 @@ WORKFLOW_TITLES = {
 CCR_VALUES = [0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0]
 
 # ============================================================================
-# FUNZIONI DI CARICAMENTO DATI
+# DATA LOADING
 # ============================================================================
 
 def load_experiments_data(filepath='../results/experiments_results.json'):
-    """Carica dati da experiments_results.json"""
+    """Load data from experiments_results.json"""
     with open(filepath, 'r') as f:
         data = json.load(f)
     return pd.DataFrame(data['experiments'])
 
 def load_ablation_data(filepath='../results/ablation_study.json'):
-    """Carica dati da ablation_study.json (Figure 12)"""
+    """Load data from ablation_study.json (Figure 12)"""
     try:
         with open(filepath, 'r') as f:
             data = json.load(f)
@@ -66,7 +66,7 @@ def load_ablation_data(filepath='../results/ablation_study.json'):
         return None
 
 def load_ccr_analysis(workflow_type):
-    """Carica dati da ccr_analysis_results_{workflow}.json"""
+    """Load data from ccr_analysis_results_{workflow}.json (if present)."""
     filepath = f'../algorithms/ccr_analysis_results_{workflow_type}.json'
     try:
         with open(filepath, 'r') as f:
@@ -78,10 +78,10 @@ def load_ccr_analysis(workflow_type):
 
 def prepare_data_for_plotting(experiment_name='EXP1_SMALL', algorithm='SM-CPTD'):
     """
-    Prepara dati per plotting in formato richiesto
+    Prepare data for plotting in the expected format.
     
     Returns:
-        dict strutturato come:
+        dict shaped like:
         {
             'montage': {
                 'SM-CPTD': {'CCR': [...], 'SLR': [...], 'AVU': [...]},
@@ -90,13 +90,13 @@ def prepare_data_for_plotting(experiment_name='EXP1_SMALL', algorithm='SM-CPTD')
             ...
         }
     """
-    # Carica dati principali
+    # Load main results
     df = load_experiments_data()
     
-    # Filtra per esperimento
+    # Filter by experiment
     df_filtered = df[df['experiment'] == experiment_name].copy()
     
-    # Organizza per workflow
+    # Group by workflow
     results = {}
     
     for workflow in WORKFLOW_ORDER:
@@ -106,10 +106,10 @@ def prepare_data_for_plotting(experiment_name='EXP1_SMALL', algorithm='SM-CPTD')
             print(f"Warning: No data for {workflow} in {experiment_name}")
             continue
         
-        # Ordina per CCR
+        # Sort by CCR
         workflow_data = workflow_data.sort_values('ccr')
         
-        # Estrai info su tasks e VMs (primo record, sono costanti per workflow/experiment)
+        # Extract tasks/VMs info (constant per workflow/experiment)
         tasks = int(workflow_data['tasks'].iloc[0])
         vms = int(workflow_data['vms'].iloc[0])
         
@@ -174,7 +174,7 @@ def plot_slr_vs_ccr(data, scale='small', output_filename='figure3_slr_vs_ccr.png
                    linestyle=style.get('linestyle', '-'),
                    zorder=style.get('zorder', 3))
         
-        # Configurazione assi
+        # Axes configuration
         ax.set_xlabel('CCR', fontsize=11)
         ax.set_ylabel('SLR', fontsize=11)
         ax.set_title(f'{WORKFLOW_TITLES[workflow]} ({tasks}×{vms})', fontsize=12, fontweight='bold')
@@ -182,11 +182,11 @@ def plot_slr_vs_ccr(data, scale='small', output_filename='figure3_slr_vs_ccr.png
         # Grid
         ax.grid(True, linestyle='--', alpha=0.3, color='gray', linewidth=0.5)
         
-        # Legenda
+        # Legend
         ax.legend(loc='upper left', fontsize=9, framealpha=0.9, 
                  edgecolor='black', fancybox=False)
         
-        # Limiti assi
+        # Axis limits
         ax.set_xlim(0.35, 2.05)
         ax.set_xticks(CCR_VALUES)
         
@@ -330,7 +330,7 @@ def plot_vf_vs_workflow(
 
     df = load_experiments_data()
 
-    # Filtra per experiment, vms e ccr (non per tasks, perché varia per workflow)
+    # Filter by experiment, VMs and CCR (not by tasks, because tasks vary by workflow)
     df_filt = df[
         (df['experiment'] == experiment) &
         (df['vms'] == vms_target) &
@@ -409,7 +409,7 @@ def plot_avg_satisfaction_vs_workflow(
 
     df = load_experiments_data()
 
-    # Filtra per experiment, vms e ccr (non per tasks, perché varia per workflow)
+    # Filter by experiment, VMs and CCR (not by tasks, because tasks vary by workflow)
     df_filt = df[
         (df['experiment'] == experiment) &
         (df['vms'] == vms_target) &
@@ -465,15 +465,15 @@ def plot_avg_satisfaction_vs_workflow(
     print(f"Saved: {output_path}")
 
 # ============================================================================
-# FUNZIONI DI PLOTTING - FIGURA 9, 10 (VM Effect - Experiment 2)
+# PLOTTING FUNCTIONS - FIGURES 9, 10 (VM Effect - Experiment 2)
 # ============================================================================
 
 def prepare_exp2_data(algorithm='SM-CPTD'):
     """
-    Prepara dati Esperimento 2 (VM Effect) per plotting
+    Prepare Experiment 2 (VM Effect) data for plotting.
     
     Returns:
-        dict strutturato come:
+        dict shaped like:
         {
             'montage': {
                 'SM-CPTD': {'VMs': [...], 'SLR': [...], 'AVU': [...]},
@@ -482,13 +482,13 @@ def prepare_exp2_data(algorithm='SM-CPTD'):
             ...
         }
     """
-    # Carica dati principali
+    # Load main results
     df = load_experiments_data()
     
-    # Filtra per EXP2_VM
+    # Filter for EXP2_VM
     df_filtered = df[df['experiment'] == 'EXP2_VM'].copy()
     
-    # Organizza per workflow
+    # Group by workflow
     results = {}
     
     for workflow in WORKFLOW_ORDER:
@@ -498,10 +498,10 @@ def prepare_exp2_data(algorithm='SM-CPTD'):
             print(f"Warning: No EXP2 data for {workflow}")
             continue
         
-        # Ordina per numero di VM
+        # Sort by VM count
         workflow_data = workflow_data.sort_values('vms')
         
-        # Estrai info su tasks e CCR (primo record, sono costanti per workflow in EXP2)
+        # Extract tasks/CCR info (constant per workflow in EXP2)
         tasks = int(workflow_data['tasks'].iloc[0])
         ccr = float(workflow_data['ccr'].iloc[0])
         
@@ -725,11 +725,11 @@ def plot_avu_vs_vms(data, output_filename='figure10_avu_vs_vms.png'):
             ax.set_xlim(vm_min - 2, vm_max + 2)
             ax.set_xticks(vms_vals)
             
-            # AVU sempre 0-100% ma con auto-scale più preciso
+            # AVU is always 0-100% (percentage), but use a tighter autoscale
             if len(avu_vals) > 0:
                 y_max = max([max([v * 100 for v in algo_data['AVU']]) 
                             for key, algo_data in workflow_results.items() if key != 'info'])
-                # Usa range dinamico ma almeno fino a 10%
+                # Use dynamic range but at least up to 10%
                 ax.set_ylim(0, max(y_max * 1.2, 10))
     
     plt.tight_layout()
@@ -1035,9 +1035,9 @@ def generate_all_figures():
         print("  ⚠️  No EXP2_VM data found, skipping Figures 9-10")
     
     print("\n" + "="*70)
-    print("✅ COMPLETATO! Tutti i grafici sono stati generati.")
+    print("Done. All figures have been generated.")
     print("="*70)
-    print("\nFile generati in results/figures/:")
+    print("\nFiles generated in results/figures/:")
     print("  - figure3_slr_vs_ccr_small.png")
     print("  - figure4_slr_vs_ccr_medium.png")
     print("  - figure5_slr_vs_ccr_large.png")
@@ -1052,44 +1052,44 @@ def generate_all_figures():
     print("  - figure_metrics_comparison_large.png")
 
 # ============================================================================
-# FUNZIONI AGGIUNTIVE - STATISTICHE E VERIFICA
+# EXTRA FUNCTIONS - STATS AND VERIFICATION
 # ============================================================================
 
 def print_data_summary():
-    """Stampa un riepilogo dei dati caricati"""
+    """Print a short summary of the loaded data"""
     df = load_experiments_data()
     
     print("\n" + "="*70)
-    print("RIEPILOGO DATI")
+    print("DATA SUMMARY")
     print("="*70)
     
-    print(f"\nTotale esperimenti: {len(df)}")
-    print(f"\nEsperimenti per scala:")
+    print(f"\nTotal experiments: {len(df)}")
+    print(f"\nExperiments by scale:")
     print(df['experiment'].value_counts())
     
-    print(f"\nWorkflow disponibili:")
+    print(f"\nWorkflows:")
     print(df['workflow'].value_counts())
     
-    print(f"\nConfigurazione VM per scala:")
+    print(f"\nVM configuration per experiment:")
     for exp in df['experiment'].unique():
         vms = df[df['experiment'] == exp]['vms'].iloc[0]
         tasks_range = df[df['experiment'] == exp]['tasks'].agg(['min', 'max'])
         print(f"  {exp}: {vms} VMs, {tasks_range['min']}-{tasks_range['max']} tasks")
     
-    print(f"\nValori CCR testati:")
+    print(f"\nCCR values tested:")
     print(sorted(df['ccr'].unique()))
     
-    print(f"\nRange metriche:")
+    print(f"\nMetric ranges:")
     print(f"  SLR: {df['slr'].min():.2f} - {df['slr'].max():.2f}")
     print(f"  AVU: {df['avu'].min():.2%} - {df['avu'].max():.2%}")
-    print(f"  VF: {df['vf'].min():.6f} - {df['vf'].max():.6f} (con NaN)")
+    print(f"  VF: {df['vf'].min():.6f} - {df['vf'].max():.6f} (may include NaN)")
 
 def verify_data_completeness():
-    """Verifica che ci siano tutti i dati necessari per le figure"""
+    """Check whether all data required for the figures is present."""
     df = load_experiments_data()
     
     print("\n" + "="*70)
-    print("VERIFICA COMPLETEZZA DATI")
+    print("DATA COMPLETENESS CHECK")
     print("="*70)
     
     expected_experiments = ['EXP1_SMALL', 'EXP1_MEDIUM', 'EXP1_LARGE']
@@ -1118,9 +1118,9 @@ def verify_data_completeness():
                 print(f"      Missing CCR: {sorted(missing_ccr)}")
     
     if all_complete:
-        print("\n✅ Tutti i dati necessari sono presenti!")
+        print("\nAll required data is present.")
     else:
-        print("\n⚠️  Alcuni dati mancano. I grafici saranno incompleti.")
+        print("\nSome data is missing. Figures may be incomplete.")
     
     return all_complete
 
@@ -1137,27 +1137,27 @@ if __name__ == '__main__':
         generate_ablation_figures()
         sys.exit(0)
 
-    # Verifica e stampa info sui dati
+    # Check and print data status
     print_data_summary()
     data_complete = verify_data_completeness()
     
-    # Genera tutte le figure principali
+    # Generate all main figures
     if data_complete or auto_mode:
         generate_all_figures()
 
-        # Genera anche la Figure 12 se i dati esistono
+        # Also generate Figure 12 if ablation data exists
         if Path('../results/ablation_study.json').exists():
             print("\n" + "="*70)
             print("Ablation study data found! Generating Figure 12...")
             print("="*70)
             generate_ablation_figures()
     else:
-        print("\n⚠️  WARNING: Dati incompleti! Procedo comunque...")
-        response = input("Continuare con la generazione dei grafici? (y/n): ")
+        print("\nWARNING: incomplete data. Proceed anyway?")
+        response = input("Continue generating figures? (y/n): ")
         if response.lower() == 'y':
             generate_all_figures()
 
             if Path('../results/ablation_study.json').exists():
                 generate_ablation_figures()
         else:
-            print("Generazione annullata.")
+            print("Generation cancelled.")

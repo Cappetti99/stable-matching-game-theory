@@ -63,7 +63,7 @@ public class Metrics {
     /**
      * VM Utilization.
      */
-    public static double VU(VM vmK, List<task> assignedTasks, double makespan, String capabilityName) {
+    public static double VU(VM vmK, List<task> assignedTasks, double makespan) {
         if (makespan <= 0 || assignedTasks == null || assignedTasks.isEmpty()) return 0.0;
         double sumET = 0.0;
         for (task t : assignedTasks) {
@@ -77,13 +77,13 @@ public class Metrics {
      * Average VM Utilization.
      */
     public static double AVU(Map<Integer, VM> vms, Map<Integer, List<task>> vmTaskAssignments,
-                             double makespan, String capabilityName) {
+                             double makespan) {
         if (vms == null || vms.isEmpty() || makespan <= 0) return 0.0;
         double sumVU = 0.0;
         int count = 0;
         for (VM vm : vms.values()) {
             List<task> tasks = vmTaskAssignments.getOrDefault(vm.getID(), new ArrayList<>());
-            sumVU += VU(vm, tasks, makespan, capabilityName);
+            sumVU += VU(vm, tasks, makespan);
             count++;
         }
         return count > 0 ? sumVU / count : 0.0;
@@ -95,8 +95,7 @@ public class Metrics {
     
     public static double VF(List<task> tasks,
                             Map<Integer, VM> vms,
-                            Map<Integer, List<task>> vmTaskAssignments,
-                            String capabilityName) {
+                            Map<Integer, List<task>> vmTaskAssignments) {
 
         // --------- NULL VALIDATION ---------
         if (tasks == null || vms == null || vmTaskAssignments == null) {
@@ -202,13 +201,11 @@ public class Metrics {
      * @param tasks List of all workflow tasks
      * @param vms Map of available VMs (vmID → VM object)
      * @param vmTaskAssignments Task-to-VM assignments (vmID → list of tasks)
-     * @param capabilityName VM capability name (e.g., "processingCapacity")
      * @return Average satisfaction (≥ 1.0, or 0.0 if no valid tasks)
      */
     public static double AvgSatisfaction(List<task> tasks,
                                          Map<Integer, VM> vms,
-                                         Map<Integer, List<task>> vmTaskAssignments,
-                                         String capabilityName) {
+                                         Map<Integer, List<task>> vmTaskAssignments) {
 
         // --------- NULL VALIDATION ---------
         if (tasks == null || vms == null || vmTaskAssignments == null) {
