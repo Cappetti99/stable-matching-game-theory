@@ -386,6 +386,85 @@ def plot_vf_vs_workflow(
     print(f"Saved: {output_path}")
 
 # ============================================================================
+# FUNZIONI DI PLOTTING - FIGURA AVERAGE SATISFACTION
+# ============================================================================
+
+def plot_avg_satisfaction_vs_workflow(
+    experiment='EXP1_LARGE',
+    vms_target=50,
+    ccr_target=1.0,
+    algorithm='SM-CPTD',
+    output_filename='figure_avg_satisfaction_vs_workflow_1000x50_ccr1.png'
+):
+    """
+    Plot Average Satisfaction vs Workflow for fixed configuration:
+    ~1000 tasks × 50 VMs × CCR = 1.0
+    (Epigenomics has 997 tasks, others have 1000)
+    
+    Average Satisfaction measures how efficiently tasks are distributed across VMs.
+    - Value = 1.0: Perfect - all tasks run on their fastest VM
+    - Value > 1.0: Some tasks run on slower VMs (higher = less optimal)
+    - Lower values are better
+    """
+
+    df = load_experiments_data()
+
+    # Filtra per experiment, vms e ccr (non per tasks, perché varia per workflow)
+    df_filt = df[
+        (df['experiment'] == experiment) &
+        (df['vms'] == vms_target) &
+        (df['ccr'] == ccr_target)
+    ].copy()
+
+    if df_filt.empty:
+        print("⚠️  No data found for the selected configuration.")
+        return
+
+    # Ordine workflow richiesto
+    workflows = WORKFLOW_ORDER
+    x_pos = np.arange(len(workflows))
+    x_labels = [WORKFLOW_TITLES[w] for w in workflows]
+
+    avg_sat_vals = []
+
+    for wf in workflows:
+        row = df_filt[df_filt['workflow'] == wf]
+        if len(row) == 0:
+            avg_sat_vals.append(np.nan)
+        else:
+            avg_sat_vals.append(row['avg_satisfaction'].iloc[0])
+
+    style = ALGO_STYLES.get(algorithm, {})
+
+    # Plot
+    plt.figure(figsize=(7, 4))
+    plt.plot(
+        x_pos, avg_sat_vals,
+        marker=style.get('marker', 'o'),
+        linewidth=2.5,
+        markersize=9,
+        linestyle='-',
+        color=style.get('color', '#1f77b4'),
+        label=style.get('label', algorithm)
+    )
+
+    plt.xticks(x_pos, x_labels)
+    plt.ylabel('Average Satisfaction', fontsize=11)
+    plt.title('Average Task Satisfaction across Workflows (1000×50, CCR = 1.0)',
+              fontsize=12, fontweight='bold')
+
+    plt.grid(True, linestyle='--', alpha=0.3)
+    plt.legend(frameon=False)
+
+    output_path = Path('../results/figures') / output_filename
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+
+    print(f"Saved: {output_path}")
+
+# ============================================================================
 # FUNZIONI DI PLOTTING - FIGURA 9, 10 (VM Effect - Experiment 2)
 # ============================================================================
 
@@ -932,6 +1011,9 @@ def generate_all_figures():
     print("  → Generating VF Comparison (Large)...")
     plot_vf_vs_workflow()
     
+    print("  → Generating Average Satisfaction Comparison (Large)...")
+    plot_avg_satisfaction_vs_workflow()
+    
     print("  → Generating Metrics Comparison (SLR, AVU, VF - Large)...")
     plot_metrics_comparison(data_large, scale='large', 
                            output_filename='figure_metrics_comparison_large.png')
@@ -965,7 +1047,8 @@ def generate_all_figures():
     print("  - figure9_slr_vs_vms.png")
     print("  - figure10_avu_vs_vms.png")
     print("  - figure_vf_vs_vms.png")
-    print("  - figure_vf_large.png")
+    print("  - figure_vf_vs_workflow_1000x50_ccr1.png")
+    print("  - figure_avg_satisfaction_vs_workflow_1000x50_ccr1.png")
     print("  - figure_metrics_comparison_large.png")
 
 # ============================================================================

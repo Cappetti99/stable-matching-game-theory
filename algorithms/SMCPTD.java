@@ -1,3 +1,5 @@
+import java.util.*;
+
 /**
  * SM-CPTD: Stable Matching Cloud-based Parallel Task Duplication Algorithm
  *
@@ -110,7 +112,6 @@ public class SMCPTD {
         this.finalSchedule = new HashMap<>();
         this.makespan = 0.0;
         this.taskLevels = null;
-        this.exitTask = null;
 
         System.out.println("✅ Input data set: " + tasks.size() +
                 " tasks, " + vms.size() + " VMs");

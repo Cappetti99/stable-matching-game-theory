@@ -153,7 +153,7 @@ public class Metrics {
             }
 
             if (Double.isFinite(fastestET) && fastestET > 0) {
-                double satisfaction =  fastestET / actualET ;
+                double satisfaction =  actualET / fastestET  ;
                 if (Double.isFinite(satisfaction)) {
                     satisfactions.add(satisfaction);
                 }
@@ -175,6 +175,111 @@ public class Metrics {
         }
 
         // population variance
+        return sumSq/satisfactions.size();
+    }
+
+    /**
+     * Average Satisfaction - Mean of task satisfaction levels.
+     * 
+     * Measures the average satisfaction of tasks in the schedule, where each task's
+     * satisfaction is the ratio of its actual execution time to the fastest possible
+     * execution time across all VMs.
+     * 
+     * Formula:
+     *   satisfaction(task_i) = actualET(task_i) / fastestET(task_i)
+     *   AvgSatisfaction = Σ(satisfaction_i) / n
+     * 
+     * Where:
+     *   - actualET = execution time on assigned VM = task.size / assignedVM.capacity
+     *   - fastestET = minimum execution time across all VMs = task.size / max(VM.capacity)
+     *   - n = number of tasks
+     * 
+     * Interpretation:
+     *   - AvgSatisfaction = 1.0: Perfect - all tasks run on their fastest VM
+     *   - AvgSatisfaction > 1.0: Some tasks run on slower VMs (higher = less optimal)
+     *   - Lower values are better (closer to 1.0 = more efficient allocation)
+     * 
+     * @param tasks List of all workflow tasks
+     * @param vms Map of available VMs (vmID → VM object)
+     * @param vmTaskAssignments Task-to-VM assignments (vmID → list of tasks)
+     * @param capabilityName VM capability name (e.g., "processingCapacity")
+     * @return Average satisfaction (≥ 1.0, or 0.0 if no valid tasks)
+     */
+    public static double AvgSatisfaction(List<task> tasks,
+                                         Map<Integer, VM> vms,
+                                         Map<Integer, List<task>> vmTaskAssignments,
+                                         String capabilityName) {
+
+        // --------- NULL VALIDATION ---------
+        if (tasks == null || vms == null || vmTaskAssignments == null) {
+            throw new IllegalArgumentException("tasks, vms and vmTaskAssignments must not be null");
+        }
+
+        // Build map once O(m*k), then lookup in O(1) per task
+        Map<Integer, VM> taskToVM = new HashMap<>();
+        for (Map.Entry<Integer, List<task>> entry : vmTaskAssignments.entrySet()) {
+            VM vm = vms.get(entry.getKey());
+            if (vm == null || entry.getValue() == null) continue;
+
+            for (task t : entry.getValue()) {
+                if (t != null) {
+                    taskToVM.put(t.getID(), vm);
+                }
+            }
+        }
+
+        List<Double> satisfactions = new ArrayList<>();
+
+        for (task t : tasks) {
+            if (t == null) continue;
+
+            // O(1) lookup
+            VM assignedVM = taskToVM.get(t.getID());
+            if (assignedVM == null) continue;
+
+            // --------- VM CAPABILITY VALIDATION ---------
+            double vmCapability = assignedVM.getProcessingCapacity();
+            if (!Double.isFinite(vmCapability) || vmCapability <= 0) {
+                System.err.println("⚠️  Warning: VM " + assignedVM.getID()
+                        + " has invalid capacity: " + vmCapability);
+                continue;
+            }
+
+            // --------- ACTUAL EXECUTION TIME ---------
+            double actualET = ET(t, assignedVM);
+            if (!Double.isFinite(actualET) || actualET <= 0) {
+                System.err.println("⚠️  Warning: Invalid actualET for task " + t.getID()
+                        + " on VM " + assignedVM.getID() + ": " + actualET);
+                continue;
+            }
+
+            // --------- FASTEST POSSIBLE EXECUTION TIME ---------
+            double fastestET = Double.POSITIVE_INFINITY;
+            for (VM vm : vms.values()) {
+                if (vm == null) continue;
+
+                double et = ET(t, vm);
+                if (Double.isFinite(et) && et > 0) {
+                    fastestET = Math.min(fastestET, et);
+                }
+            }
+
+            if (Double.isFinite(fastestET) && fastestET > 0) {
+                double satisfaction = actualET / fastestET;
+                if (Double.isFinite(satisfaction)) {
+                    satisfactions.add(satisfaction);
+                }
+            }
+        }
+
+        // --------- COMPUTE AVERAGE SATISFACTION ---------
+        if (satisfactions.isEmpty()) return 0.0;
+
+        double avg = satisfactions.stream()
+                                .mapToDouble(Double::doubleValue)
+                                .average()
+                                .orElse(0.0);
+
         return avg;
     }
 

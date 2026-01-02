@@ -63,10 +63,11 @@ public class ExperimentRunner {
         double slr;
         double avu;
         double vf;
+        double avgSatisfaction;
         double makespan;
 
         public ExperimentResult(String experiment, String workflow, int numTasks, int numVMs,
-                double ccr, double slr, double avu, double vf, double makespan) {
+                double ccr, double slr, double avu, double vf, double avgSatisfaction, double makespan) {
             this.experiment = experiment;
             this.workflow = workflow;
             this.numTasks = numTasks;
@@ -75,23 +76,19 @@ public class ExperimentRunner {
             this.slr = slr;
             this.avu = avu;
             this.vf = vf;
+            this.avgSatisfaction = avgSatisfaction;
             this.makespan = makespan;
         }
 
         @Override
         public String toString() {
-            return String.format(Locale.US, "%s,%s,%d,%d,%.1f,%.4f,%.4f,%.6f,%.4f",
-                    experiment, workflow, numTasks, numVMs, ccr, slr, avu, vf, makespan);
+            return String.format(Locale.US, "%s,%s,%d,%d,%.1f,%.4f,%.4f,%.6f,%.4f,%.4f",
+                    experiment, workflow, numTasks, numVMs, ccr, slr, avu, vf, avgSatisfaction, makespan);
         }
     }
 
     public static void main(String[] args) {
         SeededRandom.initFromArgs(args);
-        // Check for test_single mode
-        if (args.length > 0 && args[0].equals("test_single")) {
-            runTestSingle();
-            return;
-        }
 
         System.out.println("SM-CPTD Experiments");
         System.out.println("Runs: " + NUM_RUNS + " + " + WARMUP_RUNS + " warmup");
@@ -362,10 +359,11 @@ public class ExperimentRunner {
             
             double avu = calculateAVU(smgt, assignments, makespan);
             double vf = calculateVF(smgt, assignments, makespan);
+            double avgSatisfaction = calculateAvgSatisfaction(smgt, assignments, makespan);
 
             // Salva le metriche (solo se non è warmup)
             if (!isWarmup) {
-                runs.add(new RunMetrics(slr, avu, vf, makespan));
+                runs.add(new RunMetrics(slr, avu, vf, avgSatisfaction, makespan));
             }
         }
 
@@ -373,13 +371,14 @@ public class ExperimentRunner {
         double avgSLR = runs.stream().mapToDouble(r -> r.slr).average().orElse(0);
         double avgAVU = runs.stream().mapToDouble(r -> r.avu).average().orElse(0);
         double avgVF = runs.stream().mapToDouble(r -> r.vf).average().orElse(0);
+        double avgSatisfaction = runs.stream().mapToDouble(r -> r.avgSatisfaction).average().orElse(0);
         double avgMakespan = runs.stream().mapToDouble(r -> r.makespan).average().orElse(0);
 
         // Usa il numero di task dalla prima run (sono sempre gli stessi)
         List<task> tasksForCount = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
         int actualTasks = tasksForCount.size();
 
-        return new ExperimentResult(expName, workflow, actualTasks, numVMs, ccr, avgSLR, avgAVU, avgVF, avgMakespan);
+        return new ExperimentResult(expName, workflow, actualTasks, numVMs, ccr, avgSLR, avgAVU, avgVF, avgSatisfaction, avgMakespan);
     }
 
     /**
@@ -427,7 +426,7 @@ public class ExperimentRunner {
                 
                 // Single-pass scheduling (paper algorithm)
                 Map<String, Double> commCosts = calculateCommunicationCostsForDCP(smgt, ccr);
-                smcptd.executeSMCPTD(commCosts, vmMapping);
+                smcptd.executeSMCPTD(commCosts, vmMapping, ccr);
                 
                 // Get Critical Path
                 Set<Integer> criticalPath = smcptd.getCriticalPath();
@@ -463,12 +462,13 @@ public class ExperimentRunner {
      * Classe helper per memorizzare le metriche di una singola run
      */
     private static class RunMetrics {
-        double slr, avu, vf, makespan;
+        double slr, avu, vf, avgSatisfaction, makespan;
 
-        RunMetrics(double slr, double avu, double vf, double makespan) {
+        RunMetrics(double slr, double avu, double vf, double avgSatisfaction, double makespan) {
             this.slr = slr;
             this.avu = avu;
             this.vf = vf;
+            this.avgSatisfaction = avgSatisfaction;
             this.makespan = makespan;
         }
     }
@@ -884,6 +884,105 @@ public class ExperimentRunner {
     }
 
     /**
+     * <h2>Calculates Average Satisfaction - Mean Task Satisfaction Metric</h2>
+     * 
+     * <h3>WHAT AVERAGE SATISFACTION MEASURES</h3>
+     * <p>
+     * Average Satisfaction quantifies <b>how efficiently tasks are distributed</b> across VMs
+     * by measuring the mean satisfaction level of all tasks. Each task's satisfaction
+     * represents how close its execution time is to the best possible execution time.
+     * </p>
+     * <ul>
+     *   <li><b>AvgSatisfaction = 1.0</b>: Perfect - all tasks run on their fastest VM</li>
+     *   <li><b>AvgSatisfaction &gt; 1.0</b>: Some tasks run on slower VMs (higher = less optimal)</li>
+     *   <li><b>Lower is better</b>: Closer to 1.0 indicates more efficient allocation</li>
+     * </ul>
+     * 
+     * <h3>🧮 MATHEMATICAL FORMULA</h3>
+     * <pre>
+     * For each task i:
+     *   satisfaction(task_i) = actualET(task_i) / fastestET(task_i)
+     *   
+     *   where:
+     *     actualET(task_i)  = task_i.size / assignedVM.capacity
+     *     fastestET(task_i) = task_i.size / max(allVMs.capacity)
+     * 
+     * AvgSatisfaction = Σ(satisfaction_i) / n
+     * </pre>
+     * 
+     * <h3>RELATIONSHIP TO VF</h3>
+     * <ul>
+     *   <li><b>VF (Variance of Fairness)</b>: Measures variance in satisfaction levels</li>
+     *   <li><b>AvgSatisfaction</b>: Measures mean of satisfaction levels</li>
+     *   <li>Both use the same underlying satisfaction metric</li>
+     *   <li>Low VF + Low AvgSatisfaction = optimal and fair scheduling</li>
+     * </ul>
+     * 
+     * <h3>COMPLEXITY &amp; PERFORMANCE</h3>
+     * <p><b>OPTIMIZED VERSION - O(n) complexity:</b></p>
+     * <ul>
+     *   <li>Pre-build taskMap: O(n) - enables O(1) task lookup</li>
+     *   <li>Pre-build vmMap: O(m) - enables O(1) VM lookup</li>
+     *   <li>Convert assignments using HashMap.get(): O(k) where k = total assignments</li>
+     * </ul>
+     * 
+     * @param smgt       SMGT instance containing all workflow tasks and available VMs
+     * @param assignments Task-to-VM assignments (vmID → list of taskIDs assigned to that VM)
+     * @param makespan   Total workflow execution time (UNUSED - kept for API consistency)
+     * @return           Average Satisfaction (≥ 1.0, or 0.0 if no valid tasks)
+     * 
+     * @see Metrics#AvgSatisfaction(List, Map, Map, String) for the underlying calculation
+     * @see #calculateVF(SMGT, Map, double) for VF (variance of satisfaction) metric
+     */
+    private static double calculateAvgSatisfaction(SMGT smgt, Map<Integer, List<Integer>> assignments, double makespan) {
+        if (makespan <= 0)
+            return 0;
+
+        // OPTIMIZATION 1: Pre-build task lookup map - O(n) operation, enables O(1) lookups
+        Map<Integer, task> taskMap = new HashMap<>();
+        for (task t : smgt.getTasks()) {
+            taskMap.put(t.getID(), t);
+        }
+
+        // OPTIMIZATION 2: Pre-build VM lookup map - O(m) operation, enables O(1) lookups
+        Map<Integer, VM> vmMap = new HashMap<>();
+        for (VM v : smgt.getVMs()) {
+            vmMap.put(v.getID(), v);
+        }
+
+        // OPTIMIZATION 3: Convert assignments using direct HashMap lookups - O(k) where k = total assignments
+        // BUG FIX: Track which tasks have been assigned to avoid counting duplicates
+        // LOTD may duplicate tasks across multiple VMs - count each task only once
+        Set<Integer> assignedTaskIds = new HashSet<>();
+        Map<Integer, List<task>> taskAssignments = new HashMap<>();
+        
+        for (Map.Entry<Integer, List<Integer>> entry : assignments.entrySet()) {
+            int vmId = entry.getKey();
+            List<task> tasks = new ArrayList<>();
+            for (int taskId : entry.getValue()) {
+                task t = taskMap.get(taskId);
+                if (t != null) {
+                    // Only add if this is the FIRST assignment of this task
+                    // (duplicates created by LOTD should not be counted multiple times)
+                    if (!assignedTaskIds.contains(taskId)) {
+                        tasks.add(t);
+                        assignedTaskIds.add(taskId);
+                    }
+                    // If already assigned, this is a duplicate - skip it
+                } else {
+                    System.err.println(" Warning: Task ID " + taskId + " not found in task map");
+                }
+            }
+            taskAssignments.put(vmId, tasks);
+        }
+
+        // Calculate Average Satisfaction using Metrics
+        double avgSat = Metrics.AvgSatisfaction(smgt.getTasks(), vmMap, taskAssignments, "processingCapacity");
+        
+        return Double.isNaN(avgSat) || Double.isInfinite(avgSat) ? Double.NaN : avgSat;
+    }
+
+    /**
      * Salva risultati in CSV
      */
     private static void saveResultsToCSV() {
@@ -893,7 +992,7 @@ public class ExperimentRunner {
     private static void saveResultsToCSV(boolean verbose) {
         File outFile = new File(ensureResultsDir(), "experiments_results.csv");
         try (PrintWriter writer = new PrintWriter(outFile)) {
-            writer.println("experiment,workflow,tasks,vms,ccr,slr,avu,vf,makespan");
+            writer.println("experiment,workflow,tasks,vms,ccr,slr,avu,vf,avg_satisfaction,makespan");
             for (ExperimentResult r : results) {
                 if (r != null) {
                     writer.println(r.toString());
@@ -932,9 +1031,9 @@ public class ExperimentRunner {
                     continue;
                 writer.printf(Locale.US, "    {\"experiment\": \"%s\", \"workflow\": \"%s\", \"tasks\": %d, " +
                         "\"vms\": %d, \"ccr\": %.1f, \"slr\": %.4f, \"avu\": %.4f, " +
-                        "\"vf\": %.6f, \"makespan\": %.4f}",
+                        "\"vf\": %.6f, \"avg_satisfaction\": %.4f, \"makespan\": %.4f}",
                         r.experiment, r.workflow, r.numTasks, r.numVMs, r.ccr,
-                        r.slr, r.avu, r.vf, r.makespan);
+                        r.slr, r.avu, r.vf, r.avgSatisfaction, r.makespan);
                 written++;
                 if (written < totalToWrite) {
                     writer.println(",");
