@@ -277,40 +277,12 @@ public class SMGT {
             double capacity = getVMProcessingCapacity(vm);
             int threshold = (int) Math.ceil((sumTasksUpToLevel / sumCapacities) * capacity);
             vm.setThreshold(threshold);
-            //  totalThreshold += threshold;        PER ORA COMMENTATO PER CAPIRE SE SERVE O NO
 
             if (VERBOSE) {
                 System.out.println("   VM" + vmIdx + " threshold: " + threshold +
                         " (waitingList: " + vm.getWaitingListSize() + ")");
             }
         }
-
-        /*
-        // Distribute deficit if total thresholds are insufficient
-        int deficit = (int) sumTasksUpToLevel - totalThreshold;
-        if (deficit > 0) {
-            if (VERBOSE) System.out.println("   Threshold deficit: " + deficit + " tasks");
-            List<Map.Entry<Integer, Double>> vmCapacityFractions = new ArrayList<>();
-            for (int vmIdx = 0; vmIdx < vms.size(); vmIdx++) {
-                double fraction = getVMProcessingCapacity(vms.get(vmIdx)) / sumCapacities;
-                vmCapacityFractions.add(new AbstractMap.SimpleEntry<>(vmIdx, fraction));
-            }
-
-            vmCapacityFractions.sort((a, b) -> Double.compare(b.getValue(), a.getValue()));
-
-            int remaining = deficit;
-            int roundRobinIdx = 0;
-            while (remaining > 0) {
-                int vmIdx = vmCapacityFractions.get(roundRobinIdx % vmCapacityFractions.size()).getKey();
-                VM vm = vms.get(vmIdx);
-                vm.setThreshold(vm.getThreshold() + 1);
-                remaining--;
-                roundRobinIdx++;
-
-                if (VERBOSE) System.out.println("      → +1 to VM" + vmIdx);
-            }
-        }
-        */
     }
 
     // ==================== STABLE MATCHING ====================

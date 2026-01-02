@@ -1,256 +1,188 @@
-# SM-CPTD — Stable Matching Cloud-based Parallel Task Duplication
+# SM-CPTD — Workflow Scheduling with Stable Matching and Task Duplication
 
-SM-CPTD is a three-phase workflow scheduler for heterogeneous clouds:
-1) **DCP** (Dynamic Critical Path) finds the critical path and ranks tasks; 2) **SMGT** (Stable Matching Game Theory) assigns tasks to VMs via stable matching; 3) **LOTD** (List of Task Duplication) duplicates tasks to cut communication delays.
+## Overview
+This project implements a workflow scheduling pipeline inspired by the SM-CPTD approach:
 
-📄 Reference: *A stable matching-based algorithm for task scheduling in cloud computing* (Journal of Supercomputing, 2021).
+1. **DCP** computes task ranks and selects a (level-wise) critical path.
+2. **SMGT** assigns tasks to VMs level-by-level using a stable matching strategy, giving priority to critical-path tasks.
+3. **LOTD** improves the schedule by duplicating tasks (in this code: mainly entry tasks) when that reduces communication overhead.
 
----
-
-# SM-CPTD — Stable Matching + Parallel Task Duplication
-
-This repository implements the SM-CPTD workflow scheduler and the experiment code used to reproduce the paper-style figures and metrics.
-
-SM-CPTD is a three-phase pipeline:
-1) DCP (Dynamic Critical Path): identifies a critical path / task priorities
-2) SMGT (Stable Matching Game Theory): assigns tasks to VMs using stable matching
-3) LOTD (List of Task Duplication): duplicates tasks to reduce communication delays
+The repository also contains a full experimental runner and plotting scripts to reproduce the produced figures.
 
 Reference: “A stable matching-based algorithm for task scheduling in cloud computing” (Journal of Supercomputing, 2021).
 
----
+Main objectives:
+- Implement the scheduling pipeline (DCP → SMGT → LOTD) on real Pegasus workflow graphs.
+- Run controlled experiments sweeping CCR values and VM counts.
+- Save results in machine-readable format and generate publication-style figures.
 
-## Quick Start (what to run)
+### Project Structure
 
-Recommended (one command):
-
-```bash
-./run.sh
+```
+stable-matching-game-theory/
+├── algorithms/                 Java implementation and experiment runners
+│   ├── Main.java               Entry point (runs ExperimentRunner and optional plotting)
+│   ├── ExperimentRunner.java   Runs the experiments and saves results
+│   ├── SMCPTD.java             Orchestrates DCP → SMGT → LOTD
+│   ├── DCP.java                Critical path selection via recursive ranking
+│   ├── SMGT.java               Stable matching-based scheduling per DAG level
+│   ├── LOTD.java               Task duplication and schedule timing recomputation
+│   ├── PegasusXMLParser.java   Converts Pegasus XML workflows to CSV datasets
+│   ├── DataLoader.java         Loads DAG structure and generates numeric parameters
+│   ├── Metrics.java            ET/SLR/AVU/VF + communication cost helpers
+│   ├── CCRAnalyzer.java        Writes CCR sensitivity snapshots to JSON
+│   └── GanttChartGenerator.java Writes optional Gantt JSON snapshots
+├── generators/
+│   ├── generate_paper_figures.py
+│   ├── analyze_ccr_sensitivity.py
+│   └── visualize_dag.py
+├── workflow/                   Pegasus XML workflows (input)
+├── results/
+│   ├── experiments_results.json
+│   └── figures/                Generated figures (PNG)
+├── run.sh
+└── clean.sh
 ```
 
-What that script does, in order:
-1) Compiles and runs `PegasusXMLParser` to (re)generate CSV workflows under `data/`
-2) Compiles `Main.java`
-3) Runs `java Main` (forwarding any CLI args)
-4) `Main` calls `ExperimentRunner` and then tries to generate figures using Python (if available)
+### Requirements
 
-If you are on Windows, run the bash scripts via WSL or Git Bash, or run the Java commands manually (see below).
+- Java 8+ (JDK)
+- Python 3 (only for figure generation)
+- Python packages: `pandas`, `matplotlib`
 
----
-
-## Manual Run (no bash scripts)
-
-Compile Java:
-
-```bash
-cd algorithms
-javac *.java
-```
-
-Generate workflow CSVs (optional — runners also auto-generate as needed):
-
-```bash
-cd algorithms
-java PegasusXMLParser
-```
-
-Run the main experiments:
-
-```bash
-cd algorithms
-java Main
-```
-
----
-
-## Data Flow (extremely explicit)
-
-When you run experiments, the data flows like this:
-
-1) XML workflows (input)
-	 - Stored in `workflow/<name>/*.xml`
-	 - Examples: `workflow/montage/Montage_100.xml`, `workflow/cybershake/CyberShake_50.xml`
-
-2) XML → CSV conversion
-	 - `algorithms/PegasusXMLParser.java` converts a chosen XML into a folder like:
-		 - `data/<workflow>_<tasks>/task.csv`
-		 - `data/<workflow>_<tasks>/dag.csv`
-		 - `data/<workflow>_<tasks>/processing_capacity.csv`
-		 - `data/<workflow>_<tasks>/bandwidth.csv`
-
-3) CSV → in-memory objects
-	 - `algorithms/DataLoader.java` loads:
-		 - task IDs + DAG edges (predecessors/successors)
-		 - VM IDs
-	 - Important: the numeric values in the CSVs are not used as “real” values by the Java runs.
-
-4) Randomized numeric model (important assumption)
-	 - Even though the CSVs contain numbers, `DataLoader` generates the numeric values uniformly at random:
-		 - task size in [500, 700]
-		 - VM capacity in [10, 20]
-		 - bandwidth in [20, 30]
-	 - This is deterministic by default due to `SeededRandom` (see “Reproducibility”).
-
-5) Scheduling + metrics
-	 - `SMCPTD.executeSMCPTD(...)` runs DCP → SMGT → LOTD
-	 - `Metrics` computes SLR, AVU, VF, etc.
-
----
-
-## Reproducibility (seeded randomness)
-
-By default runs are deterministic.
-
-- Set the seed explicitly:
-
-```bash
-cd algorithms
-java Main --seed=123
-```
-
-- The experiment runners also vary a run index internally to create multiple runs with different generated values.
-
-If you truly want non-deterministic randomness, `algorithms/Main.java` contains a commented line you can enable:
-
-```java
-// SeededRandom.setUseSeed(false);
-```
-
----
-
-## What Each Entry Point Does
-
-### Main
-
-- File: `algorithms/Main.java`
-- Calls `ExperimentRunner.main(args)`
-- Then attempts to run `generators/generate_paper_figures.py --auto` if Python + `pandas` are available
-
-### ExperimentRunner (paper reproduction)
-
-- File: `algorithms/ExperimentRunner.java`
-- Runs two experiment families and writes results to `results/`:
-
-Experiment 1 (CCR sweep; paper Figures 3–8 style):
-- For each workflow and each CCR in {0.4, 0.6, …, 2.0}, run SM-CPTD and record metrics.
-
-Experiment 2 (VM-count sweep; paper Figures 9–10 style):
-- Fix CCR = 1.0 and vary VM count in {30, 35, …, 70}.
-
-CLI flags:
-
-```bash
-cd algorithms
-java ExperimentRunner            # run both experiments
-java ExperimentRunner --exp1     # CCR sweep only
-java ExperimentRunner --exp2     # VM-count sweep only
-java ExperimentRunner --workflow=montage
-```
-
-CCR sensitivity snapshots:
-- During Experiment 1, `CCRAnalyzer` captures extra data per CCR value and writes JSON under:
-	- `results/ccr_sensitivity/<workflow>_<experiment>_analysis.json`
-
-### AblationExperimentRunner (component ablation)
-
-- File: `algorithms/AblationExperimentRunner.java`
-- Runs the same workflow with 4 variants:
-	1) SMGT only
-	2) DCP + SMGT
-	3) SMGT + LOTD
-	4) Full SM-CPTD
-
-```bash
-cd algorithms
-java AblationExperimentRunner
-```
-
----
-
-## Metrics (what they mean in this code)
-
-- Makespan: total schedule length (max VM finish time)
-- SLR: makespan normalized by a critical-path baseline
-- AVU: Average VM Utilization across the makespan
-- VF: Variance of (per-task) satisfaction / fairness proxy (lower is “fairer”)
-
-Task duplication note:
-- LOTD can schedule the same logical task multiple times on different VMs.
-- In this project’s interpretation, duplicated executions are real work and should be counted as work when computing utilization/fairness.
-
----
-
-## Outputs (what files you should expect)
-
-Generated data (created on demand):
-- `data/<workflow>_<tasks>/...` (CSV files generated from XML)
-
-Experiment results:
-- `results/experiments_results.json` (always)
-- `results/experiments_results.csv` (written by `ExperimentRunner`)
-- `results/ccr_sensitivity/` (created when running Experiment 1)
-
-Figures:
-- `results/figures/*.png` created by `generators/generate_paper_figures.py`
-
----
-
-## Python Figure Generation
-
-Scripts are in `generators/`:
-- `generate_paper_figures.py`: reads `results/experiments_results.json` and writes plots under `results/figures/`
-- `analyze_ccr_sensitivity.py`: consumes `results/ccr_sensitivity/*.json`
-- `visualize_dag.py`: workflow visualization utility
-
-Install dependencies if needed:
+Install Python dependencies:
 
 ```bash
 pip3 install pandas matplotlib
 ```
 
-Run manually:
+### Running Experiments
+
+Recommended (repo root):
+
+```bash
+./run.sh
+```
+
+What `run.sh` does:
+1) runs `PegasusXMLParser` (generates CSV datasets under `data/`)
+2) compiles and runs `Main`
+3) `Main` runs `ExperimentRunner` and then tries to generate figures automatically
+
+Manual run (no scripts):
+
+```bash
+cd algorithms
+javac *.java
+
+java Main
+```
+
+On Windows: run `run.sh` via WSL or Git Bash; otherwise use the manual Java commands.
+
+#### Arguments
+
+The Java runners accept a small set of CLI flags:
+
+1. **Experiment selection**:
+   - `--exp1`: run the CCR sweep only
+   - `--exp2`: run the VM-count sweep only
+
+2. **Workflow selection**:
+   - `--workflow=<name>`: restrict to one workflow (`cybershake`, `epigenomics`, `ligo`, `montage`)
+
+3. **Reproducibility**:
+   - `--seed=<long>` or `--seed <long>`: set the base seed (used by `SeededRandom`)
+
+Examples:
+
+```bash
+cd algorithms
+
+# CCR sweep only
+java ExperimentRunner --exp1
+
+# VM-count sweep only
+java ExperimentRunner --exp2
+
+# Only Montage
+java ExperimentRunner --exp1 --workflow=montage
+
+# Fixed seed for reproducibility
+java Main --seed=123
+```
+
+## Experiments Implemented (in code)
+
+All experiments are implemented in `algorithms/ExperimentRunner.java`.
+
+### Experiment 1 — CCR sweep
+
+- Workflows: `cybershake`, `epigenomics`, `ligo`, `montage`
+- CCR values: 0.4 → 2.0 (step 0.2)
+- Sizes:
+  - Small: 5 VMs and ~50 tasks (Epigenomics uses 47)
+  - Medium: 10 VMs and 100 tasks
+  - Large: 50 VMs and ~1000 tasks (Epigenomics uses 997)
+
+This experiment also writes CCR sensitivity JSON snapshots via `CCRAnalyzer` under `results/ccr_sensitivity/`.
+
+### Experiment 2 — VM-count sweep
+
+- Fixed CCR: 1.0
+- VM counts: 30, 35, 40, 45, 50, 55, 60, 65, 70
+- Tasks: ~1000 (Epigenomics uses 997)
+
+## Outputs
+
+### Results
+
+`ExperimentRunner` writes results under `results/`:
+- `results/experiments_results.json`
+- `results/experiments_results.csv` (created by the runner when saving CSV)
+
+Recorded metrics (fields in `experiments_results.json`):
+- `slr`, `avu`, `vf`, `avgSatisfaction`, `makespan`
+
+### Figures
+
+Figures are saved under `results/figures/`.
+
+They are generated by `generators/generate_paper_figures.py` using `results/experiments_results.json`.
+The script can be run automatically from `Main` (if Python + dependencies are available) or manually:
 
 ```bash
 cd generators
 python3 generate_paper_figures.py --auto
 ```
 
----
+If the corresponding experiment data is present, the script generates (among others) the following PNG files:
+- `figure3_slr_vs_ccr_small.png`
+- `figure4_slr_vs_ccr_medium.png`
+- `figure5_slr_vs_ccr_large.png`
+- `figure6_avu_vs_ccr_small.png`
+- `figure7_avu_vs_ccr_medium.png`
+- `figure8_avu_vs_ccr_large.png`
+- `figure9_slr_vs_vms.png`
+- `figure10_avu_vs_vms.png`
+- `figure_vf_vs_vms.png`
+- `figure_vf_vs_workflow_1000x50_ccr1.png`
+- `figure_avg_satisfaction_vs_workflow_1000x50_ccr1.png`
+- `figure_metrics_comparison_large.png`
 
-## Repo Structure (as in this workspace)
+Optional outputs (enabled in Java code paths that request them):
+- `results/gantt_charts/*.json` (Gantt chart snapshots)
 
-```
-stable-matching-game-theory/
-├── algorithms/                 Java sources
-│   ├── Main.java               Entry point: runs ExperimentRunner and optional figures
-│   ├── ExperimentRunner.java   Paper experiments (CCR sweep + VM sweep)
-│   ├── AblationExperimentRunner.java  Ablation study runner
-│   ├── SMCPTD.java             Full pipeline (DCP → SMGT → LOTD)
-│   ├── DCP.java, SMGT.java, LOTD.java Core algorithms
-│   ├── CCRAnalyzer.java        CCR sensitivity capture + JSON output
-│   ├── DataLoader.java         Loads DAG structure; generates random sizes/capacities/bw
-│   ├── PegasusXMLParser.java   Converts Pegasus XML → CSV folders under data/
-│   ├── Metrics.java            SLR/AVU/VF and communication cost helpers
-│   ├── VM.java, task.java      Core models
-│   └── Utility.java            Shared helpers
-├── generators/                 Python plotting and analysis
-├── workflow/                   Input XML workflows
-├── results/                    Saved results and generated figures
-├── run.sh                      Bash: generate data → compile → run Main
-└── clean.sh                    Bash: remove .class and generated data folders
-```
+## Data Generation and Assumptions (important for interpretation)
 
----
+- The workflow structure comes from Pegasus XML files under `workflow/`.
+- CSV datasets under `data/` are generated from XML by `PegasusXMLParser`.
+- During execution, `DataLoader` uses the CSVs mainly for DAG structure and IDs; it generates numeric parameters uniformly:
+  - task size in [500, 700]
+  - VM capacity in [10, 20]
+  - bandwidth in [20, 30]
 
-## Maintenance
-
-Remove compiled Java classes and generated CSV workflow folders:
-
-```bash
-./clean.sh
-```
-
----
+This is controlled by `SeededRandom`, so results are reproducible when a seed is fixed.
 
 ## References
 
