@@ -291,10 +291,11 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description='Visualize Pegasus DAG workflows')
-    parser.add_argument('dag_name', nargs='?', default=None, help='DAG file name or path')
+    parser.add_argument('dag_name', nargs='?', default=None, help='DAG file name or path (omit to visualize all)')
     parser.add_argument('--no-show', action='store_true', help='Do not show interactive window (just save to file)')
     parser.add_argument('--show', action='store_true', help='Show interactive window (default: auto-detect)')
     parser.add_argument('--list', action='store_true', help='List available DAGs')
+    parser.add_argument('--all', action='store_true', help='Visualize all DAGs')
     parser.add_argument('--base-path', default='workflow', help='Base path for workflow files')
     
     args = parser.parse_args()
@@ -309,8 +310,37 @@ if __name__ == "__main__":
         print("-" * 40)
         sys.exit(0)
     
+    # Determine show mode
+    if args.no_show:
+        show = False
+    elif args.show:
+        show = True
+    else:
+        # Don't show interactively when processing all DAGs
+        show = False if (args.all or not args.dag_name) else True
+    
     dag_name = args.dag_name
     
+    # If no DAG specified or --all flag, visualize all DAGs
+    if args.all or not dag_name:
+        if not dags:
+            print("\nNo XML DAG files found in workflow/ directory.")
+            sys.exit(1)
+        
+        print(f"Visualizing all {len(dags)} DAGs...")
+        print("=" * 60)
+        
+        for i, dag in enumerate(dags, 1):
+            print(f"\n[{i}/{len(dags)}] Processing: {dag}")
+            print_dag_info(dag, base_path)
+            visualize_dag(dag, base_path, show=False)
+        
+        print("\n" + "=" * 60)
+        print(f"Successfully visualized all {len(dags)} DAGs!")
+        print(f"Output directory: assets/")
+        sys.exit(0)
+    
+    # Single DAG mode
     if dag_name:
         # Check if it's a full path or just a name
         if not dag_name.endswith('.xml') and not os.path.exists(os.path.join(base_path, dag_name)):
@@ -321,33 +351,7 @@ if __name__ == "__main__":
             else:
                 print(f"DAG '{dag_name}' not found!")
                 sys.exit(1)
-    else:
-        print("Available DAGs in workflow/:")
-        print("-" * 40)
-        for i, d in enumerate(dags, 1):
-            print(f"  {i}. {d}")
-        print("-" * 40)
         
-        if dags:
-            # Default to first one
-            dag_name = dags[0]
-            print(f"\nNo DAG specified. Using: {dag_name}")
-            print("Usage: python3 generators/visualize_dag.py <dag_name> [--no-show]")
-        else:
-            print("\nNo XML DAG files found in workflow/ directory.")
-            sys.exit(1)
-    
-    # Determine show mode
-    # Default: show if --show specified, don't show if --no-show specified
-    # If neither, show interactively
-    if args.no_show:
-        show = False
-    elif args.show:
-        show = True
-    else:
-        # Auto-detect: show by default for interactive use
-        show = True
-    
-    # Print info and visualize
-    print_dag_info(dag_name, base_path)
-    visualize_dag(dag_name, base_path, show=show)
+        # Print info and visualize
+        print_dag_info(dag_name, base_path)
+        visualize_dag(dag_name, base_path, show=show)

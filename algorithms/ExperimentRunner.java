@@ -25,33 +25,13 @@ import java.util.*;
  */
 public class ExperimentRunner {
 
-    // ============================================================================
-    // CONFIGURAZIONE ESPERIMENTI
-    // ============================================================================
+    private static final int NUM_RUNS = 5;
+    private static final int WARMUP_RUNS = 0;
 
-    // Numero di run multiple per stabilizzare i risultati
-    private static final int NUM_RUNS = 3; // Production: 10 runs per stabilizzare i risultati
-    private static final int WARMUP_RUNS = 0; // Production: 1 warmup per eliminare cold start effects
-
-    // Workflow Pegasus XML reali dal paper (convertiti da XML a CSV)
     private static final String[] WORKFLOWS = { "cybershake", "epigenomics", "ligo", "montage" };
-
-    // CCR range: 0.4 → 2.0 con step 0.2 (come richiesto dal paper)
     private static final double[] CCR_VALUES = { 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0 };
-
-    // Experiment 1: CCR effect configurations (basato sui workflow Pegasus XML
-    // reali)
-    // Configurazioni disponibili: 50-100-1000 task
-    private static final int[][] SMALL_CONFIGS = { { 50, 5 } };
-    private static final int[][] MEDIUM_CONFIGS = { { 100, 10 } };
-    private static final int[][] LARGE_CONFIGS = { { 1000, 50 } };
-
-    // Experiment 2: VM effect configurations
     private static final int[] VM_COUNTS = { 30, 35, 40, 45, 50, 55, 60, 65, 70 };
-    private static final int FIXED_TASKS = 1000;
     private static final double FIXED_CCR = 1.0;
-
-    // Results storage
     private static List<ExperimentResult> results = new ArrayList<>();
 
     public static class ExperimentResult {
@@ -93,7 +73,6 @@ public class ExperimentRunner {
         System.out.println("SM-CPTD Experiments");
         System.out.println("Runs: " + NUM_RUNS + " + " + WARMUP_RUNS + " warmup");
 
-        // Parse arguments
         boolean runExp1 = true;
         boolean runExp2 = true;
         String singleWorkflow = null;
@@ -121,11 +100,8 @@ public class ExperimentRunner {
                 runExperiment2_VMEffect(workflowsToRun);
             }
 
-            // Save results
             saveResultsToCSV();
             saveResultsToJSON();
-
-            // Print summary
             printSummary();
 
         } catch (Exception e) {
@@ -140,11 +116,9 @@ public class ExperimentRunner {
     private static void runExperiment1_CCREffect(String[] workflows) {
         System.out.println("\nExperiment 1: CCR Effect");
 
-        // Small workflows
         System.out.println("\nSmall (47-50 tasks, 5 VMs):");
         for (String workflow : workflows) {
             if (workflow.equals("cybershake")) {
-                // CyberShake ha sia 30 che 50 task disponibili - usa 50
                 runCCRExperiment(new String[] { workflow }, 50, 5, "EXP1_SMALL");
             } else if (workflow.equals("epigenomics")) {
                 runCCRExperiment(new String[] { workflow }, 47, 5, "EXP1_SMALL");
@@ -153,13 +127,9 @@ public class ExperimentRunner {
             }
         }
 
-        // Medium workflows
         System.out.println("\nMedium (100 tasks, 10 VMs):");
-        for (int[] config : MEDIUM_CONFIGS) {
-            runCCRExperiment(workflows, config[0], config[1], "EXP1_MEDIUM");
-        }
+        runCCRExperiment(workflows, 100, 10, "EXP1_MEDIUM");
 
-        // Large workflows - epigenomics ha 997 task invece di 1000
         System.out.println("\nLarge (997-1000 tasks, 50 VMs):");
         for (String workflow : workflows) {
             int tasks = workflow.equals("epigenomics") ? 997 : 1000;
@@ -200,14 +170,12 @@ public class ExperimentRunner {
     }
 
     /**
-     * Esegue esperimenti CCR per una configurazione specifica
-     * ENHANCED: Now includes CCR sensitivity analysis
+     * Run CCR experiments for a specific configuration. 
      */
     private static void runCCRExperiment(String[] workflows, int numTasks, int numVMs, String expName) {
         for (String workflow : workflows) {
             System.out.println("\nWorkflow: " + workflow + " (" + numTasks + " task, " + numVMs + " VM)");
 
-            // NEW: Create CCR analyzer for this workflow
             CCRAnalyzer ccrAnalyzer = new CCRAnalyzer(workflow, numTasks, numVMs, expName);
 
             for (double ccr : CCR_VALUES) {
@@ -229,7 +197,6 @@ public class ExperimentRunner {
                 }
             }
             
-            // NEW: Save CCR sensitivity analysis after all CCR values tested
             try {
                 String outputPath = "../results/ccr_sensitivity/" + workflow + "_" + 
                                    expName.toLowerCase() + "_analysis.json";
@@ -249,8 +216,7 @@ public class ExperimentRunner {
     }
 
     /**
-     * Salvataggio incrementale: utile per non perdere dati se l'esecuzione si
-     * interrompe.
+     * Incremental checkpoint save.
      */
     private static void checkpointSave() {
         saveResultsToCSV(false);
@@ -274,24 +240,10 @@ public class ExperimentRunner {
             int numRuns, int warmupRuns)
             throws Exception {
 
-        // 1. Trova la directory del workflow Pegasus
-        String workflowDir;
-        if (expName.equals("EXP2_VM")) {
-            // Esperimento 2: cerca directory con VM specificato
-            workflowDir = findPegasusWorkflowDir(workflow.toLowerCase(), numTasks, numVMs);
-        } else {
-            // Esperimento 1: passa comunque il numero di VM al parser per generare capacità
-            // corrette
-            workflowDir = findPegasusWorkflowDir(workflow.toLowerCase(), numTasks, numVMs);
-        }
+        String workflowDir = findPegasusWorkflowDir(workflow.toLowerCase(), numTasks, numVMs);
 
         if (workflowDir == null) {
-            if (expName.equals("EXP2_VM")) {
-                System.out.println(
-                        "Workflow non trovato per " + workflow + " " + numTasks + " task, " + numVMs + " VMs");
-            } else {
-                System.out.println("Workflow non trovato per " + workflow + " " + numTasks + " task");
-            }
+            System.out.println("Workflow non trovato per " + workflow + " " + numTasks + " task");
             return null;
         }
 
@@ -302,18 +254,6 @@ public class ExperimentRunner {
         for (int runIdx = 0; runIdx < totalRuns; runIdx++) {
             boolean isWarmup = runIdx < warmupRuns;
 
-            // 2. Carica dati (DataLoader genera valori random)
-            // ExperimentRunner è l'entry point: prepara task/VM e li passa a SMCPTD.
-            //
-            // SEED STRATEGY:
-            // Option A: SAME SEED FOR ALL RUNS (current - for reproducibility)
-            //   Use -1 as runIdx to keep same seed across all runs
-            //   Good for: Testing if algorithm is deterministic
-            //int seedRunIdx = -1;
-            //
-            // Option B: DIFFERENT SEED PER RUN (for statistical analysis)
-            //   Uncomment line below to vary seed per run
-            //   Good for: Computing mean/variance across different random inputs
             int seedRunIdx = runIdx;
             
             List<task> tasks = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv", seedRunIdx);
@@ -325,29 +265,18 @@ public class ExperimentRunner {
             smcptd.setGanttChartSettings(true, workflow, ccr);
             SMGT smgt = smcptd.getSMGT();
 
-            // 4. Crea mapping VM
             Map<Integer, VM> vmMapping = new HashMap<>();
             for (VM vm : vms) {
                 vmMapping.put(vm.getID(), vm);
             }
 
-            // ============================================================================
-            // SINGLE-PASS SCHEDULING (Paper Algorithm)
-            // ============================================================================
-            // Calculate communication costs using paper's DCP formula:
-            // ci,j = (1/m(m-1)) × Σ(k=0 to m-1) Σ(l=0,l≠k to m-1) [TTi,j / B(VMk, VMl)]
-            // This averages costs over all VM pairs as specified in the paper
             Map<String, Double> commCosts = calculateCommunicationCostsForDCP(smgt, ccr);
-            
-            // Execute SM-CPTD algorithm (DCP → SMGT → LOTD)
             Map<Integer, List<Integer>> assignments = smcptd.executeSMCPTD(commCosts, vmMapping, ccr);
-            
-            // ============================================================================
 
-            // 6. Calcola metriche
+
+            // Calcola metriche
             double makespan = smcptd.getMakespan();
             
-            // Calculate SLR using critical path tasks (Paper Equation 7)
             Set<Integer> criticalPath = smcptd.getCriticalPath();
             List<task> criticalPathTasks = new ArrayList<>();
             for (task t : tasks) {
@@ -361,20 +290,17 @@ public class ExperimentRunner {
             double vf = calculateVF(smgt, assignments, makespan);
             double avgSatisfaction = calculateAvgSatisfaction(smgt, assignments, makespan);
 
-            // Salva le metriche (solo se non è warmup)
             if (!isWarmup) {
                 runs.add(new RunMetrics(slr, avu, vf, avgSatisfaction, makespan));
             }
         }
 
-        // Calcola la media dei risultati
         double avgSLR = runs.stream().mapToDouble(r -> r.slr).average().orElse(0);
         double avgAVU = runs.stream().mapToDouble(r -> r.avu).average().orElse(0);
         double avgVF = runs.stream().mapToDouble(r -> r.vf).average().orElse(0);
         double avgSatisfaction = runs.stream().mapToDouble(r -> r.avgSatisfaction).average().orElse(0);
         double avgMakespan = runs.stream().mapToDouble(r -> r.makespan).average().orElse(0);
 
-        // Usa il numero di task dalla prima run (sono sempre gli stessi)
         List<task> tasksForCount = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
         int actualTasks = tasksForCount.size();
 
@@ -382,7 +308,7 @@ public class ExperimentRunner {
     }
 
     /**
-     * ENHANCED: Esegue un singolo esperimento con CCR analysis
+     * Esegue un singolo esperimento con CCR analysis
      * 
      * This version captures data for CCR sensitivity analysis including:
      * - Communication costs
@@ -415,30 +341,25 @@ public class ExperimentRunner {
                 
                 SMCPTD smcptd = new SMCPTD();
                 smcptd.setInputData(tasks, vms);
-                smcptd.setGenerateGanttChart(false); // Disable for CCR analysis
+                smcptd.setGenerateGanttChart(false);
                 SMGT smgt = smcptd.getSMGT();
                 
-                // Create VM mapping
                 Map<Integer, VM> vmMapping = new HashMap<>();
                 for (VM vm : vms) {
                     vmMapping.put(vm.getID(), vm);
                 }
                 
-                // Single-pass scheduling (paper algorithm)
                 Map<String, Double> commCosts = calculateCommunicationCostsForDCP(smgt, ccr);
                 smcptd.executeSMCPTD(commCosts, vmMapping, ccr);
                 
-                // Get Critical Path
                 Set<Integer> criticalPath = smcptd.getCriticalPath();
                 
-                // Get duplicated tasks from LOTD (if available)
                 Map<Integer, Set<Integer>> duplicatedTasks = new HashMap<>();
                 LOTD lotd = smcptd.getLOTD();
                 if (lotd != null) {
                     duplicatedTasks = lotd.getDuplicatedTasks();
                 }
                 
-                // Capture snapshot
                 ccrAnalyzer.captureSnapshot(
                     ccr,
                     commCosts,
@@ -452,7 +373,6 @@ public class ExperimentRunner {
             }
         } catch (Exception e) {
             System.err.println("       CCR analysis capture failed: " + e.getMessage());
-            // Continue anyway - don't fail the experiment
         }
         
         return result;
@@ -474,10 +394,9 @@ public class ExperimentRunner {
     }
 
     /**
-     * Trova il file XML del workflow più vicino al numero di task richiesto
+     * Find workflow XML by task count.
      */
     private static String findWorkflowXML(String workflow, int targetTasks) {
-        // Mappa dei workflow alle directory
         String workflowDir = "../workflow/" + workflow.toLowerCase();
         File dir = new File(workflowDir);
 
@@ -506,7 +425,6 @@ public class ExperimentRunner {
                             bestMatch = file.getAbsolutePath();
                         }
                     } catch (NumberFormatException e) {
-                        // Ignora
                     }
                 }
             }
@@ -516,21 +434,18 @@ public class ExperimentRunner {
     }
     
     /**
-      * Trova la directory del workflow Pegasus con supporto per VM variabili
-      * Converte XML in CSV nella cartella data/
-      */
+     * Find and convert Pegasus workflow directory.
+     */
     protected static String findPegasusWorkflowDir(String workflow, int targetTasks, int targetVMs) {
-        // Trova il file XML del workflow
         String xmlFile = findWorkflowXML(workflow, targetTasks);
         if (xmlFile == null) {
             System.out.println("   Workflow XML non trovato per " + workflow + " " + targetTasks + " task");
             return null;
         }
 
-        // Converti XML in CSV nella cartella data/
         try {
             String outputDir = "../data/" + workflow.toLowerCase() + "_" + targetTasks;
-            int vms = targetVMs > 0 ? targetVMs : 5; // Default 5 VM
+            int vms = targetVMs > 0 ? targetVMs : 5;
             PegasusXMLParser.parseAndConvert(xmlFile, outputDir, vms);
             return outputDir;
         } catch (Exception e) {
@@ -541,41 +456,17 @@ public class ExperimentRunner {
     }
 
     /**
-     * Calculate communication costs for DCP using the paper's formula.
-     * 
-     * Formula: ci,j = (1 / m(m-1)) × Σ(k=0 to m-1) Σ(l=0,l≠k to m-1) [TTi,j / B(VMk, VMl)]
-     * 
-     * Where:
-     * - TTi,j = sti × CCR (data transfer size)
-     * - m = number of VMs
-     * - B(VMk, VMl) = bandwidth from VMk to VMl
-     * 
-     * This averages the communication cost across ALL possible VM pairs (k ≠ l),
-     * which is appropriate for DCP since tasks are not yet assigned to VMs.
-     * 
-     * Note: This is mathematically different from averaging bandwidths first.
-     * avg(TTi,j / B) ≠ TTi,j / avg(B)
-     * 
-     * @param smgt SMGT object with tasks and VMs
-     * @param ccr Communication-to-Computation Ratio
-     * @return Map of communication costs (key: "sourceTaskId_destTaskId", value: cost)
-     * @throws IllegalStateException if bandwidth data is missing or invalid
+     * Calculate communication costs for DCP (average across all VM pairs).
      */
     private static Map<String, Double> calculateCommunicationCostsForDCP(SMGT smgt, double ccr) {
         Map<String, Double> costs = new HashMap<>();
-        
         List<VM> vms = smgt.getVMs();
         
-        // For each edge in the task graph
         for (task t : smgt.getTasks()) {
             for (int succId : t.getSucc()) {
                 String key = t.getID() + "_" + succId;
                 task succ = Utility.getTaskById(succId, smgt.getTasks());
-                
-                // Use CommunicationCostCalculator to compute average cost
-                double avgCost = Metrics.CommunicationCostCalculator.calculateAverage(
-                    t, succ, vms, ccr);
-                
+                double avgCost = Metrics.CommunicationCostCalculator.calculateAverage(t, succ, vms, ccr);
                 costs.put(key, avgCost);
             }
         }
@@ -584,98 +475,8 @@ public class ExperimentRunner {
     }
 
     /**
-     * Calculates AVU (Average VM Utilization) - a key performance metric for workflow scheduling.
-     * 
-     * <h3>What AVU Measures:</h3>
-     * AVU represents the <b>average proportion of time VMs are busy executing tasks</b> during the
-     * workflow execution. It indicates how efficiently the scheduling algorithm utilizes available
-     * computing resources.
-     * <ul>
-     *   <li>AVU = 1.0 (100%): Perfect utilization - all VMs busy throughout execution</li>
-     *   <li>AVU = 0.5 (50%): VMs idle half the time on average</li>
-     *   <li>AVU = 0.0 (0%): No utilization - VMs completely idle</li>
-     * </ul>
-     * 
-     * <h3>Mathematical Formula (Paper Equations 8-9):</h3>
-     * <pre>
-     * VM Utilization (Eq. 8):
-     *   VU(VM_k) = (Σ ET(task_i)) / makespan
-     *   where:
-     *     - ET(task_i) = execution time of task i on VM k = task_size / vm_capacity
-     *     - Σ ET(task_i) = sum of execution times for all tasks assigned to VM k
-     *     - makespan = total workflow execution time
-     * 
-     * Average VM Utilization (Eq. 9):
-     *   AVU = (Σ VU(VM_k)) / m
-     *   where:
-     *     - m = total number of VMs
-     *     - Σ VU(VM_k) = sum of utilization across all VMs
-     * </pre>
-     * 
-     * <h3>LIMITATIONS:</h3>
-     * <ul>
-     *   <li><b>Does NOT account for idle time while waiting for data from predecessors:</b>
-     *       AVU only counts raw execution time. If a task must wait for predecessor tasks
-     *       to complete before starting, this wait time is NOT reflected in AVU.</li>
-     * 
-     *   <li><b>Does NOT include communication overhead in utilization calculation:</b>
-     *       Data transfer time between tasks is excluded. Only pure computation time
-     *       (task execution) is counted as "busy" time.</li>
-     * 
-     *   <li><b>Assumes makespan is accurately calculated:</b>
-     *       AVU accuracy depends on makespan accuracy. Preferably, makespan should be
-     *       calculated from LOTD.taskAFT (Actual Finish Times) which accounts for:
-     *       <ul>
-     *         <li>Task dependencies and precedence constraints</li>
-     *         <li>Communication costs between tasks</li>
-     *         <li>Data transfer delays</li>
-     *       </ul>
-     *   </li>
-     * 
-     *   <li><b>If fallback makespan is used, AVU may be overestimated:</b>
-     *       When LOTD AFT is unavailable, a simplified fallback calculates makespan by
-     *       summing task execution times per VM without accounting for dependencies or
-     *       communication. This typically results in:
-     *       <ul>
-     *         <li>Underestimated makespan (too small)</li>
-     *         <li>Overestimated AVU (appears higher than reality)</li>
-     *         <li>Misleading efficiency metrics</li>
-     *       </ul>
-     *       Check SMCPTD logs for "Using fallback makespan" warnings.
-     *   </li>
-     * </ul>
-     * 
-     * <h3>ACCURACY:</h3>
-     * Results are most accurate when:
-     * <ul>
-     *   <li>LOTD successfully completes and provides taskAFT (Actual Finish Times)</li>
-     *   <li>Makespan includes communication costs and dependency delays</li>
-     *   <li>All tasks are successfully scheduled (no unassigned tasks)</li>
-     *   <li>VM capabilities are properly configured and non-zero</li>
-     * </ul>
-     * 
-     * Look for this log in SMCPTD output to confirm accuracy:
-     * <pre>
-     *   Makespan calculated from LOTD AFT: 333.333
-     *    Source: LOTD Actual Finish Times (accurate for AVU/VF calculation)
-     * </pre>
-     * 
-     * <h3>COMPLEXITY:</h3>
-     * <b>Optimized from O(n²) to O(n)</b> where n = total number of tasks
-     * <ul>
-     *   <li><b>Old approach:</b> Nested loops - O(n²) for large workflows (500ms+ for 1000 tasks)</li>
-     *   <li><b>New approach:</b> HashMap pre-building - O(n) linear time (~2ms for 1000 tasks)</li>
-     *   <li><b>Speedup:</b> ~250x faster for large-scale workflows (1000+ tasks)</li>
-     * </ul>
-     * 
-     * Optimization strategy:
-     * <ol>
-     *   <li>Pre-build taskMap for O(1) task lookup (eliminates nested loop)</li>
-     *   <li>Pre-build vmMap for O(1) VM lookup</li>
-     *   <li>Direct HashMap.get() calls instead of linear search</li>
-     * </ol>
-     * 
-     * @param smgt SMGT instance containing tasks and VMs
+     * Calculates AVU (Average VM Utilization). Delegates to Metrics.AVU.
+     @param smgt SMGT instance containing tasks and VMs
      * @param assignments VM assignments (vmID → list of taskIDs)
      * @param makespan Total workflow execution time (should be from LOTD.taskAFT when available)
      * @return Average VM Utilization in range [0.0, 1.0] where 1.0 = 100% utilization
@@ -690,24 +491,18 @@ public class ExperimentRunner {
      * @see SMCPTD#calculateFinalMetrics for makespan calculation details
      */
     private static double calculateAVU(SMGT smgt, Map<Integer, List<Integer>> assignments, double makespan) {
-        if (makespan <= 0)
-            return 0;
+        if (makespan <= 0) return 0;
 
-        // OPTIMIZATION 1: Pre-build task lookup map - O(n) operation, enables O(1) lookups
         Map<Integer, task> taskMap = new HashMap<>();
         for (task t : smgt.getTasks()) {
             taskMap.put(t.getID(), t);
         }
 
-        // OPTIMIZATION 2: Pre-build VM lookup map - O(m) operation, enables O(1) lookups
         Map<Integer, VM> vmMap = new HashMap<>();
         for (VM v : smgt.getVMs()) {
             vmMap.put(v.getID(), v);
         }
 
-        // OPTIMIZATION 3: Convert assignments using direct HashMap lookups - O(k) where k = total assignments
-        // BUG FIX: Track which tasks have been assigned to avoid counting duplicates
-        // LOTD may duplicate tasks across multiple VMs - count each task only once
         Set<Integer> assignedTaskIds = new HashSet<>();
         Map<Integer, List<task>> taskAssignments = new HashMap<>();
         
@@ -717,112 +512,18 @@ public class ExperimentRunner {
             for (int taskId : entry.getValue()) {
                 task t = taskMap.get(taskId);
                 if (t != null) {
-                    // Only add if this is the FIRST assignment of this task
-                    // (duplicates created by LOTD should not be counted multiple times)
-                    if (!assignedTaskIds.contains(taskId)) {
-                        tasks.add(t);
-                        assignedTaskIds.add(taskId);
-                    }
-                    // If already assigned, this is a duplicate - skip it for AVU calculation
-                } else {
+                    tasks.add(t);                } else if (t == null) {
                     System.err.println(" Warning: Task ID " + taskId + " not found in task map");
                 }
             }
             taskAssignments.put(vmId, tasks);
         }
 
-        double avu = Metrics.AVU(vmMap, taskAssignments, makespan, "processingCapacity");
-        
-        return avu;
+        return Metrics.AVU(vmMap, taskAssignments, makespan, "processingCapacity");
     }
 
     /**
-     * <h2>Calculates VF (Variance of Fairness) - Task Satisfaction Metric</h2>
-     * 
-     * <h3>WHAT VF MEASURES</h3>
-     * <p>
-     * VF (Variance of Fairness) quantifies <b>how fairly tasks are distributed</b> across VMs
-     * by measuring the variance in task "satisfaction" levels. Each task's satisfaction
-     * represents how close its execution time is to the best possible execution time.
-     * </p>
-     * <ul>
-     *   <li><b>VF = 0.0</b>: Perfect fairness - all tasks have equal satisfaction</li>
-     *   <li><b>VF &gt; 0.0</b>: Higher variance - some tasks are significantly slower than others</li>
-     *   <li><b>Lower VF is better</b>: Indicates more balanced task distribution</li>
-     * </ul>
-     * 
-     * <h3>🧮 MATHEMATICAL FORMULA (Paper Equation 10)</h3>
-     * <pre>
-     * For each task i:
-     *   satisfaction(task_i) = actualET(task_i) / fastestET(task_i)
-     *   
-     *   where:
-     *     actualET(task_i)  = task_i.size / assignedVM.capacity
-     *     fastestET(task_i) = task_i.size / max(allVMs.capacity)
-     * 
-     * VF = variance(all satisfactions)
-     *    = Σ(satisfaction_i - mean_satisfaction)² / n
-     * </pre>
-     * 
-     * <h3>LIMITATIONS</h3>
-     * <ul>
-     *   <li><b>Does NOT account for communication overhead</b>
-     *       <br>→ Only considers computation time (task.size / vm.capacity)</li>
-     *   <li><b>Does NOT consider task dependencies</b>
-     *       <br>→ Ignores predecessor wait times and critical path constraints</li>
-     *   <li><b>Simplified satisfaction metric</b>
-     *       <br>→ Assumes "fastest ET" = execution on most powerful VM</li>
-     *   <li><b>Sensitive to VM heterogeneity</b>
-     *       <br>→ Large capacity differences inflate VF even with good scheduling</li>
-     *   <li><b>Makespan parameter unused in calculation</b>
-     *       <br>→ VF is independent of total workflow completion time</li>
-     * </ul>
-     * 
-     * <h3>ACCURACY CONSIDERATIONS</h3>
-     * <p><b>VF is most accurate when:</b></p>
-     * <ul>
-     *   <li>All tasks have non-zero size</li>
-     *   <li>All VMs have positive processing capacity</li>
-     *   <li>VM assignments contain valid task IDs</li>
-     *   <li>Communication costs are negligible compared to computation</li>
-     * </ul>
-     * <p><b>Expected log output for valid calculation:</b></p>
-     * <pre>
-     *   (No warnings about missing tasks or invalid IDs)
-     *   calculateVF performance: X.XXXms (N tasks, M VMs)  [for large workflows]
-     * </pre>
-     * <p><b>Warning signs of issues:</b></p>
-     * <pre>
-     *    Warning: Task ID X not found in task map  [Assignment references non-existent task]
-     * </pre>
-     * 
-     * <h3>COMPLEXITY &amp; PERFORMANCE</h3>
-     * <p><b>OPTIMIZED VERSION - O(n²) → O(n) improvement:</b></p>
-     * <ul>
-     *   <li><b>OLD</b>: Nested loop - for each assignment, search all tasks = O(n²)</li>
-     *   <li><b>NEW</b>: Pre-build HashMap for O(1) lookups = O(n)</li>
-     * </ul>
-     * 
-     * <p><b>Optimization Strategy:</b></p>
-     * <ol>
-     *   <li>Pre-build taskMap: O(n) - enables O(1) task lookup</li>
-     *   <li>Pre-build vmMap: O(m) - enables O(1) VM lookup</li>
-     *   <li>Convert assignments using direct HashMap.get(): O(k) where k = total assignments</li>
-     * </ol>
-     * 
-     * <p><b>Performance Comparison (1000 tasks):</b></p>
-     * <ul>
-     *   <li>Before: ~500ms+ (nested loops)</li>
-     *   <li>After: ~2-5ms (HashMap lookups)</li>
-     *   <li>Speedup: ~100-250x faster</li>
-     * </ul>
-     * 
-     * <p><b>Performance Logging:</b> Automatically enabled when:</p>
-     * <ul>
-     *   <li>Workflow has &gt;500 tasks, OR</li>
-     *   <li>Execution takes &gt;10ms</li>
-     * </ul>
-     * 
+     * Calculates VF (Variance of Fairness). Delegates to Metrics.VF.
      * @param smgt       SMGT instance containing all workflow tasks and available VMs
      * @param assignments Task-to-VM assignments (vmID → list of taskIDs assigned to that VM)
      * @param makespan   Total workflow execution time (UNUSED - kept for API consistency)
@@ -836,24 +537,18 @@ public class ExperimentRunner {
      * @see #calculateAVU(SMGT, Map, double) for AVU (VM utilization) metric calculation
      */
     private static double calculateVF(SMGT smgt, Map<Integer, List<Integer>> assignments, double makespan) {
-        if (makespan <= 0)
-            return 0;
+        if (makespan <= 0) return 0;
 
-        // OPTIMIZATION 1: Pre-build task lookup map - O(n) operation, enables O(1) lookups
         Map<Integer, task> taskMap = new HashMap<>();
         for (task t : smgt.getTasks()) {
             taskMap.put(t.getID(), t);
         }
 
-        // OPTIMIZATION 2: Pre-build VM lookup map - O(m) operation, enables O(1) lookups
         Map<Integer, VM> vmMap = new HashMap<>();
         for (VM v : smgt.getVMs()) {
             vmMap.put(v.getID(), v);
         }
 
-        // OPTIMIZATION 3: Convert assignments using direct HashMap lookups - O(k) where k = total assignments
-        // BUG FIX: Track which tasks have been assigned to avoid counting duplicates
-        // LOTD may duplicate tasks across multiple VMs - count each task only once
         Set<Integer> assignedTaskIds = new HashSet<>();
         Map<Integer, List<task>> taskAssignments = new HashMap<>();
         
@@ -862,70 +557,21 @@ public class ExperimentRunner {
             List<task> tasks = new ArrayList<>();
             for (int taskId : entry.getValue()) {
                 task t = taskMap.get(taskId);
-                if (t != null) {
-                    // Only add if this is the FIRST assignment of this task
-                    // (duplicates created by LOTD should not be counted multiple times)
-                    if (!assignedTaskIds.contains(taskId)) {
-                        tasks.add(t);
-                        assignedTaskIds.add(taskId);
-                    }
-                    // If already assigned, this is a duplicate - skip it for VF calculation
-                } else {
+                if (t != null ) {
+                    tasks.add(t);
+                } else if (t == null) {
                     System.err.println(" Warning: Task ID " + taskId + " not found in task map");
                 }
             }
             taskAssignments.put(vmId, tasks);
         }
 
-        // Calcola VF usando Metrics
         double vf = Metrics.VF(smgt.getTasks(), vmMap, taskAssignments, "processingCapacity");
-        
         return Double.isNaN(vf) || Double.isInfinite(vf) ? Double.NaN : vf;
     }
 
     /**
-     * <h2>Calculates Average Satisfaction - Mean Task Satisfaction Metric</h2>
-     * 
-     * <h3>WHAT AVERAGE SATISFACTION MEASURES</h3>
-     * <p>
-     * Average Satisfaction quantifies <b>how efficiently tasks are distributed</b> across VMs
-     * by measuring the mean satisfaction level of all tasks. Each task's satisfaction
-     * represents how close its execution time is to the best possible execution time.
-     * </p>
-     * <ul>
-     *   <li><b>AvgSatisfaction = 1.0</b>: Perfect - all tasks run on their fastest VM</li>
-     *   <li><b>AvgSatisfaction &gt; 1.0</b>: Some tasks run on slower VMs (higher = less optimal)</li>
-     *   <li><b>Lower is better</b>: Closer to 1.0 indicates more efficient allocation</li>
-     * </ul>
-     * 
-     * <h3>🧮 MATHEMATICAL FORMULA</h3>
-     * <pre>
-     * For each task i:
-     *   satisfaction(task_i) = actualET(task_i) / fastestET(task_i)
-     *   
-     *   where:
-     *     actualET(task_i)  = task_i.size / assignedVM.capacity
-     *     fastestET(task_i) = task_i.size / max(allVMs.capacity)
-     * 
-     * AvgSatisfaction = Σ(satisfaction_i) / n
-     * </pre>
-     * 
-     * <h3>RELATIONSHIP TO VF</h3>
-     * <ul>
-     *   <li><b>VF (Variance of Fairness)</b>: Measures variance in satisfaction levels</li>
-     *   <li><b>AvgSatisfaction</b>: Measures mean of satisfaction levels</li>
-     *   <li>Both use the same underlying satisfaction metric</li>
-     *   <li>Low VF + Low AvgSatisfaction = optimal and fair scheduling</li>
-     * </ul>
-     * 
-     * <h3>COMPLEXITY &amp; PERFORMANCE</h3>
-     * <p><b>OPTIMIZED VERSION - O(n) complexity:</b></p>
-     * <ul>
-     *   <li>Pre-build taskMap: O(n) - enables O(1) task lookup</li>
-     *   <li>Pre-build vmMap: O(m) - enables O(1) VM lookup</li>
-     *   <li>Convert assignments using HashMap.get(): O(k) where k = total assignments</li>
-     * </ul>
-     * 
+     * Calculates Average Satisfaction. Delegates to Metrics.AvgSatisfaction.
      * @param smgt       SMGT instance containing all workflow tasks and available VMs
      * @param assignments Task-to-VM assignments (vmID → list of taskIDs assigned to that VM)
      * @param makespan   Total workflow execution time (UNUSED - kept for API consistency)
@@ -935,24 +581,18 @@ public class ExperimentRunner {
      * @see #calculateVF(SMGT, Map, double) for VF (variance of satisfaction) metric
      */
     private static double calculateAvgSatisfaction(SMGT smgt, Map<Integer, List<Integer>> assignments, double makespan) {
-        if (makespan <= 0)
-            return 0;
+        if (makespan <= 0) return 0;
 
-        // OPTIMIZATION 1: Pre-build task lookup map - O(n) operation, enables O(1) lookups
         Map<Integer, task> taskMap = new HashMap<>();
         for (task t : smgt.getTasks()) {
             taskMap.put(t.getID(), t);
         }
 
-        // OPTIMIZATION 2: Pre-build VM lookup map - O(m) operation, enables O(1) lookups
         Map<Integer, VM> vmMap = new HashMap<>();
         for (VM v : smgt.getVMs()) {
             vmMap.put(v.getID(), v);
         }
 
-        // OPTIMIZATION 3: Convert assignments using direct HashMap lookups - O(k) where k = total assignments
-        // BUG FIX: Track which tasks have been assigned to avoid counting duplicates
-        // LOTD may duplicate tasks across multiple VMs - count each task only once
         Set<Integer> assignedTaskIds = new HashSet<>();
         Map<Integer, List<task>> taskAssignments = new HashMap<>();
         
@@ -962,13 +602,7 @@ public class ExperimentRunner {
             for (int taskId : entry.getValue()) {
                 task t = taskMap.get(taskId);
                 if (t != null) {
-                    // Only add if this is the FIRST assignment of this task
-                    // (duplicates created by LOTD should not be counted multiple times)
-                    if (!assignedTaskIds.contains(taskId)) {
-                        tasks.add(t);
-                        assignedTaskIds.add(taskId);
-                    }
-                    // If already assigned, this is a duplicate - skip it
+                    tasks.add(t);
                 } else {
                     System.err.println(" Warning: Task ID " + taskId + " not found in task map");
                 }
@@ -976,14 +610,12 @@ public class ExperimentRunner {
             taskAssignments.put(vmId, tasks);
         }
 
-        // Calculate Average Satisfaction using Metrics
         double avgSat = Metrics.AvgSatisfaction(smgt.getTasks(), vmMap, taskAssignments, "processingCapacity");
-        
         return Double.isNaN(avgSat) || Double.isInfinite(avgSat) ? Double.NaN : avgSat;
     }
 
     /**
-     * Salva risultati in CSV
+     * Save results to CSV.
      */
     private static void saveResultsToCSV() {
         saveResultsToCSV(true);
@@ -1007,7 +639,7 @@ public class ExperimentRunner {
     }
 
     /**
-     * Salva risultati in JSON
+     * Save results to JSON.
      */
     private static void saveResultsToJSON() {
         saveResultsToJSON(true);
@@ -1053,7 +685,7 @@ public class ExperimentRunner {
     }
 
     /**
-     * Stampa riepilogo risultati
+     * Print results summary.
      */
     private static void printSummary() {
         System.out.println("\n" + "=".repeat(70));
@@ -1061,7 +693,6 @@ public class ExperimentRunner {
         System.out.println("=".repeat(70));
         System.out.println("Total experiments: " + results.size());
 
-        // Raggruppa per esperimento
         Map<String, List<ExperimentResult>> byExperiment = new HashMap<>();
         for (ExperimentResult r : results) {
             byExperiment.computeIfAbsent(r.experiment, k -> new ArrayList<>()).add(r);

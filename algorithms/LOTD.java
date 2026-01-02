@@ -595,16 +595,7 @@ public class LOTD {
                 return gapStart;
             }
         }
-
-        // Try to fit after last task
-        if (!slots.isEmpty()) {
-            ExecutionSlot last = slots.get(slots.size() - 1);
-            double slotStart = Math.max(earliestStart, last.aft);
-            if (slotStart + duration <= deadline) {
-                return slotStart;
-            }
-        }
-
+    
         return -1; // No suitable slot found
     }
 
@@ -633,14 +624,13 @@ public class LOTD {
         this.duplicateAST.put(key, dupAST);
         this.duplicateAFT.put(key, dupAFT);
 
-        // Add duplicate to vmSchedule (real task, not phantom)
+        // Add duplicate to vmSchedule
         // This ensures AVU and other metrics account for duplicate execution time
         if (!vmSchedule.get(targetVM).contains(taskId)) {
             vmSchedule.get(targetVM).add(taskId);
         }
 
         // Add duplicate to VM execution order
-        // Use a special key format for duplicates to distinguish from original
         updateVMExecutionOrder(targetVM, taskId, dupAST, dupAFT);
         
         if (VERBOSE) {
@@ -693,7 +683,7 @@ public class LOTD {
     }
 
     /**
-     * Step 5: Final timing calculation
+     * Final timing calculation
      * 
      * Performs a complete recalculation of all task timings with duplicates in place.
      * This ensures consistency after all duplications have been performed.
