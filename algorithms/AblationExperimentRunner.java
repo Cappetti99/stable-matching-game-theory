@@ -296,7 +296,7 @@ public class AblationExperimentRunner {
         LOTD lotd = new LOTD(freshSmgt);
         lotd.setCommunicationCosts(commCosts);
         
-        return lotd.executeLOTDCorrect(smgtSchedule);
+        return lotd.executeLOTD(smgtSchedule);
     }
     
     /**

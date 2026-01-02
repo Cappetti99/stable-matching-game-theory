@@ -276,7 +276,7 @@ public class SMCPTD {
 
             System.out.println("   🔧 Running LOTD optimization...");
             Map<Integer, List<Integer>> optimizedSchedule = 
-                lotd.executeLOTDCorrect(smgtSchedule);
+                lotd.executeLOTD(smgtSchedule);
 
             return optimizedSchedule;
 

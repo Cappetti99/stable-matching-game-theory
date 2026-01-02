@@ -109,7 +109,7 @@ public class LOTD {
      * @param preSchedule Schedule from SMGT (VM_ID -> task_IDs)
      * @return Optimized schedule with entry task duplications
      */
-    public Map<Integer, List<Integer>> executeLOTDCorrect(Map<Integer, List<Integer>> preSchedule) {
+    public Map<Integer, List<Integer>> executeLOTD(Map<Integer, List<Integer>> preSchedule) {
 
         if (VERBOSE) {
             System.out.println("\n=== LOTD: Entry Task Duplication ===");
@@ -227,7 +227,8 @@ public class LOTD {
         double ast = Math.max(drt, mrt);
 
         // 4. Execution time
-        double et = calculateExecutionTime(t, vmId);
+        VM vm = Utility.getVMById(vmId, vms);
+        double et = (vm != null) ? Metrics.ET(t, vm) : t.getSize();
 
         // 5. Actual Finish Time
         double aft = ast + et;
@@ -266,12 +267,16 @@ public class LOTD {
                 } else {
                     // Remote predecessor - add communication cost
                     Integer predVM = taskToVM.get(predId);
-                    double commCost = (predVM != null && !predVM.equals(vmId))
-                            ? getCommunicationCost(predId, t.getID(), predVM, vmId)
-                            : 0.0;
-                    
-                    double newDRT = predAFT + commCost;                  
-                    drt = Math.max(drt, newDRT);
+                    if (predVM != null && !predVM.equals(vmId)) {
+                        task predTask = Utility.getTaskById(predId, tasks);
+                        VM predVMObj = Utility.getVMById(predVM, vms);
+                        VM targetVMObj = Utility.getVMById(vmId, vms);
+                        double commCost = (predTask != null && predVMObj != null && targetVMObj != null)
+                                ? Metrics.CommunicationCostCalculator.calculate(predTask, t, predVMObj, targetVMObj, ccr)
+                                : 0.0;
+                        double newDRT = predAFT + commCost;
+                        drt = Math.max(drt, newDRT);
+                    }
                 }
             }
         }
@@ -307,7 +312,8 @@ public class LOTD {
 
         // Calculate execution time for this task
         task t = Utility.getTaskById(taskId, tasks);
-        double et = (t != null) ? calculateExecutionTime(t, vmId) : 0.0;
+        VM vm = Utility.getVMById(vmId, vms);
+        double et = (t != null && vm != null) ? Metrics.ET(t, vm) : 0.0;
 
         // Try insertion-based scheduling: find the earliest slot where this task fits
         // Task needs a contiguous time window of size 'et' that doesn't overlap with existing tasks
@@ -390,8 +396,9 @@ public class LOTD {
         }
     }
 
+
     /**
-     * Step 3: Find all entry tasks (no predecessors)
+     * Find all entry tasks (no predecessors)
      */
     private List<Integer> findEntryTasks() {
         List<Integer> entryTasks = new ArrayList<>();
@@ -406,7 +413,7 @@ public class LOTD {
     }
 
     /**
-     * Step 4: Try to duplicate an entry task onto VMs with its children
+     * Try to duplicate an entry task onto VMs with its children
      */
     private void tryDuplicateEntryTask(int entryTaskId) {
         task entryTask = Utility.getTaskById(entryTaskId, tasks);
@@ -480,14 +487,21 @@ public class LOTD {
             return null;
 
         // 1. Calculate execution time for duplicate
-        double duplicateET = calculateExecutionTime(entryTask, targetVM);
+        VM targetVMObj = Utility.getVMById(targetVM, vms);
+        if (targetVMObj == null)
+            return null;
+        double duplicateET = Metrics.ET(entryTask, targetVMObj);
 
         // 2. Calculate when data would arrive from original VM
         Double originalFinish = taskAFT.get(entryTaskId);
         if (originalFinish == null)
             originalFinish = 0.0;
 
-        double commCost = getCommunicationCost(entryTaskId, succId, originalVM, targetVM);
+        task succTask = Utility.getTaskById(succId, tasks);
+        VM originalVMObj = Utility.getVMById(originalVM, vms);
+        double commCost = (succTask != null && originalVMObj != null && targetVMObj != null)
+                ? Metrics.CommunicationCostCalculator.calculate(entryTask, succTask, originalVMObj, targetVMObj, ccr)
+                : 0.0;
         double dataArrival = originalFinish + commCost;
 
         // 3. Get when successor starts on target VM
@@ -496,23 +510,8 @@ public class LOTD {
             succAST = Double.MAX_VALUE;
 
         // 4. Find earliest idle slot where duplicate can fit BEFORE successor starts
-        // The duplicate must start after entry task's predecessors finish on target VM
+        // Entry tasks have no predecessors by definition, so duplicate can start at time 0
         double earliestStart = 0.0;
-        
-        // Check predecessors of entry task to see when their data arrives on target VM
-        for (Integer predId : entryTask.getPre()) {
-            Double predFinish = taskAFT.get(predId);
-            if (predFinish != null) {
-                Integer predVM = taskToVM.get(predId);
-                if (predVM != null && predVM != targetVM) {
-                    double predCommCost = getCommunicationCost(predId, entryTaskId, predVM, targetVM);
-                    earliestStart = Math.max(earliestStart, predFinish + predCommCost);
-                } else if (predVM != null) {
-                    // Predecessor on same VM, just wait for it to finish
-                    earliestStart = Math.max(earliestStart, predFinish);
-                }
-            }
-        }
 
         // Find idle slot on target VM where duplicate can fit
         double idleSlotStart = findIdleSlot(targetVM, earliestStart, succAST, duplicateET);
@@ -821,37 +820,7 @@ public class LOTD {
 
     // ==================== UTILITY METHODS ====================
 
-    /**
-     * Get communication cost between two tasks on different VMs
-     */
-    private double getCommunicationCost(int srcTaskId, int dstTaskId,
-            int srcVMId, int dstVMId) {
-        task srcTask = Utility.getTaskById(srcTaskId, tasks);
-        task dstTask = Utility.getTaskById(dstTaskId, tasks);
-        VM srcVM = Utility.getVMById(srcVMId, vms);
-        VM dstVM = Utility.getVMById(dstVMId, vms);
-        
-        if (srcTask == null || dstTask == null || srcVM == null || dstVM == null) {
-            return 0.0;
-        }
-        
-        return Metrics.CommunicationCostCalculator.calculate(srcTask, dstTask, srcVM, dstVM, ccr);
-    }
 
-    /**
-     * Calculate execution time of task on VM
-     */
-    private double calculateExecutionTime(task t, int vmId) {
-        VM vm = Utility.getVMById(vmId, vms);
-        if (vm == null)
-            return t.getSize();
-
-        double capacity = vm.getProcessingCapacity();
-        if (capacity <= 0)
-            return t.getSize();
-
-        return t.getSize() / capacity;
-    }
     
     /**
      * Get tasks ordered by waitingList order within each DAG level.
