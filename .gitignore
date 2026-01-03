@@ -107,15 +107,6 @@ config.local
 settings.local
 .env.local
 
-# Output matplotlib (immagini generate)
-*.png
-*.jpg
-*.jpeg
-*.pdf
-*.svg
-!docs/*.pdf
-!docs/*.png
-
 # File CSV generati dinamicamente
 *.csv
 !examples/*.csv

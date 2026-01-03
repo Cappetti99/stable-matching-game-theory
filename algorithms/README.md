@@ -1,4 +1,4 @@
-# SM-CPTD Java Module (algorithms/)
+# SM-CPTD (algorithms/)
 ## Overview
 
 This folder contains the Java implementation of the SM-CPTD workflow scheduler, together with the components required to compute the evaluation metrics used in the associated paper.
@@ -112,7 +112,7 @@ Performs level-by-level task scheduling:
 - Computes per-VM capacity thresholds (how many tasks a VM can accept).
 - Uses a stable matching process for non-CP tasks based on task/VM preferences.
 
-The `VM.waitingList` is used to track assigned tasks and enforces capacity constraints (`waitingList.size() >= threshold`).
+The `VM.waitingList` is used to track assigned tasks and enforces capacity constraints (`waitingList.size() < threshold`).
 
 ### `LOTD.java` - List of Task Duplication
 
@@ -160,23 +160,6 @@ java PegasusXMLParser
 ```
 The runners may also automatically generate missing datasets by selecting the closest matching XML workflow.
 
----
-
-## Build and Execution
-
-Compile:
-
-```bash
-cd algorithms
-javac *.java
-```
-
-Run the main experiment pipeline:
-
-```bash
-cd algorithms
-java Main
-```
 ---
 
 ### Reproducibility

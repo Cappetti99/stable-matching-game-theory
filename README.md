@@ -51,9 +51,10 @@ stable-matching-game-theory/
 
 ### Requirements
 
-- Java 8+ (JDK)
-- Python 3 (only for figure generation)
-- Python packages: `pandas`, `matplotlib`
+- **Java**: OpenJDK 23.0.2 (Temurin) or compatible JDK 17+
+  - Download: [Eclipse Temurin](https://adoptium.net/)
+- **Python 3**: Only required for figure generation
+- **Python packages**: `pandas`, `matplotlib`, `seaborn`, `numpy`
 
 Install Python dependencies:
 
@@ -171,7 +172,7 @@ $$\text{satisfaction}(t_i)=\frac{ET(t_i,\;\text{assigned VM})}{\min_k ET(t_i,\;V
 
 This ratio is always $\ge 1$ (values closer to 1 indicate that the task is executed on a VM close to its best possible option).
 Then, **VF** is computed as the (population) variance of satisfaction across all scheduled tasks: 
-$$ VF = \frac{1}{n} \sum_{i=1}^{n} (M - S_i)^2 $$
+$$VF = \frac{1}{n} \sum_{i=1}^{n} (M - S_i)^2 $$
 Where $$S_i$$ is the satisfaction of the 
 𝑖-th task and $$M$$ is the mean satisfaction across all tasks.
 
@@ -187,7 +188,7 @@ Interpretation:
 
 | Average task satisfaction across workflows (large-scale, CCR=1.0). |
 |----------------|
-|![nobase](results/figures/figure_vf_vs_vms.png) |
+|![nobase](results/figures/figure_avg_satisfaction_vs_workflow_1000x50_ccr1.png) |
 
 
 ## Ablation Study
@@ -229,8 +230,7 @@ Overall, the SM-CPTD pipeline provides a practical scheduling approach that bala
 
 ## References
 
-- [Z. hong Jia, L. Pan, X. Liu, and X. jun Li. A novel cloud workflow scheduling algorithm based on stable matching game theory. ](https://link.springer.com/article/10.1007/s11227-021-03742-3) The Journal of Supercomputing, 77(10):11597–11624,
-2021.
-- [DAX-file: workflows dax format. ](https://github.com/adnanetalha/DAX-file).
+- [Z. hong Jia, L. Pan, X. Liu, and X. jun Li. A novel cloud workflow scheduling algorithm based on stable matching game theory. ](https://link.springer.com/article/10.1007/s11227-021-03742-3) The Journal of Supercomputing, 77(10):11597–11624, 2021.
+- [DAX-file: workflows dax format](https://github.com/adnanetalha/DAX-file).
 
 

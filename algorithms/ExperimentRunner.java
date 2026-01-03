@@ -24,7 +24,7 @@ import java.util.*;
  */
 public class ExperimentRunner {
 
-    private static final int NUM_RUNS = 5;
+    private static final int NUM_RUNS = 10;
     private static final int WARMUP_RUNS = 0;
 
     private static final String[] WORKFLOWS = { "cybershake", "epigenomics", "ligo", "montage" };
