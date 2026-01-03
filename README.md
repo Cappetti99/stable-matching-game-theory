@@ -1,20 +1,25 @@
-# SM-CPTD — Workflow Scheduling with Stable Matching and Task Duplication
+# SM-CPTD — A novel cloud workflow scheduling algorithm based on stable matching game theory
 
 ## Overview
-This project implements a workflow scheduling pipeline inspired by the SM-CPTD approach:
+This repository presents an experimental implementation and evaluation of a **workflow scheduling pipeline inspired by the SM-CPTD approach**, combining critical-path analysis, stable matching–based task assignment, and selective task duplication.
+The focus of this repository is on experimental evaluation, reproducibility, and empirical analysis, while detailed algorithmic and implementation aspects are documented in the dedicated README within the `algorithms/` directory.
 
-1. **DCP** computes task ranks and selects a (level-wise) critical path.
-2. **SMGT** assigns tasks to VMs level-by-level using a stable matching strategy, giving priority to critical-path tasks.
-3. **LOTD** improves the schedule by duplicating tasks (in this code: mainly entry tasks) when that reduces communication overhead.
+The scheduling pipeline is conceptually organized into three stages:
 
-The repository also contains a full experimental runner and plotting scripts to reproduce the produced figures.
+1. **Dynamic Critical Path** computation for task ranking and critical-path identification.
+2. **Stable Matching Game Theory** scheduling, which assigns tasks to virtual machines (VMs) level by level, prioritizing critical-path tasks.
+3. **List of Task Duplication**, which improves the schedule by duplicating selected tasks (in this implementation, only entry tasks) to reduce communication overhead.
 
-Reference: “A stable matching-based algorithm for task scheduling in cloud computing” (Journal of Supercomputing, 2021).
+The repository contains a full experimental pipeline and plotting scripts for reproducing the experimental results and figures presented in the paper.
 
-Main objectives:
+Reference: 
+*[“A stable matching-based algorithm for task scheduling in cloud computing” (Journal of Supercomputing, 2021).](https://link.springer.com/article/10.1007/s11227-021-03742-3)*
+
+### Main objectives:
 - Implement the scheduling pipeline (DCP → SMGT → LOTD) on real Pegasus workflow graphs.
-- Run controlled experiments sweeping CCR values and VM counts.
-- Save results in machine-readable format and generate publication-style figures.
+- Conduct controlled experimental evaluations under varying communication-to-computation ratios (CCR) and VM counts.
+- Collect and store metrics in machine-readable formats.
+- Generate figures suitable for empirical analysis and comparison.
 
 ### Project Structure
 
@@ -56,29 +61,17 @@ Install Python dependencies:
 pip3 install pandas matplotlib
 ```
 
-### Running Experiments
+## Running Experiments
 
-Recommended (repo root):
+Recommended Execution (from repository root):
 
 ```bash
 ./run.sh
 ```
-
-What `run.sh` does:
-1) runs `PegasusXMLParser` (generates CSV datasets under `data/`)
-2) compiles and runs `Main`
-3) `Main` runs `ExperimentRunner` and then tries to generate figures automatically
-
-Manual run (no scripts):
-
-```bash
-cd algorithms
-javac *.java
-
-java Main
-```
-
-On Windows: run `run.sh` via WSL or Git Bash; otherwise use the manual Java commands.
+This script performs the following steps:
+1) runs `PegasusXMLParser` (generates CSV datasets under `data/`).
+2) compiles and runs `Main`.
+3) `Main` runs `ExperimentRunner` and then tries to generate figures automatically using Python (if available).
 
 #### Arguments
 
@@ -112,79 +105,132 @@ java ExperimentRunner --exp1 --workflow=montage
 java Main --seed=123
 ```
 
-## Experiments Implemented (in code)
+## Experiments and Results
 
 All experiments are implemented in `algorithms/ExperimentRunner.java`.
 
-### Experiment 1 — CCR sweep
+## Experiment 1 — CCR Sensitivity Analysis
+This experiment evaluates the impact of the communication-to-computation ratio (CCR) on scheduling performance.
 
-- Workflows: `cybershake`, `epigenomics`, `ligo`, `montage`
-- CCR values: 0.4 → 2.0 (step 0.2)
-- Sizes:
-  - Small: 5 VMs and ~50 tasks (Epigenomics uses 47)
-  - Medium: 10 VMs and 100 tasks
-  - Large: 50 VMs and ~1000 tasks (Epigenomics uses 997)
+Experimental setup: 
+
+- Workflows: `cybershake`, `epigenomics`, `ligo`, `montage`.
+- CCR values: 0.4 → 2.0 (step 0.2).
+- Problem sizes:
+  - *Small*: 5 VMs and ~50 tasks (Epigenomics uses 47).
+  - *Medium*: 10 VMs and 100 tasks.
+  - *Large*: 50 VMs and ~1000 tasks (Epigenomics uses 997).
 
 This experiment also writes CCR sensitivity JSON snapshots via `CCRAnalyzer` under `results/ccr_sensitivity/`.
 
-### Experiment 2 — VM-count sweep
+### Results and figures
+The CCR sensitivity analysis highlights the expected trade-off between computation and communication costs:
+- SLR generally increases with higher CCR values, reflecting increased communication overhead.
+- AVU decreases as communication dominates computation, indicating reduced effective VM utilization.
+- Larger workflows exhibit smoother trends, while smaller workflows show higher variance.
 
-- Fixed CCR: 1.0
-- VM counts: 30, 35, 40, 45, 50, 55, 60, 65, 70
-- Tasks: ~1000 (Epigenomics uses 997)
+| Comparison of SLR values across CCRs for workflows of increasing size (small, medium, and large). |
+|----------------|
+|![nobase](results/figures/figure3_slr_vs_ccr_small.png) |
+|![nobase](results/figures/figure4_slr_vs_ccr_medium.png) |
+|![nobase](results/figures/figure5_slr_vs_ccr_large.png) |
 
-## Outputs
 
-### Results
+| Comparison of AVU values across CCRs for workflows of increasing size (small, medium, and large). |
+|----------------|
+|![nobase](results/figures/figure6_avu_vs_ccr_small.png) |
+|![nobase](results/figures/figure7_avu_vs_ccr_medium.png) |
+|![nobase](results/figures/figure8_avu_vs_ccr_large.png) |
 
-`ExperimentRunner` writes results under `results/`:
-- `results/experiments_results.json`
-- `results/experiments_results.csv` (created by the runner when saving CSV)
 
-Recorded metrics (fields in `experiments_results.json`):
-- `slr`, `avu`, `vf`, `avgSatisfaction`, `makespan`
 
-### Figures
+## Experiment 2 — VM Count Scalability
 
-Figures are saved under `results/figures/`.
+This experiment analyzes scalability with respect to the number of available VMs. 
+- Fixed CCR: 1.0.
+- VM counts: 30, 35, 40, 45, 50, 55, 60, 65, 70.
+- Tasks: ~1000 (Epigenomics uses 997).
 
-They are generated by `generators/generate_paper_figures.py` using `results/experiments_results.json`.
-The script can be run automatically from `Main` (if Python + dependencies are available) or manually:
+### Results and figures
 
-```bash
-cd generators
-python3 generate_paper_figures.py --auto
-```
+When increasing the number of VMs:
+- Makespan and SLR decrease initially, then plateau as parallelism saturates.
+- AVU decreases with higher VM counts, reflecting underutilization in highly overprovisioned settings.
 
-If the corresponding experiment data is present, the script generates (among others) the following PNG files:
-- `figure3_slr_vs_ccr_small.png`
-- `figure4_slr_vs_ccr_medium.png`
-- `figure5_slr_vs_ccr_large.png`
-- `figure6_avu_vs_ccr_small.png`
-- `figure7_avu_vs_ccr_medium.png`
-- `figure8_avu_vs_ccr_large.png`
-- `figure9_slr_vs_vms.png`
-- `figure10_avu_vs_vms.png`
-- `figure_vf_vs_vms.png`
-- `figure_vf_vs_workflow_1000x50_ccr1.png`
-- `figure_avg_satisfaction_vs_workflow_1000x50_ccr1.png`
-- `figure_metrics_comparison_large.png`
+| Comparison of SLR and AVU values across different numbers of VMs (large-scale workflows, CCR = 1.0). |
+|----------------|
+|![nobase](results/figures/figure9_slr_vs_vms.png) |
+|![nobase](results/figures/figure10_avu_vs_vms.png) |
 
-Optional outputs (enabled in Java code paths that request them):
-- `results/gantt_charts/*.json` (Gantt chart snapshots)
+## Fairness Analysis — Variance Factor (VF)
+In addition to makespan-oriented metrics, the evaluation includes a fairness-oriented metric named VF (Variance Factor).
 
-## Data Generation and Assumptions (important for interpretation)
+Each task is associated with a *satisfaction* value defined as:
 
-- The workflow structure comes from Pegasus XML files under `workflow/`.
-- CSV datasets under `data/` are generated from XML by `PegasusXMLParser`.
-- During execution, `DataLoader` uses the CSVs mainly for DAG structure and IDs; it generates numeric parameters uniformly:
-  - task size in [500, 700]
-  - VM capacity in [10, 20]
-  - bandwidth in [20, 30]
+$$\text{satisfaction}(t_i)=\frac{ET(t_i,\;\text{assigned VM})}{\min_k ET(t_i,\;VM_k)}$$
 
-This is controlled by `SeededRandom`, so results are reproducible when a seed is fixed.
+This ratio is always $\ge 1$ (values closer to 1 indicate that the task is executed on a VM close to its best possible option).
+Then, **VF** is computed as the (population) variance of satisfaction across all scheduled tasks: 
+$$ VF = \frac{1}{n} \sum_{i=1}^{n} (M - S_i)^2 $$
+Where $$S_i$$ is the satisfaction of the 
+𝑖-th task and $$M$$ is the mean satisfaction across all tasks.
+
+Interpretation:
+- **Lower VF** means *more uniform* satisfaction across tasks (i.e., a fairer allocation).
+- **Higher VF** means satisfaction is more uneven (some tasks are much more penalized than others).
+
+### Results and figures
+
+| VF across workflows (large-scale, 50 VMs, CCR=1.0). |
+|----------------|
+|![nobase](results/figures/figure_vf_vs_workflow_1000x50_ccr1.png) |
+
+| Average task satisfaction across workflows (large-scale, CCR=1.0). |
+|----------------|
+|![nobase](results/figures/figure_vf_vs_vms.png) |
+
+
+## Ablation Study
+
+To quantify the contribution of individual pipeline components, an ablation study is provided via `algorithms/AblationExperimentRunner.java`.
+
+The runner evaluates four variants on the large-scale workflows (about 1000 tasks, 50 VMs, CCR = 1.0):
+
+1. **SMGT only** (baseline)
+2. **DCP + SMGT** (critical-path prioritization)
+3. **SMGT + LOTD** (task duplication refinement)
+4. **DCP + SMGT + LOTD** (full SM-CPTD pipeline)
+
+### Results and figures
+
+The ablation compares SLR, AVU, and VF across workflows to highlight how each component impacts performance and fairness.
+
+????? FOOORSE QUAlCOSA SIMIL 
+The ablation results show that:
+- Critical-path prioritization (DCP) improves makespan-related metrics.
+- Task duplication (LOTD) further refines schedules by reducing communication delays.
+- The full SM-CPTD pipeline consistently outperforms partial variants in terms of SLR, AVU, and fairness.
+
+
+| Ablation study results: SLR, AVU, and VF. |
+|----------------|
+|![nobase](results/figures/figure12_ablation_slr.png) |
+|![nobase](results/figures/figure12_ablation_avu.png) |
+|![nobase](results/figures/figure12_ablation_vf.png) |
+
+## Conclusion
+
+Across all workflows and experimental settings, the results confirm the expected trade-offs:
+- Increasing CCR increases communication overhead, which typically increases SLR/makespan and reduces AVU.
+- The fairness metrics (AvgSatisfaction and VF) remain comparatively stable across CCR sweeps, suggesting the stable-matching assignment tends to preserve fairness even as communication costs rise.
+- In the scalability experiment, increasing the number of VMs reduces SLR/makespan at first, then shows diminishing returns, while AVU decreases as the system becomes more overprovisioned.
+
+Overall, the SM-CPTD pipeline provides a practical scheduling approach that balances makespan-oriented objectives with fairness-aware allocation, and the ablation study highlights that combining critical-path prioritization (DCP) and selective duplication (LOTD) is beneficial compared to the SMGT-only baseline.
 
 ## References
 
-- docs/s11227-021-03742-3.pdf
-- docs/QESM.pdf
+- [Z. hong Jia, L. Pan, X. Liu, and X. jun Li. A novel cloud workflow scheduling algorithm based on stable matching game theory. ](https://link.springer.com/article/10.1007/s11227-021-03742-3) The Journal of Supercomputing, 77(10):11597–11624,
+2021.
+- [DAX-file: workflows dax format. ](https://github.com/adnanetalha/DAX-file).
+
+
