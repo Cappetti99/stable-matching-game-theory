@@ -24,7 +24,7 @@ import java.util.*;
  */
 public class ExperimentRunner {
 
-    private static final int NUM_RUNS = 10;
+    private static final int NUM_RUNS = 1;
     private static final int WARMUP_RUNS = 0;
 
     private static final String[] WORKFLOWS = { "cybershake", "epigenomics", "ligo", "montage" };
@@ -261,7 +261,15 @@ public class ExperimentRunner {
 
             SMCPTD smcptd = new SMCPTD();
             smcptd.setInputData(tasks, vms);
-            smcptd.setGanttChartSettings(true, workflow, ccr);
+            
+            // Only generate Gantt charts for non-warmup runs
+            if (isWarmup) {
+                smcptd.setGanttChartSettings(false, workflow, ccr, 0);
+            } else {
+                int actualRunIdx = runIdx - warmupRuns;  // 0-based index for actual runs
+                smcptd.setGanttChartSettings(true, workflow, ccr, actualRunIdx);
+            }
+            
             SMGT smgt = smcptd.getSMGT();
 
             Map<Integer, VM> vmMapping = new HashMap<>();

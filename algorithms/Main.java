@@ -6,7 +6,7 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
         // To disable seeding and use truly random values, uncomment the line below:
-         SeededRandom.setUseSeed(false);
+        SeededRandom.setUseSeed(false);
         
         SeededRandom.initFromArgs(args);
         System.out.println("Starting experiments...");

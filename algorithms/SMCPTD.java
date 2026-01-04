@@ -67,6 +67,9 @@ public class SMCPTD {
     /** CCR value associated with the Gantt chart */
     private double ganttChartCCR = 0.0;
 
+    /** Run index for Gantt chart file naming */
+    private int ganttChartRunIndex = 0;
+
     /**
      * Default constructor.
      *
@@ -216,6 +219,7 @@ public class SMCPTD {
                     smgt.getTasks().size(),
                     smgt.getVMs().size(),
                     ganttChartCCR,
+                    ganttChartRunIndex,
                     makespan,
                     finalSchedule,
                     lotd.getTaskAST(),
@@ -419,11 +423,13 @@ public class SMCPTD {
      * @param generate Whether to generate Gantt charts
      * @param workflow Workflow name for chart title
      * @param ccr CCR value for chart title
+     * @param runIndex Run index (0-based) for unique file naming
      */
-    public void setGanttChartSettings(boolean generate, String workflow, double ccr) {
+    public void setGanttChartSettings(boolean generate, String workflow, double ccr, int runIndex) {
         this.generateGanttChart = generate;
         this.ganttChartWorkflow = workflow;
         this.ganttChartCCR = ccr;
+        this.ganttChartRunIndex = runIndex;
     }
 
     /**

@@ -28,6 +28,7 @@ public class GanttChartGenerator {
      * @param numTasks Number of tasks
      * @param numVMs Number of VMs
      * @param ccr CCR value used
+     * @param runIndex Run index (0-based) for unique file naming
      * @param makespan Final makespan
      * @param vmSchedule VM assignments (vmId -> list of taskIds)
      * @param taskAST Task Actual Start Times
@@ -44,6 +45,7 @@ public class GanttChartGenerator {
             int numTasks,
             int numVMs,
             double ccr,
+            int runIndex,
             double makespan,
             Map<Integer, List<Integer>> vmSchedule,
             Map<Integer, Double> taskAST,
@@ -59,8 +61,8 @@ public class GanttChartGenerator {
 
         // Generate filename with timestamp
         String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-        String filename = String.format(Locale.US, "%s_%d_tasks_%d_vms_ccr%.1f_%s.json",
-                workflow, numTasks, numVMs, ccr, timestamp);
+        String filename = String.format(Locale.US, "%s_%d_tasks_%d_vms_ccr%.1f_run%d_%s.json",
+                workflow, numTasks, numVMs, ccr, runIndex, timestamp);
         File outputFile = new File(OUTPUT_DIR, filename);
 
         try (PrintWriter writer = new PrintWriter(outputFile)) {
