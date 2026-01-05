@@ -294,7 +294,7 @@ public class AblationExperimentRunner {
         
         // Apply LOTD optimization
         LOTD lotd = new LOTD(freshSmgt);
-        lotd.setCommunicationCosts(commCosts);
+        lotd.setCCR(CCR);
         
         return lotd.executeLOTD(smgtSchedule);
     }
@@ -319,7 +319,7 @@ public class AblationExperimentRunner {
         
         SMCPTD smcptdPass1 = new SMCPTD();
         smcptdPass1.setInputData(tasks, vms);
-        Map<Integer, List<Integer>> assignmentsPass1 = smcptdPass1.executeSMCPTD(commCosts, vmMapping);
+        Map<Integer, List<Integer>> assignmentsPass1 = smcptdPass1.executeSMCPTD(commCosts, vmMapping, CCR);
         
         // Build task-to-VM mapping from Pass 1
         Map<Integer, Integer> taskToVM = new HashMap<>();
@@ -341,12 +341,12 @@ public class AblationExperimentRunner {
         smgt.setTasks(tasks);
         smgt.setVMs(vms);
         smgt.calculateTaskLevels();
-        Map<String, Double> commCostsPass2 = calculateCommunicationCostsVMSpecific(smgt, taskToVM, ccr);
+        Map<String, Double> commCostsPass2 = calculateCommunicationCostsVMSpecific(smgt, taskToVM, CCR);
         
         // Execute full pipeline with refined costs
         SMCPTD smcptd = new SMCPTD();
         smcptd.setInputData(tasks, vms);
-        return smcptd.executeSMCPTD(commCostsPass2, vmMapping, ccr);
+        return smcptd.executeSMCPTD(commCostsPass2, vmMapping, CCR);
     }
     
     // ============================================================================
