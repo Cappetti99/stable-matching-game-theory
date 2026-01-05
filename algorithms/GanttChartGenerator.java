@@ -22,7 +22,7 @@ public class GanttChartGenerator {
     private static final String OUTPUT_DIR = "../results/gantt_charts";
 
     /**
-     * Generate a JSON file containing Gantt chart data
+     * Generate a JSON file containing Gantt chart data (original version - for backward compatibility)
      * 
      * @param workflow Workflow name (e.g., "cybershake")
      * @param numTasks Number of tasks
@@ -56,6 +56,50 @@ public class GanttChartGenerator {
             Map<String, Double> duplicateAFT,
             List<task> tasks,
             List<VM> vms) {
+        
+        // Call the extended version with null overflow tasks
+        generateGanttChart(workflow, numTasks, numVMs, ccr, runIndex, makespan,
+                vmSchedule, taskAST, taskAFT, criticalPath, duplicatedTasks,
+                duplicateAST, duplicateAFT, tasks, vms, null);
+    }
+
+    /**
+     * Generate a JSON file containing Gantt chart data (extended version with overflow tasks)
+     * 
+     * @param workflow Workflow name (e.g., "cybershake")
+     * @param numTasks Number of tasks
+     * @param numVMs Number of VMs
+     * @param ccr CCR value used
+     * @param runIndex Run index (0-based) for unique file naming
+     * @param makespan Final makespan
+     * @param vmSchedule VM assignments (vmId -> list of taskIds)
+     * @param taskAST Task Actual Start Times
+     * @param taskAFT Task Actual Finish Times
+     * @param criticalPath Set of critical path task IDs
+     * @param duplicatedTasks Map of duplicated tasks per VM
+     * @param duplicateAST Per-VM AST for duplicates (key: "taskId_vmId")
+     * @param duplicateAFT Per-VM AFT for duplicates (key: "taskId_vmId")
+     * @param tasks List of all tasks
+     * @param vms List of all VMs
+     * @param overflowTasks Set of tasks assigned despite exceeding threshold (can be null)
+     */
+    public static void generateGanttChart(
+            String workflow,
+            int numTasks,
+            int numVMs,
+            double ccr,
+            int runIndex,
+            double makespan,
+            Map<Integer, List<Integer>> vmSchedule,
+            Map<Integer, Double> taskAST,
+            Map<Integer, Double> taskAFT,
+            Set<Integer> criticalPath,
+            Map<Integer, Set<Integer>> duplicatedTasks,
+            Map<String, Double> duplicateAST,
+            Map<String, Double> duplicateAFT,
+            List<task> tasks,
+            List<VM> vms,
+            Set<Integer> overflowTasks) {
 
         ensureOutputDir();
 
@@ -76,7 +120,8 @@ public class GanttChartGenerator {
             writer.printf(Locale.US, "    \"ccr\": %.1f,%n", ccr);
             writer.printf(Locale.US, "    \"makespan\": %.4f,%n", makespan);
             writer.printf("    \"timestamp\": \"%s\",%n", timestamp);
-            writer.printf("    \"criticalPathSize\": %d%n", criticalPath != null ? criticalPath.size() : 0);
+            writer.printf("    \"criticalPathSize\": %d,%n", criticalPath != null ? criticalPath.size() : 0);
+            writer.printf("    \"overflowTaskCount\": %d%n", overflowTasks != null ? overflowTasks.size() : 0);
             writer.println("  },");
 
             // VMs section
@@ -86,12 +131,12 @@ public class GanttChartGenerator {
 
             // Tasks section
             writer.println("  \"tasks\": [");
-            writeTasksSection(writer, tasks, taskAST, taskAFT, criticalPath, vmSchedule, duplicatedTasks);
+            writeTasksSection(writer, tasks, taskAST, taskAFT, criticalPath, vmSchedule, duplicatedTasks, overflowTasks);
             writer.println("  ],");
 
             // Schedule section (Gantt chart data)
             writer.println("  \"schedule\": [");
-            writeScheduleSection(writer, vmSchedule, taskAST, taskAFT, tasks, duplicatedTasks, duplicateAST, duplicateAFT, criticalPath);
+            writeScheduleSection(writer, vmSchedule, taskAST, taskAFT, tasks, duplicatedTasks, duplicateAST, duplicateAFT, criticalPath, overflowTasks);
             writer.println("  ],");
 
             // Critical path section
@@ -102,6 +147,11 @@ public class GanttChartGenerator {
             // Duplications section
             writer.println("  \"duplications\": [");
             writeDuplicationsSection(writer, duplicatedTasks);
+            writer.println("  ],");
+
+            // Overflow tasks section
+            writer.println("  \"overflowTasks\": [");
+            writeOverflowTasksSection(writer, overflowTasks);
             writer.println("  ]");
 
             writer.println("}");
@@ -144,7 +194,8 @@ public class GanttChartGenerator {
             Map<Integer, Double> taskAFT,
             Set<Integer> criticalPath,
             Map<Integer, List<Integer>> vmSchedule,
-            Map<Integer, Set<Integer>> duplicatedTasks) {
+            Map<Integer, Set<Integer>> duplicatedTasks,
+            Set<Integer> overflowTasks) {
 
         if (tasks == null || tasks.isEmpty()) return;
 
@@ -173,6 +224,7 @@ public class GanttChartGenerator {
             double aft = taskAFT != null ? taskAFT.getOrDefault(taskId, 0.0) : 0.0;
             boolean isCritical = criticalPath != null && criticalPath.contains(taskId);
             boolean isDuplicated = allDuplicatedTasks.contains(taskId);
+            boolean isOverflow = overflowTasks != null && overflowTasks.contains(taskId);
             Integer vmId = taskToVM.get(taskId);
 
             writer.print("    {");
@@ -183,6 +235,7 @@ public class GanttChartGenerator {
             writer.printf("\"vmId\": %s, ", vmId != null ? vmId.toString() : "null");
             writer.printf("\"isCritical\": %b, ", isCritical);
             writer.printf("\"isDuplicated\": %b, ", isDuplicated);
+            writer.printf("\"isOverThreshold\": %b, ", isOverflow);
             
             // Predecessors
             writer.print("\"predecessors\": [");
@@ -229,7 +282,8 @@ public class GanttChartGenerator {
             Map<Integer, Set<Integer>> duplicatedTasks,
             Map<String, Double> duplicateAST,
             Map<String, Double> duplicateAFT,
-            Set<Integer> criticalPath) {
+            Set<Integer> criticalPath,
+            Set<Integer> overflowTasks) {
 
         if (vmSchedule == null || vmSchedule.isEmpty()) return;
 
@@ -267,6 +321,7 @@ public class GanttChartGenerator {
                 boolean isDuplicate = duplicatedTasks != null && 
                                      duplicatedTasks.get(vmId) != null && 
                                      duplicatedTasks.get(vmId).contains(taskId);
+                boolean isOverflow = overflowTasks != null && overflowTasks.contains(taskId);
 
                 // Use duplicate-specific timing if this is a duplicate
                 double ast, aft;
@@ -291,7 +346,8 @@ public class GanttChartGenerator {
                 writer.printf(Locale.US, "\"duration\": %.4f, ", aft - ast);
                 writer.printf(Locale.US, "\"size\": %.4f, ", size);
                 writer.printf("\"isCritical\": %b, ", isCritical);
-                writer.printf("\"isDuplicate\": %b", isDuplicate);
+                writer.printf("\"isDuplicate\": %b, ", isDuplicate);
+                writer.printf("\"isOverThreshold\": %b", isOverflow);
                 writer.print("}");
 
                 taskCount++;
@@ -388,6 +444,25 @@ public class GanttChartGenerator {
             writer.print("]}");
             count++;
             if (count < nonEmpty.size()) {
+                writer.println(",");
+            } else {
+                writer.println();
+            }
+        }
+    }
+
+    /**
+     * Write overflow tasks section (tasks assigned despite exceeding threshold)
+     */
+    private static void writeOverflowTasksSection(PrintWriter writer, Set<Integer> overflowTasks) {
+        if (overflowTasks == null || overflowTasks.isEmpty()) return;
+
+        List<Integer> sorted = new ArrayList<>(overflowTasks);
+        Collections.sort(sorted);
+
+        for (int i = 0; i < sorted.size(); i++) {
+            writer.print("    " + sorted.get(i));
+            if (i < sorted.size() - 1) {
                 writer.println(",");
             } else {
                 writer.println();

@@ -9,9 +9,9 @@ public class Main {
         SeededRandom.setUseSeed(false);
         
         SeededRandom.initFromArgs(args);
-        System.out.println("Starting experiments...");
-
-        ExperimentRunner.main(args);
+            System.out.println("Starting experiments...");
+            
+            ExperimentRunner.main(args);
 
         generateFigures();
 
