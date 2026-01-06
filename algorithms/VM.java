@@ -82,10 +82,6 @@ public class VM {
     }
 
     // Add a task to the waiting list
-    public void addTaskToWaitingList(int taskId) {
-        this.waitingList.add(taskId);
-    }
-
     public void addToWaitingList(int taskId) {
         this.waitingList.add(taskId);
     }

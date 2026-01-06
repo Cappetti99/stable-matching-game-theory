@@ -1,8 +1,6 @@
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class task {
     private int ID;
@@ -10,19 +8,15 @@ public class task {
     private double rank; // Task rank from CSV
     private List<Integer> pre; // List of predecessor task IDs
     private List<Integer> succ; // List of successor task IDs
-
-    // Optional: communication "size"/weight per edge (this -> succ)
-    private Map<Integer, Double> succCommCost;
     
     // Constructor
     public task(int ID) {
         this.ID = ID;
         this.pre = new ArrayList<>();
         this.succ = new ArrayList<>();
-        this.succCommCost = new HashMap<>();
     }
 
-    // Getters
+    // Getters and Setters
     public int getID() {
         return ID;
     }
@@ -62,19 +56,6 @@ public class task {
         if (!succ.contains(taskID)) {
             succ.add(taskID);
         }
-    }
-
-    /**
-     * Overload to store an explicit communication cost/size for edge (this -> taskID).
-     * The scheduler can interpret it as dataSize and combine with bandwidth.
-     */
-    public void addSuccessor(int taskID, double commCost) {
-        addSuccessor(taskID);
-        succCommCost.put(taskID, commCost);
-    }
-
-    public double getSuccCommunicationCost(int succTaskId) {
-        return succCommCost.getOrDefault(succTaskId, -1.0);
     }
 
     @Override
