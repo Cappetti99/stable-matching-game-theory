@@ -30,7 +30,7 @@ public class GanttChartGenerator {
      * @param vmSchedule VM assignments (vmId -> list of taskIds)
      * @param taskAST Task Actual Start Times
      * @param taskAFT Task Actual Finish Times
-     * @param criticalPath Set of critical path task IDs
+     * @param criticalPath Set of critical path Task IDs
      * @param duplicatedTasks Map of duplicated tasks per VM
      * @param duplicateAST Per-VM AST for duplicates (key: "taskId_vmId")
      * @param duplicateAFT Per-VM AFT for duplicates (key: "taskId_vmId")
@@ -51,7 +51,7 @@ public class GanttChartGenerator {
             Map<Integer, Set<Integer>> duplicatedTasks,
             Map<String, Double> duplicateAST,
             Map<String, Double> duplicateAFT,
-            List<task> tasks,
+            List<Task> tasks,
             List<VM> vms) {
         
         // Call the extended version with null overflow tasks
@@ -72,7 +72,7 @@ public class GanttChartGenerator {
      * @param vmSchedule VM assignments (vmId -> list of taskIds)
      * @param taskAST Task Actual Start Times
      * @param taskAFT Task Actual Finish Times
-     * @param criticalPath Set of critical path task IDs
+     * @param criticalPath Set of critical path Task IDs
      * @param duplicatedTasks Map of duplicated tasks per VM
      * @param duplicateAST Per-VM AST for duplicates (key: "taskId_vmId")
      * @param duplicateAFT Per-VM AFT for duplicates (key: "taskId_vmId")
@@ -94,7 +94,7 @@ public class GanttChartGenerator {
             Map<Integer, Set<Integer>> duplicatedTasks,
             Map<String, Double> duplicateAST,
             Map<String, Double> duplicateAFT,
-            List<task> tasks,
+            List<Task> tasks,
             List<VM> vms,
             Set<Integer> overflowTasks) {
 
@@ -186,7 +186,7 @@ public class GanttChartGenerator {
      */
     private static void writeTasksSection(
             PrintWriter writer, 
-            List<task> tasks,
+            List<Task> tasks,
             Map<Integer, Double> taskAST,
             Map<Integer, Double> taskAFT,
             Set<Integer> criticalPath,
@@ -196,7 +196,7 @@ public class GanttChartGenerator {
 
         if (tasks == null || tasks.isEmpty()) return;
 
-        // Build task-to-VM map
+        // Build Task-to-VM map
         Map<Integer, Integer> taskToVM = new HashMap<>();
         for (Map.Entry<Integer, List<Integer>> entry : vmSchedule.entrySet()) {
             for (Integer taskId : entry.getValue()) {
@@ -206,7 +206,7 @@ public class GanttChartGenerator {
             }
         }
 
-        // Check if task is duplicated
+        // Check if Task is duplicated
         Set<Integer> allDuplicatedTasks = new HashSet<>();
         if (duplicatedTasks != null) {
             for (Set<Integer> dups : duplicatedTasks.values()) {
@@ -215,7 +215,7 @@ public class GanttChartGenerator {
         }
 
         int count = 0;
-        for (task t : tasks) {
+        for (Task t : tasks) {
             int taskId = t.getID();
             double ast = taskAST != null ? taskAST.getOrDefault(taskId, 0.0) : 0.0;
             double aft = taskAFT != null ? taskAFT.getOrDefault(taskId, 0.0) : 0.0;
@@ -275,7 +275,7 @@ public class GanttChartGenerator {
             Map<Integer, List<Integer>> vmSchedule,
             Map<Integer, Double> taskAST,
             Map<Integer, Double> taskAFT,
-            List<task> tasks,
+            List<Task> tasks,
             Map<Integer, Set<Integer>> duplicatedTasks,
             Map<String, Double> duplicateAST,
             Map<String, Double> duplicateAFT,
@@ -284,10 +284,10 @@ public class GanttChartGenerator {
 
         if (vmSchedule == null || vmSchedule.isEmpty()) return;
 
-        // Build task lookup map
-        Map<Integer, task> taskMap = new HashMap<>();
+        // Build Task lookup map
+        Map<Integer, Task> taskMap = new HashMap<>();
         if (tasks != null) {
-            for (task t : tasks) {
+            for (Task t : tasks) {
                 taskMap.put(t.getID(), t);
             }
         }
@@ -331,7 +331,7 @@ public class GanttChartGenerator {
                     aft = taskAFT != null ? taskAFT.getOrDefault(taskId, 0.0) : 0.0;
                 }
 
-                task t = taskMap.get(taskId);
+                Task t = taskMap.get(taskId);
                 double size = t != null ? t.getSize() : 0.0;
                 
                 boolean isCritical = criticalPath != null && criticalPath.contains(taskId);
@@ -368,7 +368,7 @@ public class GanttChartGenerator {
     }
 
     /**
-     * Get effective AST for a task on a specific VM (considering duplicates)
+     * Get effective AST for a Task on a specific VM (considering duplicates)
      */
     private static double getEffectiveAST(
             int taskId, 

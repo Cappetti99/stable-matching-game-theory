@@ -2,7 +2,7 @@
 import java.util.ArrayList;
 import java.util.List;
 
-public class task {
+public class Task {
     private int ID;
     private double size; // Task size from CSV
     private double rank; // Task rank from CSV
@@ -10,7 +10,7 @@ public class task {
     private List<Integer> succ; // List of successor task IDs
     
     // Constructor
-    public task(int ID) {
+    public Task(int ID) {
         this.ID = ID;
         this.pre = new ArrayList<>();
         this.succ = new ArrayList<>();

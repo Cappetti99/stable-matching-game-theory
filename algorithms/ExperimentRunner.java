@@ -24,7 +24,7 @@ import java.util.*;
  */
 public class ExperimentRunner {
 
-    private static final int NUM_RUNS = 10;
+    private static final int NUM_RUNS = 1;
     private static final int WARMUP_RUNS = 0;
 
     private static final String[] WORKFLOWS = { "cybershake", "epigenomics", "ligo", "montage" };
@@ -179,7 +179,7 @@ public class ExperimentRunner {
      */
     private static void runCCRExperiment(String[] workflows, int numTasks, int numVMs, String expName) {
         for (String workflow : workflows) {
-            System.out.println("\nWorkflow: " + workflow + " (" + numTasks + " task, " + numVMs + " VM)");
+            System.out.println("\nWorkflow: " + workflow + " (" + numTasks + " Task, " + numVMs + " VM)");
 
             CCRAnalyzer ccrAnalyzer = new CCRAnalyzer(workflow, numTasks, numVMs, expName);
 
@@ -261,7 +261,7 @@ public class ExperimentRunner {
 
             int seedRunIdx = runIdx;
             
-            List<task> tasks = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv", seedRunIdx);
+            List<Task> tasks = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/Task.csv", seedRunIdx);
             List<VM> vms = DataLoader.loadVMsFromCSV(workflowDir + "/processing_capacity.csv", seedRunIdx);
             DataLoader.loadBandwidthFromCSV(workflowDir + "/bandwidth.csv", vms, seedRunIdx);
 
@@ -291,8 +291,8 @@ public class ExperimentRunner {
             double makespan = smcptd.getMakespan();
             
             Set<Integer> criticalPath = smcptd.getCriticalPath();
-            List<task> criticalPathTasks = new ArrayList<>();
-            for (task t : tasks) {
+            List<Task> criticalPathTasks = new ArrayList<>();
+            for (Task t : tasks) {
                 if (criticalPath.contains(t.getID())) {
                     criticalPathTasks.add(t);
                 }
@@ -314,7 +314,7 @@ public class ExperimentRunner {
         double avgSatisfaction = runs.stream().mapToDouble(r -> r.avgSatisfaction).average().orElse(0);
         double avgMakespan = runs.stream().mapToDouble(r -> r.makespan).average().orElse(0);
 
-        List<task> tasksForCount = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv");
+        List<Task> tasksForCount = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/Task.csv");
         int actualTasks = tasksForCount.size();
 
         return new ExperimentResult(expName, workflow, actualTasks, numVMs, ccr, avgSLR, avgAVU, avgVF, avgSatisfaction, avgMakespan);
@@ -348,7 +348,7 @@ public class ExperimentRunner {
                 // Load data (using -1 for consistent seed in CCR analysis snapshot)
                 // This uses the default seed to ensure CCR analysis is consistent
                 int seedRunIdx = -1; // Use same seed for CCR analysis snapshot
-                List<task> tasks = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/task.csv", seedRunIdx);
+                List<Task> tasks = DataLoader.loadTasksFromCSV(workflowDir + "/dag.csv", workflowDir + "/Task.csv", seedRunIdx);
                 List<VM> vms = DataLoader.loadVMsFromCSV(workflowDir + "/processing_capacity.csv", seedRunIdx);
                 DataLoader.loadBandwidthFromCSV(workflowDir + "/bandwidth.csv", vms, seedRunIdx);
                 
@@ -407,7 +407,7 @@ public class ExperimentRunner {
     }
 
     /**
-     * Find workflow XML by task count.
+     * Find workflow XML by Task count.
      */
     private static String findWorkflowXML(String workflow, int targetTasks) {
         String workflowDir = "../workflow/" + workflow.toLowerCase();
@@ -420,7 +420,7 @@ public class ExperimentRunner {
         String bestMatch = null;
         int bestDiff = Integer.MAX_VALUE;
 
-        // Find the XML file closest to the requested task count
+        // Find the XML file closest to the requested Task count
         for (File file : dir.listFiles()) {
             if (file.isFile() && file.getName().endsWith(".xml")) {
                 String name = file.getName();
@@ -475,10 +475,10 @@ public class ExperimentRunner {
         Map<String, Double> costs = new HashMap<>();
         List<VM> vms = smgt.getVMs();
         
-        for (task t : smgt.getTasks()) {
+        for (Task t : smgt.getTasks()) {
             for (int succId : t.getSucc()) {
                 String key = t.getID() + "_" + succId;
-                task succ = Utility.getTaskById(succId, smgt.getTasks());
+                Task succ = Utility.getTaskById(succId, smgt.getTasks());
                 double avgCost = Metrics.CommunicationCostCalculator.calculateAverage(t, succ, vms, ccr);
                 costs.put(key, avgCost);
             }
@@ -495,22 +495,22 @@ public class ExperimentRunner {
      * @return Average VM Utilization in range [0.0, 1.0] where 1.0 = 100% utilization
      * 
      * @implNote This method delegates actual calculation to {@link Metrics#AVU} after converting
-     *           task IDs to task objects using optimized HashMap lookups. Performance logging
+     *           Task IDs to Task objects using optimized HashMap lookups. Performance logging
      *           is enabled for workflows with &gt;500 tasks or execution time &gt;10ms.
      *           
-     *           Duplicates are INCLUDED - each duplicate task execution contributes
+     *           Duplicates are INCLUDED - each duplicate Task execution contributes
      *           to VM utilization. This is correct behavior since duplicates represent actual work.
      * 
      * @see Metrics#AVU(Map, Map, double)
      * @see Metrics#VU(VM, List, double)
-     * @see Metrics#ET(task, VM)
+     * @see Metrics#ET(Task, VM)
      * @see SMCPTD#calculateFinalMetrics for makespan calculation details
      */
     private static double calculateAVU(SMGT smgt, Map<Integer, List<Integer>> assignments, double makespan) {
         if (makespan <= 0) return 0;
 
-        Map<Integer, task> taskMap = new HashMap<>();
-        for (task t : smgt.getTasks()) {
+        Map<Integer, Task> taskMap = new HashMap<>();
+        for (Task t : smgt.getTasks()) {
             taskMap.put(t.getID(), t);
         }
 
@@ -520,17 +520,17 @@ public class ExperimentRunner {
         }
 
         Set<Integer> assignedTaskIds = new HashSet<>();
-        Map<Integer, List<task>> taskAssignments = new HashMap<>();
+        Map<Integer, List<Task>> taskAssignments = new HashMap<>();
         
         for (Map.Entry<Integer, List<Integer>> entry : assignments.entrySet()) {
             int vmId = entry.getKey();
-            List<task> tasks = new ArrayList<>();
+            List<Task> tasks = new ArrayList<>();
             for (int taskId : entry.getValue()) {
-                task t = taskMap.get(taskId);
+                Task t = taskMap.get(taskId);
                 if (t != null) {
                     tasks.add(t);  // Add ALL tasks including duplicates
                 } else if (t == null) {
-                    System.err.println(" Warning: Task ID " + taskId + " not found in task map");
+                    System.err.println(" Warning: Task ID " + taskId + " not found in Task map");
                 }
             }
             taskAssignments.put(vmId, tasks);
@@ -550,7 +550,7 @@ public class ExperimentRunner {
      *           focusing on efficient data structure conversion from ID-based assignments
      *           to object-based assignments with O(n) complexity.
      *           
-     *           Duplicates are EXCLUDED - each task's satisfaction is counted only once.
+     *           Duplicates are EXCLUDED - each Task's satisfaction is counted only once.
      *           This ensures VF measures fairness across unique tasks, not duplicate executions.
      * 
      * @see Metrics#VF(List, Map, Map, Map, String) for the underlying VF calculation
@@ -559,8 +559,8 @@ public class ExperimentRunner {
     private static double calculateVF(SMGT smgt, Map<Integer, List<Integer>> assignments, double makespan) {
         if (makespan <= 0) return 0;
 
-        Map<Integer, task> taskMap = new HashMap<>();
-        for (task t : smgt.getTasks()) {
+        Map<Integer, Task> taskMap = new HashMap<>();
+        for (Task t : smgt.getTasks()) {
             taskMap.put(t.getID(), t);
         }
 
@@ -569,20 +569,20 @@ public class ExperimentRunner {
             vmMap.put(v.getID(), v);
         }
 
-        // For VF, don't count duplicates (each task's satisfaction counted once)
+        // For VF, don't count duplicates (each Task's satisfaction counted once)
         Set<Integer> assignedTaskIds = new HashSet<>();
-        Map<Integer, List<task>> taskAssignments = new HashMap<>();
+        Map<Integer, List<Task>> taskAssignments = new HashMap<>();
         
         for (Map.Entry<Integer, List<Integer>> entry : assignments.entrySet()) {
             int vmId = entry.getKey();
-            List<task> tasks = new ArrayList<>();
+            List<Task> tasks = new ArrayList<>();
             for (int taskId : entry.getValue()) {
-                task t = taskMap.get(taskId);
+                Task t = taskMap.get(taskId);
                 if (t != null && !assignedTaskIds.contains(taskId)) {
                     tasks.add(t);
                     assignedTaskIds.add(taskId);
                 } else if (t == null) {
-                    System.err.println(" Warning: Task ID " + taskId + " not found in task map");
+                    System.err.println(" Warning: Task ID " + taskId + " not found in Task map");
                 }
             }
             taskAssignments.put(vmId, tasks);
@@ -599,7 +599,7 @@ public class ExperimentRunner {
      * @param makespan   Total workflow execution time (UNUSED - kept for API consistency)
      * @return           Average Satisfaction (≥ 1.0, or 0.0 if no valid tasks)
      * 
-     * @implNote Duplicates are EXCLUDED - each task's satisfaction is counted only once.
+     * @implNote Duplicates are EXCLUDED - each Task's satisfaction is counted only once.
      *           This is consistent with VF calculation and ensures satisfaction metrics
      *           measure fairness across unique tasks.
      * 
@@ -609,8 +609,8 @@ public class ExperimentRunner {
     private static double calculateAvgSatisfaction(SMGT smgt, Map<Integer, List<Integer>> assignments, double makespan) {
         if (makespan <= 0) return 0;
 
-        Map<Integer, task> taskMap = new HashMap<>();
-        for (task t : smgt.getTasks()) {
+        Map<Integer, Task> taskMap = new HashMap<>();
+        for (Task t : smgt.getTasks()) {
             taskMap.put(t.getID(), t);
         }
 
@@ -619,20 +619,20 @@ public class ExperimentRunner {
             vmMap.put(v.getID(), v);
         }
 
-        // For AvgSatisfaction, don't count duplicates (each task's satisfaction counted once)
+        // For AvgSatisfaction, don't count duplicates (each Task's satisfaction counted once)
         Set<Integer> assignedTaskIds = new HashSet<>();
-        Map<Integer, List<task>> taskAssignments = new HashMap<>();
+        Map<Integer, List<Task>> taskAssignments = new HashMap<>();
         
         for (Map.Entry<Integer, List<Integer>> entry : assignments.entrySet()) {
             int vmId = entry.getKey();
-            List<task> tasks = new ArrayList<>();
+            List<Task> tasks = new ArrayList<>();
             for (int taskId : entry.getValue()) {
-                task t = taskMap.get(taskId);
+                Task t = taskMap.get(taskId);
                 if (t != null && !assignedTaskIds.contains(taskId)) {
                     tasks.add(t);
                     assignedTaskIds.add(taskId);
                 } else if (t == null) {
-                    System.err.println(" Warning: Task ID " + taskId + " not found in task map");
+                    System.err.println(" Warning: Task ID " + taskId + " not found in Task map");
                 }
             }
             taskAssignments.put(vmId, tasks);

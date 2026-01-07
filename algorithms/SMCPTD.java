@@ -20,7 +20,7 @@ import java.util.*;
  *    - Reduces communication delays and overall makespan
  *
  * Input (provided by ExperimentRunner):
- * - List<task> tasks: workflow tasks with precedence constraints (DAG)
+ * - List<Task> tasks: workflow tasks with precedence constraints (DAG)
  * - List<VM> vms: available virtual machines
  * - Map<String, Double> communicationCosts: inter-task communication costs
  * - double CCR: Communication-to-Computation Ratio
@@ -87,7 +87,7 @@ public class SMCPTD {
      * @param tasks List of workflow tasks with dependencies (DAG)
      * @param vms   List of available virtual machines
      */
-    public void setInputData(List<task> tasks, List<VM> vms) {
+    public void setInputData(List<Task> tasks, List<VM> vms) {
         if (tasks == null || tasks.isEmpty()) {
             throw new IllegalArgumentException("tasks must be non-empty");
         }

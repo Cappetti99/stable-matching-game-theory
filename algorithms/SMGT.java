@@ -14,12 +14,12 @@ public class SMGT {
     private List<VM> vms;
 
     /** List of tasks composing the workflow DAG */
-    private List<task> tasks;
+    private List<Task> tasks;
 
-    /** Mapping: task ID -> topological level in the DAG */
+    /** Mapping: Task ID -> topological level in the DAG */
     private Map<Integer, Integer> taskLevels;
 
-    /** Mapping: topological level -> list of task IDs */
+    /** Mapping: topological level -> list of Task IDs */
     private Map<Integer, List<Integer>> levelTasks;
 
     /**
@@ -37,7 +37,7 @@ public class SMGT {
 
     // getter and setter methods
 
-    public void setTasks(List<task> tasks) {
+    public void setTasks(List<Task> tasks) {
         this.tasks = tasks;
     }
 
@@ -49,13 +49,13 @@ public class SMGT {
         return vms;
     }
 
-    public List<task> getTasks() {
+    public List<Task> getTasks() {
         return tasks;
     }
 
     /**
 
-     * Computes the topological level of each task in the workflow DAG.
+     * Computes the topological level of each Task in the workflow DAG.
      *
      * Tasks at level 0 have no predecessors (entry tasks).
      * Each subsequent level contains tasks whose predecessors
@@ -102,8 +102,8 @@ public class SMGT {
      * 2. Computes thresholds for all VMs at this level.
      * 3. Uses stable matching to assign non-CP tasks based on preferences.
      *
-     * @param criticalPath Set of task IDs belonging to the Critical Path
-     * @return Map VM_ID -> list of assigned task IDs
+     * @param criticalPath Set of Task IDs belonging to the Critical Path
+     * @return Map VM_ID -> list of assigned Task IDs
      */
     public Map<Integer, List<Integer>> runSMGT(Set<Integer> criticalPath) {
         if (VERBOSE) {
@@ -158,7 +158,7 @@ public class SMGT {
      * preference lists.
      *
      * @param level        DAG level to process
-     * @param criticalPath Set of task IDs in the Critical Path
+     * @param criticalPath Set of Task IDs in the Critical Path
      * @param schedule     Current schedule map (modified in place)
      */
     private void processLevel(int level, Set<Integer> criticalPath,
@@ -204,7 +204,7 @@ public class SMGT {
 
             if (VERBOSE) {
                 VM vm = vms.get(fastestVM);
-                System.out.println("   ✓ CP task t" + cpTaskId + " → VM" + fastestVM +
+                System.out.println("   ✓ CP Task t" + cpTaskId + " → VM" + fastestVM +
                     " (waitingList: " + vm.getWaitingListSize() + "/" + vm.getThreshold() + ")");
             }
         }
@@ -231,7 +231,7 @@ public class SMGT {
     // threshold calculation for levels
 
     /**
-     * Computes and sets the task threshold for each VM at a given DAG level.
+     * Computes and sets the Task threshold for each VM at a given DAG level.
      *
      * Formula:
      * threshold(VM_k, level) = ceil((Σ_{v=0}^{level} n_v / Σp_i) × p_k)
@@ -285,7 +285,7 @@ public class SMGT {
      *
      * @param unassignedTasks List of tasks to assign
      * @param taskPreferences Map taskID -> ordered list of preferred VM indices
-     * @param vmPreferences   Map vmID -> ordered list of preferred task IDs
+     * @param vmPreferences   Map vmID -> ordered list of preferred Task IDs
      * @param schedule        Current schedule (modified in place)
      */
     private void stableMatchingForLevel(
@@ -317,7 +317,7 @@ public class SMGT {
                 continue;
             }
 
-            // VM full: find worst non-CP task to possibly replace
+            // VM full: find worst non-CP Task to possibly replace
             Integer worstTask = findWorstNonCPTask(vm.getWaitingList(), vmIdx, vmPreferences, taskPreferences);
 
             if (worstTask == null) {
@@ -349,7 +349,7 @@ public class SMGT {
     // ==================== UTILITY METHODS ====================
 
     /**
-     * Assign a task to a VM (updates schedule and VM waiting list)
+     * Assign a Task to a VM (updates schedule and VM waiting list)
      */
     private void assignTask(int taskId, int vmIdx, Map<Integer, List<Integer>> schedule) {
         schedule.get(vmIdx).add(taskId);
@@ -363,7 +363,7 @@ public class SMGT {
     }
 
     /**
-     * Unassign a task from a VM (removes from schedule and waiting list)
+     * Unassign a Task from a VM (removes from schedule and waiting list)
      */
     private void unassignTask(int taskId, int vmIdx, Map<Integer, List<Integer>> schedule) {
         schedule.get(vmIdx).remove((Integer) taskId);
@@ -371,7 +371,7 @@ public class SMGT {
     }
 
     /**
-     * Finds the best available VM for a task (non-full, minimal finish time)
+     * Finds the best available VM for a Task (non-full, minimal finish time)
      */
     private int findBestAvailableVM(int taskId) {
         int bestVM = -1;
@@ -397,7 +397,7 @@ public class SMGT {
     }
 
     /**
-     * Finds the worst finish-time task in a VM's waiting list (non-CP tasks only)
+     * Finds the worst finish-time Task in a VM's waiting list (non-CP tasks only)
      */
     private Integer findWorstNonCPTask(List<Integer> taskList, int vmIdx,
             Map<Integer, List<Integer>> vmPreferences,
@@ -421,10 +421,10 @@ public class SMGT {
     }
 
     /**
-     * Calculates finish time of a task on a VM using Metrics.ET
+     * Calculates finish time of a Task on a VM using Metrics.ET
      */
     private double calculateFinishTime(int taskId, int vmIdx) {
-        task t = Utility.getTaskById(taskId, tasks);
+        Task t = Utility.getTaskById(taskId, tasks);
         if (t == null || vmIdx >= vms.size()) return Double.MAX_VALUE;
         return Metrics.ET(t, vms.get(vmIdx));
     }
@@ -454,7 +454,7 @@ public class SMGT {
     }
 
     /**
-     * Generates VM preference list for a task (sorted by finish time ascending)
+     * Generates VM preference list for a Task (sorted by finish time ascending)
      */
     public List<Integer> generateTaskPreferences(int taskId) {
         List<Map.Entry<Integer, Double>> vmFinishTimes = new ArrayList<>();
@@ -469,11 +469,11 @@ public class SMGT {
     }
 
     /**
-     * Generates task preference list for a VM (sorted by finish time ascending)
+     * Generates Task preference list for a VM (sorted by finish time ascending)
      */
     public List<Integer> generateVMPreferences(int vmIdx) {
         List<Map.Entry<Integer, Double>> taskFinishTimes = new ArrayList<>();
-        for (task t : tasks) {
+        for (Task t : tasks) {
             taskFinishTimes.add(new AbstractMap.SimpleEntry<>(t.getID(), calculateFinishTime(t.getID(), vmIdx)));
         }
         taskFinishTimes.sort(Map.Entry.comparingByValue());

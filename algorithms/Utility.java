@@ -16,7 +16,7 @@ public class Utility {
      * @return a map level -> list of task IDs
      */
 
-    public static Map<Integer, List<Integer>> organizeTasksByLevels(List<task> tasks) {
+    public static Map<Integer, List<Integer>> organizeTasksByLevels(List<Task> tasks) {
         if (tasks == null || tasks.isEmpty()) {
             throw new IllegalArgumentException("tasks must not be null or empty");
         }
@@ -25,10 +25,10 @@ public class Utility {
 
         //compute levels using a topological algorithm
         Map<Integer, Integer> taskToLevel = new HashMap<>();
-        Map<Integer, task> taskMap = new HashMap<>();
+        Map<Integer, Task> taskMap = new HashMap<>();
 
         // Build a map for fast task lookup
-        for (task t : tasks) {
+        for (Task t : tasks) {
             if (t == null) {
                 continue;
             }
@@ -40,7 +40,7 @@ public class Utility {
         Map<Integer, Integer> inDegree = new HashMap<>();
 
         // Initialize in-degree for all tasks (null-safe access)
-        for (task t : tasks) {
+        for (Task t : tasks) {
             if (t == null) {
                 continue;
             }
@@ -59,7 +59,7 @@ public class Utility {
         while (!queue.isEmpty()) {
             int currentId = queue.poll();
             int currentLevel = taskToLevel.get(currentId);
-            task current = taskMap.get(currentId);
+            Task current = taskMap.get(currentId);
 
             if (current == null) {
                 continue;
@@ -107,7 +107,7 @@ public class Utility {
      * @param tasks list of tasks
      * @return the task with the given ID, or null if not found
      */
-    public static task getTaskById(int taskId, List<task> tasks) {
+    public static Task getTaskById(int taskId, List<Task> tasks) {
         if (tasks == null) {
             return null;
         }

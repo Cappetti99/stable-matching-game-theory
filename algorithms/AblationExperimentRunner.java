@@ -91,7 +91,7 @@ public class AblationExperimentRunner {
         System.out.println("📊 Workflow: " + workflow.toUpperCase());
         System.out.println("─".repeat(60));
         
-        // Adjust task count for epigenomics
+        // Adjust Task count for epigenomics
         int tasks = workflow.equals("epigenomics") ? 997 : TASKS;
         
         for (AlgorithmVariant variant : AlgorithmVariant.values()) {
@@ -133,8 +133,8 @@ public class AblationExperimentRunner {
             
             // Load data with run-specific seed
             int seedRunIdx = runIdx; // Vary seed per run for statistical analysis
-            List<task> tasks = DataLoader.loadTasksFromCSV(
-                    workflowDir + "/dag.csv", workflowDir + "/task.csv", seedRunIdx);
+            List<Task> tasks = DataLoader.loadTasksFromCSV(
+                    workflowDir + "/dag.csv", workflowDir + "/Task.csv", seedRunIdx);
             List<VM> vms = DataLoader.loadVMsFromCSV(
                     workflowDir + "/processing_capacity.csv", seedRunIdx);
             DataLoader.loadBandwidthFromCSV(
@@ -158,8 +158,8 @@ public class AblationExperimentRunner {
             // Calculate critical path for SLR computation
             Map<Integer, List<Integer>> taskLevels = Utility.organizeTasksByLevels(tasks);
             Set<Integer> criticalPath = DCP.executeDCP(tasks, taskLevels, commCosts, vmMapping);
-            List<task> criticalPathTasks = new ArrayList<>();
-            for (task t : tasks) {
+            List<Task> criticalPathTasks = new ArrayList<>();
+            for (Task t : tasks) {
                 if (criticalPath.contains(t.getID())) {
                     criticalPathTasks.add(t);
                 }
@@ -197,7 +197,7 @@ public class AblationExperimentRunner {
      */
     private static Map<Integer, List<Integer>> executeVariant(
             AlgorithmVariant variant,
-            List<task> tasks,
+            List<Task> tasks,
             List<VM> vms,
             Map<String, Double> commCosts,
             Map<Integer, VM> vmMapping,
@@ -226,7 +226,7 @@ public class AblationExperimentRunner {
      * No DCP (empty critical path), No LOTD
      */
     private static Map<Integer, List<Integer>> executeSMGTOnly(
-            List<task> tasks, List<VM> vms) {
+            List<Task> tasks, List<VM> vms) {
         
         // Clear VM waiting lists before execution
         for (VM vm : vms) {
@@ -248,7 +248,7 @@ public class AblationExperimentRunner {
      * With DCP, No LOTD
      */
     private static Map<Integer, List<Integer>> executeDCP_SMGT(
-            List<task> tasks, List<VM> vms,
+            List<Task> tasks, List<VM> vms,
             Map<String, Double> commCosts,
             Map<Integer, VM> vmMapping) {
         
@@ -277,7 +277,7 @@ public class AblationExperimentRunner {
      * No DCP, With LOTD
      */
     private static Map<Integer, List<Integer>> executeSMGT_LOTD(
-            List<task> tasks, List<VM> vms,
+            List<Task> tasks, List<VM> vms,
             Map<String, Double> commCosts,
             SMGT smgt) {
         
@@ -309,7 +309,7 @@ public class AblationExperimentRunner {
      * Uses 2-pass approach for bandwidth calculation
      */
     private static Map<Integer, List<Integer>> executeFull_SMCPTD(
-            List<task> tasks, List<VM> vms,
+            List<Task> tasks, List<VM> vms,
             Map<String, Double> commCosts,
             Map<Integer, VM> vmMapping) throws Exception {
         
@@ -325,7 +325,7 @@ public class AblationExperimentRunner {
         smcptdPass1.setInputData(tasks, vms);
         Map<Integer, List<Integer>> assignmentsPass1 = smcptdPass1.executeSMCPTD(commCosts, vmMapping, CCR);
         
-        // Build task-to-VM mapping from Pass 1
+        // Build Task-to-VM mapping from Pass 1
         Map<Integer, Integer> taskToVM = new HashMap<>();
         for (Map.Entry<Integer, List<Integer>> entry : assignmentsPass1.entrySet()) {
             int vmId = entry.getKey();
@@ -360,10 +360,10 @@ public class AblationExperimentRunner {
         List<VM> vms = smgt.getVMs();
         int m = vms.size();
         
-        for (task t : smgt.getTasks()) {
+        for (Task t : smgt.getTasks()) {
             for (int succId : t.getSucc()) {
                 String key = t.getID() + "_" + succId;
-                task succ = Utility.getTaskById(succId, smgt.getTasks());
+                Task succ = Utility.getTaskById(succId, smgt.getTasks());
                 
                 // Use CommunicationCostCalculator
                 double avgCost = Metrics.CommunicationCostCalculator.calculateAverage(
@@ -393,10 +393,10 @@ public class AblationExperimentRunner {
         }
         
         // Calculate costs using VM-pair-specific bandwidth when available
-        for (task t : smgt.getTasks()) {
+        for (Task t : smgt.getTasks()) {
             for (int succId : t.getSucc()) {
                 String key = t.getID() + "_" + succId;
-                task succ = Utility.getTaskById(succId, smgt.getTasks());
+                Task succ = Utility.getTaskById(succId, smgt.getTasks());
                 
                 // Get VM indices for source and destination tasks
                 Integer sourceVMIdx = taskToVMIdx.get(t.getID());
@@ -427,17 +427,17 @@ public class AblationExperimentRunner {
     
     private static double calculateMakespan(
             Map<Integer, List<Integer>> assignments,
-            List<task> tasks,
+            List<Task> tasks,
             Map<Integer, VM> vmMapping,
             Map<String, Double> commCosts) {
         
-        // Build task lookup
-        Map<Integer, task> taskMap = new HashMap<>();
-        for (task t : tasks) {
+        // Build Task lookup
+        Map<Integer, Task> taskMap = new HashMap<>();
+        for (Task t : tasks) {
             taskMap.put(t.getID(), t);
         }
         
-        // Build task-to-VM mapping (handle duplicates by keeping first assignment)
+        // Build Task-to-VM mapping (handle duplicates by keeping first assignment)
         // Note: assignments use VM index (0, 1, 2...) as keys
         Map<Integer, Integer> taskToVMIdx = new HashMap<>();
         for (Map.Entry<Integer, List<Integer>> entry : assignments.entrySet()) {
@@ -449,13 +449,13 @@ public class AblationExperimentRunner {
             }
         }
         
-        // Track VM ready times (when VM finishes its last assigned task)
+        // Track VM ready times (when VM finishes its last assigned Task)
         Map<Integer, Double> vmReadyTime = new HashMap<>();
         for (Integer vmIdx : vmMapping.keySet()) {
             vmReadyTime.put(vmIdx, 0.0);
         }
         
-        // Calculate AFT (Actual Finish Time) for each task respecting precedences AND VM availability
+        // Calculate AFT (Actual Finish Time) for each Task respecting precedences AND VM availability
         Map<Integer, Double> taskAST = new HashMap<>();
         Map<Integer, Double> taskAFT = new HashMap<>();
         
@@ -469,7 +469,7 @@ public class AblationExperimentRunner {
             List<Integer> levelTasks = taskLevels.get(level);
             
             for (Integer taskId : levelTasks) {
-                task t = taskMap.get(taskId);
+                Task t = taskMap.get(taskId);
                 if (t == null || !taskToVMIdx.containsKey(taskId)) continue;
                 
                 int vmIdx = taskToVMIdx.get(taskId);
@@ -501,7 +501,7 @@ public class AblationExperimentRunner {
                 // Machine Ready Time (MRT): when VM becomes available
                 double machineReadyTime = vmReadyTime.getOrDefault(vmIdx, 0.0);
                 
-                // AST = max(DRT, MRT) - task starts when both data and machine are ready
+                // AST = max(DRT, MRT) - Task starts when both data and machine are ready
                 double ast = Math.max(dataReadyTime, machineReadyTime);
                 
                 // AFT = AST + execution time
@@ -510,7 +510,7 @@ public class AblationExperimentRunner {
                 taskAST.put(taskId, ast);
                 taskAFT.put(taskId, aft);
                 
-                // Update VM ready time (this VM is busy until this task finishes)
+                // Update VM ready time (this VM is busy until this Task finishes)
                 vmReadyTime.put(vmIdx, aft);
             }
         }
@@ -525,8 +525,8 @@ public class AblationExperimentRunner {
     private static double calculateAVU(SMGT smgt, Map<Integer, List<Integer>> assignments, double makespan) {
         if (makespan <= 0) return 0;
         
-        Map<Integer, task> taskMap = new HashMap<>();
-        for (task t : smgt.getTasks()) {
+        Map<Integer, Task> taskMap = new HashMap<>();
+        for (Task t : smgt.getTasks()) {
             taskMap.put(t.getID(), t);
         }
         
@@ -538,15 +538,15 @@ public class AblationExperimentRunner {
             vmMap.put(i, vmList.get(i));  // Use index as key, not VM.getID()
         }
         
-        // For AVU, we need to count ALL task executions (including duplicates)
+        // For AVU, we need to count ALL Task executions (including duplicates)
         // because each execution contributes to VM utilization
-        Map<Integer, List<task>> taskAssignments = new HashMap<>();
+        Map<Integer, List<Task>> taskAssignments = new HashMap<>();
         
         for (Map.Entry<Integer, List<Integer>> entry : assignments.entrySet()) {
             int vmIdx = entry.getKey();  // This is VM index, not VM.getID()
-            List<task> vmTasks = new ArrayList<>();
+            List<Task> vmTasks = new ArrayList<>();
             for (int taskId : entry.getValue()) {
-                task t = taskMap.get(taskId);
+                Task t = taskMap.get(taskId);
                 if (t != null) {
                     vmTasks.add(t);  // Add even if duplicate (counts as VM utilization)
                 }
@@ -560,8 +560,8 @@ public class AblationExperimentRunner {
     private static double calculateVF(SMGT smgt, Map<Integer, List<Integer>> assignments, double makespan) {
         if (makespan <= 0) return 0;
         
-        Map<Integer, task> taskMap = new HashMap<>();
-        for (task t : smgt.getTasks()) {
+        Map<Integer, Task> taskMap = new HashMap<>();
+        for (Task t : smgt.getTasks()) {
             taskMap.put(t.getID(), t);
         }
         
@@ -573,15 +573,15 @@ public class AblationExperimentRunner {
             vmMap.put(i, vmList.get(i));  // Use index as key, not VM.getID()
         }
         
-        // For VF, don't count duplicates (each task's satisfaction counted once)
+        // For VF, don't count duplicates (each Task's satisfaction counted once)
         Set<Integer> assignedTaskIds = new HashSet<>();
-        Map<Integer, List<task>> taskAssignments = new HashMap<>();
+        Map<Integer, List<Task>> taskAssignments = new HashMap<>();
         
         for (Map.Entry<Integer, List<Integer>> entry : assignments.entrySet()) {
             int vmIdx = entry.getKey();  // This is VM index, not VM.getID()
-            List<task> tasks = new ArrayList<>();
+            List<Task> tasks = new ArrayList<>();
             for (int taskId : entry.getValue()) {
-                task t = taskMap.get(taskId);
+                Task t = taskMap.get(taskId);
                 if (t != null && !assignedTaskIds.contains(taskId)) {
                     tasks.add(t);
                     assignedTaskIds.add(taskId);
@@ -597,8 +597,8 @@ public class AblationExperimentRunner {
     private static double calculateAvgSatisfaction(SMGT smgt, Map<Integer, List<Integer>> assignments, double makespan) {
         if (makespan <= 0) return 0;
         
-        Map<Integer, task> taskMap = new HashMap<>();
-        for (task t : smgt.getTasks()) {
+        Map<Integer, Task> taskMap = new HashMap<>();
+        for (Task t : smgt.getTasks()) {
             taskMap.put(t.getID(), t);
         }
         
@@ -610,15 +610,15 @@ public class AblationExperimentRunner {
             vmMap.put(i, vmList.get(i));  // Use index as key, not VM.getID()
         }
         
-        // For AvgSatisfaction, don't count duplicates (each task's satisfaction counted once)
+        // For AvgSatisfaction, don't count duplicates (each Task's satisfaction counted once)
         Set<Integer> assignedTaskIds = new HashSet<>();
-        Map<Integer, List<task>> taskAssignments = new HashMap<>();
+        Map<Integer, List<Task>> taskAssignments = new HashMap<>();
         
         for (Map.Entry<Integer, List<Integer>> entry : assignments.entrySet()) {
             int vmIdx = entry.getKey();  // This is VM index, not VM.getID()
-            List<task> tasks = new ArrayList<>();
+            List<Task> tasks = new ArrayList<>();
             for (int taskId : entry.getValue()) {
-                task t = taskMap.get(taskId);
+                Task t = taskMap.get(taskId);
                 if (t != null && !assignedTaskIds.contains(taskId)) {
                     tasks.add(t);
                     assignedTaskIds.add(taskId);

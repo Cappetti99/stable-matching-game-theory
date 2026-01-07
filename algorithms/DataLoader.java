@@ -109,7 +109,7 @@ public class DataLoader {
      * @param filename Path to task.csv
      * @return List of task objects with random sizes
      */
-    public static List<task> loadTaskBasicInfo(String filename) throws IOException {
+    public static List<Task> loadTaskBasicInfo(String filename) throws IOException {
         return loadTaskBasicInfo(filename, -1);
     }
 
@@ -119,8 +119,8 @@ public class DataLoader {
      * @param runIdx Run index for seed variation (-1 for default behavior)
      * @return List of task objects with random sizes
      */
-    public static List<task> loadTaskBasicInfo(String filename, int runIdx) throws IOException {
-        List<task> tasks = new ArrayList<>();
+    public static List<Task> loadTaskBasicInfo(String filename, int runIdx) throws IOException {
+        List<Task> tasks = new ArrayList<>();
         Random rand = (runIdx >= 0)
             ? SeededRandom.forScopeAndRun("DataLoader.loadTaskBasicInfo:" + filename, runIdx)
             : SeededRandom.forScope("DataLoader.loadTaskBasicInfo:" + filename);
@@ -157,7 +157,7 @@ public class DataLoader {
                     // Rank will be calculated by DCP, not loaded from CSV
                     double rank = 0.0;
 
-                    task t = new task(taskId);
+                    Task t = new Task(taskId);
                     t.setSize(size);
                     t.setRank(rank);
                     tasks.add(t);
@@ -172,7 +172,7 @@ public class DataLoader {
      * @param filename Path to dag.csv
      * @param tasks List of tasks to build relationships for (will be modified)
      */
-    public static void loadDAGStructure(String filename, List<task> tasks) throws IOException {
+    public static void loadDAGStructure(String filename, List<Task> tasks) throws IOException {
         try (BufferedReader reader = new BufferedReader(new FileReader(filename))) {
             String line;
             boolean firstLine = true;
@@ -196,8 +196,8 @@ public class DataLoader {
                     int succId = Integer.parseInt(parts[1].replace("t", "").trim());
 
                     // BUG FIX: Add null checks to prevent NullPointerException
-                    task predTask = Utility.getTaskById(predId, tasks);
-                    task succTask = Utility.getTaskById(succId, tasks);
+                    Task predTask = Utility.getTaskById(predId, tasks);
+                    Task succTask = Utility.getTaskById(succId, tasks);
                     
                     if (predTask != null && succTask != null) {
                         // Add relationships
@@ -223,7 +223,7 @@ public class DataLoader {
      * @param taskFilename Path to task.csv
      * @return List of tasks with complete structure
      */
-    public static List<task> loadTasksFromCSV(String dagFilename, String taskFilename) throws IOException {
+    public static List<Task> loadTasksFromCSV(String dagFilename, String taskFilename) throws IOException {
         return loadTasksFromCSV(dagFilename, taskFilename, -1);
     }
 
@@ -234,8 +234,8 @@ public class DataLoader {
      * @param runIdx Run index for seed variation (-1 for default behavior)
      * @return List of tasks with complete structure
      */
-    public static List<task> loadTasksFromCSV(String dagFilename, String taskFilename, int runIdx) throws IOException {
-        List<task> tasks = new ArrayList<>();
+    public static List<Task> loadTasksFromCSV(String dagFilename, String taskFilename, int runIdx) throws IOException {
+        List<Task> tasks = new ArrayList<>();
         
         // First load task basic info if task.csv exists
         File taskFile = new File(taskFilename);

@@ -9,12 +9,12 @@ import java.util.*;
 public class Metrics {
 
     /**
-     * Execution time of a task on a VM.
+     * Execution time of a Task on a VM.
      * 
-     * VALIDATED: Returns POSITIVE_INFINITY if VM capacity ≤ 0 or task size ≤ 0
+     * VALIDATED: Returns POSITIVE_INFINITY if VM capacity ≤ 0 or Task size ≤ 0
      */
-    public static double ET(task ti, VM vmK) {
-        // VALIDATION: Check task size
+    public static double ET(Task ti, VM vmK) {
+        // VALIDATION: Check Task size
         if (ti.getSize() <= 0) {
             return Double.POSITIVE_INFINITY;
         }
@@ -40,14 +40,14 @@ public class Metrics {
      * @param criticalPathTasks Tasks on the critical path 
      * @param vms Available VMs
      */
-    public static double SLR(double makespan, List<task> criticalPathTasks, Map<Integer, VM> vms) {
+    public static double SLR(double makespan, List<Task> criticalPathTasks, Map<Integer, VM> vms) {
         double sumMinET = 0.0;
-        for (task t : criticalPathTasks) {
+        for (Task t : criticalPathTasks) {
             double minET = Double.POSITIVE_INFINITY;
             for (VM vm : vms.values()) minET = Math.min(minET, ET(t, vm));
             if (minET != Double.POSITIVE_INFINITY) sumMinET += minET;
             else {
-                // If any critical path task cannot be executed, SLR return error 
+                // If any critical path Task cannot be executed, SLR return error 
                 throw new IllegalArgumentException(
                     "Cannot compute SLR: Task " + t.getID() + " cannot be executed on any VM.");
 
@@ -63,10 +63,10 @@ public class Metrics {
     /**
      * VM Utilization.
      */
-    public static double VU(VM vmK, List<task> assignedTasks, double makespan) {
+    public static double VU(VM vmK, List<Task> assignedTasks, double makespan) {
         if (makespan <= 0 || assignedTasks == null || assignedTasks.isEmpty()) return 0.0;
         double sumET = 0.0;
-        for (task t : assignedTasks) {
+        for (Task t : assignedTasks) {
             double et = ET(t, vmK);
             if (et != Double.POSITIVE_INFINITY) sumET += et;
         }
@@ -76,13 +76,13 @@ public class Metrics {
     /**
      * Average VM Utilization.
      */
-    public static double AVU(Map<Integer, VM> vms, Map<Integer, List<task>> vmTaskAssignments,
+    public static double AVU(Map<Integer, VM> vms, Map<Integer, List<Task>> vmTaskAssignments,
                              double makespan) {
         if (vms == null || vms.isEmpty() || makespan <= 0) return 0.0;
         double sumVU = 0.0;
         int count = 0;
         for (VM vm : vms.values()) {
-            List<task> tasks = vmTaskAssignments.getOrDefault(vm.getID(), new ArrayList<>());
+            List<Task> tasks = vmTaskAssignments.getOrDefault(vm.getID(), new ArrayList<>());
             sumVU += VU(vm, tasks, makespan);
             count++;
         }
@@ -92,29 +92,29 @@ public class Metrics {
 
     /**
      * Compute satisfactions for all tasks based on their assignments.
-     * A task's satisfaction is defined as:
+     * A Task's satisfaction is defined as:
      * S(ti) = ET(ti, assignedVM) / min{ET(ti, VMk)} for all VMs
      * 
      * @param tasks List of all tasks
      * @param vms Map of VM ID to VM objects
      * @param vmTaskAssignments Map of VM ID to list of assigned tasks
-     * @return List of satisfaction values for each task
+     * @return List of satisfaction values for each Task
      */
 
-    private static List<Double> computeSatisfactions(List<task> tasks,
+    private static List<Double> computeSatisfactions(List<Task> tasks,
                                                     Map<Integer, VM> vms,
-                                                    Map<Integer, List<task>> vmTaskAssignments) {
+                                                    Map<Integer, List<Task>> vmTaskAssignments) {
 
         if (tasks == null || vms == null || vmTaskAssignments == null) {
             throw new IllegalArgumentException("tasks, vms and vmTaskAssignments must not be null");
         }
 
         Map<Integer, VM> taskToVM = new HashMap<>();
-        for (Map.Entry<Integer, List<task>> entry : vmTaskAssignments.entrySet()) {
+        for (Map.Entry<Integer, List<Task>> entry : vmTaskAssignments.entrySet()) {
             VM vm = vms.get(entry.getKey());
             if (vm == null || entry.getValue() == null) continue;
 
-            for (task t : entry.getValue()) {
+            for (Task t : entry.getValue()) {
                 if (t != null) {
                     taskToVM.put(t.getID(), vm);
                 }
@@ -123,7 +123,7 @@ public class Metrics {
 
         List<Double> satisfactions = new ArrayList<>();
 
-        for (task t : tasks) {
+        for (Task t : tasks) {
             if (t == null) continue;
 
             VM assignedVM = taskToVM.get(t.getID());
@@ -157,9 +157,9 @@ public class Metrics {
     /**
      * Average Satisfaction.
      */
-    public static double AvgSatisfaction(List<task> tasks,
+    public static double AvgSatisfaction(List<Task> tasks,
                                         Map<Integer, VM> vms,
-                                        Map<Integer, List<task>> vmTaskAssignments) {
+                                        Map<Integer, List<Task>> vmTaskAssignments) {
 
         List<Double> satisfactions =
                 computeSatisfactions(tasks, vms, vmTaskAssignments);
@@ -176,9 +176,9 @@ public class Metrics {
     /**
      * Variance of Satisfaction.
      */
-    public static double VF(List<task> tasks,
+    public static double VF(List<Task> tasks,
                             Map<Integer, VM> vms,
-                            Map<Integer, List<task>> vmTaskAssignments) {
+                            Map<Integer, List<Task>> vmTaskAssignments) {
 
         List<Double> satisfactions =
                 computeSatisfactions(tasks, vms, vmTaskAssignments);
@@ -209,14 +209,14 @@ public class Metrics {
          * 
          * Formula: cost = (taskSize × CCR) / bandwidth
          * 
-         * @param srcTask Source task (sender)
-         * @param dstTask Destination task (receiver) - not used but kept for API consistency
+         * @param srcTask Source Task (sender)
+         * @param dstTask Destination Task (receiver) - not used but kept for API consistency
          * @param srcVM Source VM where srcTask executes
          * @param dstVM Destination VM where dstTask executes
          * @param ccr Communication-to-Computation Ratio (multiplier for data size)
          * @return Communication time cost (0.0 if same VM)
          */
-        public static double calculate(task srcTask, task dstTask, 
+        public static double calculate(Task srcTask, Task dstTask, 
                                        VM srcVM, VM dstVM, double ccr) {
             if (srcVM == null || dstVM == null) {
                 return 0.0;
@@ -246,13 +246,13 @@ public class Metrics {
          * Formula: avgCost = Σ[(taskSize × CCR) / B(k,l)] / (m × (m-1))
          * where m = number of VMs, and k ≠ l
          * 
-         * @param srcTask Source task
-         * @param dstTask Destination task (not used but kept for consistency)
+         * @param srcTask Source Task
+         * @param dstTask Destination Task (not used but kept for consistency)
          * @param vms List of all available VMs
          * @param ccr Communication-to-Computation Ratio
          * @return Average communication cost across all VM pairs
          */
-        public static double calculateAverage(task srcTask, task dstTask,
+        public static double calculateAverage(Task srcTask, Task dstTask,
                                              List<VM> vms, double ccr) {
             if (vms == null || vms.size() < 2) {
                 return 0.0;
