@@ -13,9 +13,6 @@ import java.text.SimpleDateFormat;
  * - Makespan and other metrics
  * 
  * Output folder: ../results/gantt_charts/
- * 
- * @author Lorenzo Cappetti
- * @version 1.0
  */
 public class GanttChartGenerator {
 

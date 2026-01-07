@@ -78,18 +78,9 @@ public class DataLoader {
     }
 
     /**
-     * Generates random bandwidth between all VM pairs
+     * Generates random bandwidth between all VM pairs with run-specific seed
      * NOTE: Bandwidth is generated with uniform distribution [20, 30] Mbps
      * CSV file is ignored - bandwidth generated for all VM pairs
-     * @param filename Path to bandwidth.csv (not used, kept for compatibility)
-     * @param vms List of VMs to apply bandwidth to
-     */
-    public static void loadBandwidthFromCSV(String filename, List<VM> vms) throws IOException {
-        loadBandwidthFromCSV(filename, vms, -1);
-    }
-
-    /**
-     * Generates random bandwidth between all VM pairs with run-specific seed
      * @param filename Path to bandwidth.csv (not used, kept for compatibility)
      * @param vms List of VMs to apply bandwidth to
      * @param runIdx Run index for seed variation (-1 for default behavior)

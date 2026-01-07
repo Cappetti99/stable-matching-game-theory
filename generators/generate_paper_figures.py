@@ -251,15 +251,15 @@ def plot_avu_vs_ccr(data, scale='small', output_filename='figure6_avu_vs_ccr.png
                    linestyle=style.get('linestyle', '-'),
                    zorder=style.get('zorder', 3))
             
-            # Add trend annotation for SM-CPTD
-            if algo_name == 'SM-CPTD' and len(avu_vals) >= 2:
-                avu_start = avu_vals[0]
-                avu_end = avu_vals[-1]
-                decrease_pct = ((avu_end - avu_start) / avu_start) * 100
+            # Add variation annotation for all algorithms (max to min)
+            if len(avu_vals) >= 2:
+                avu_max = max(avu_vals)
+                avu_min = min(avu_vals)
+                variation_pct = ((avu_min - avu_max) / avu_max) * 100
                 
-                # Add annotation showing the decrease
-                ax.annotate(f'{decrease_pct:.1f}%', 
-                           xy=(ccr_vals[-1], avu_end),
+                # Add annotation showing the variation at the last point (rightmost)
+                ax.annotate(f'{variation_pct:+.1f}%', 
+                           xy=(ccr_vals[-1], avu_vals[-1]),
                            xytext=(10, -5),
                            textcoords='offset points',
                            fontsize=9,
@@ -465,7 +465,7 @@ def plot_avg_satisfaction_vs_workflow(
     print(f"Saved: {output_path}")
 
 # ============================================================================
-# PLOTTING FUNCTIONS - FIGURES 9, 10 (VM Effect - Experiment 2)
+# PLOTTING FUNCTIONS - FIGURES 9, 10 
 # ============================================================================
 
 def prepare_exp2_data(algorithm='SM-CPTD'):
@@ -594,75 +594,6 @@ def plot_slr_vs_vms(data, output_filename='figure9_slr_vs_vms.png'):
     print(f"Saved: {output_path}")
     plt.close()
 
-def plot_vf_vs_vms(data, output_filename='figure_vf_vs_vms.png'):
-    """
-    Genera grafico VF vs VM Count (Experiment 2)
-    
-    Args:
-        data: dict con struttura {workflow: {algorithm: {'VMs': [...], 'VF': [...]}}}
-        output_filename: nome file output
-    """
-    fig, axes = plt.subplots(2, 2, figsize=(14, 7))
-    fig.suptitle('Comparison of VF with different VM counts (CCR=1.0)', 
-                 fontsize=14, fontweight='bold')
-    
-    for idx, (ax, workflow) in enumerate(zip(axes.flat, WORKFLOW_ORDER)):
-        if workflow not in data:
-            continue
-            
-        workflow_results = data[workflow]
-        
-        # Estrai info su tasks e CCR
-        info = workflow_results.get('info', {})
-        tasks = info.get('tasks', '?')
-        ccr = info.get('ccr', '?')
-        
-        # Plot per ogni algoritmo
-        for algo_name, algo_data in workflow_results.items():
-            if algo_name == 'info':  # Salta il campo info
-                continue
-            
-            style = ALGO_STYLES.get(algo_name, {})
-            
-            vms_vals = algo_data['VMs']
-            vf_vals = algo_data['VF']
-            
-            ax.plot(vms_vals, vf_vals, 
-                   label=style.get('label', algo_name),
-                   color=style.get('color', None),
-                   marker=style.get('marker', 'o'),
-                   linewidth=style.get('linewidth', 1.5),
-                   markersize=style.get('markersize', 7),
-                   linestyle=style.get('linestyle', '-'),
-                   zorder=style.get('zorder', 3))
-        
-        # Configurazione assi
-        ax.set_xlabel('Number of VMs', fontsize=11)
-        ax.set_ylabel('VF', fontsize=11)
-        ax.set_title(f'{WORKFLOW_TITLES[workflow]} ({tasks} tasks, CCR={ccr})', 
-                    fontsize=12, fontweight='bold')
-        
-        # Grid
-        ax.grid(True, linestyle='--', alpha=0.3, color='gray', linewidth=0.5)
-        
-        # Legenda
-        ax.legend(loc='best', fontsize=9, framealpha=0.9, 
-                 edgecolor='black', fancybox=False)
-        
-        # Limiti assi
-        if len(vms_vals) > 0:
-            vm_min = min(vms_vals)
-            vm_max = max(vms_vals)
-            ax.set_xlim(vm_min - 2, vm_max + 2)
-            ax.set_xticks(vms_vals)
-    
-    plt.tight_layout()
-    output_path = Path('../results/figures') / output_filename
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    print(f"Saved: {output_path}")
-    plt.close()
-
 def plot_avu_vs_vms(data, output_filename='figure10_avu_vs_vms.png'):
     """
     Genera Figura 10: AVU vs VM Count (Experiment 2)
@@ -704,6 +635,25 @@ def plot_avu_vs_vms(data, output_filename='figure10_avu_vs_vms.png'):
                    markersize=style.get('markersize', 7),
                    linestyle=style.get('linestyle', '-'),
                    zorder=style.get('zorder', 3))
+            
+            # Add variation annotation for all algorithms (max to min)
+            if len(avu_vals) >= 2:
+                avu_max = max(avu_vals)
+                avu_min = min(avu_vals)
+                variation_pct = ((avu_min - avu_max) / avu_max) * 100
+                
+                # Add annotation showing the variation at the last point (rightmost)
+                ax.annotate(f'{variation_pct:+.1f}%', 
+                           xy=(vms_vals[-1], avu_vals[-1]),
+                           xytext=(10, -5),
+                           textcoords='offset points',
+                           fontsize=9,
+                           color=style.get('color', 'black'),
+                           weight='bold',
+                           bbox=dict(boxstyle='round,pad=0.3', 
+                                   facecolor='white', 
+                                   edgecolor=style.get('color', 'black'),
+                                   alpha=0.8))
         
         # Configurazione assi
         ax.set_xlabel('Number of VMs', fontsize=11)
@@ -939,11 +889,12 @@ def plot_ablation_single_metric(metric, metric_title, output_filename):
 
 
 def plot_ablation_figure12(output_filename='figure12_ablation_study.png'):
-    """Genera 3 file separati per l'ablation study: SLR, AVU, VF."""
+    """Genera 4 file separati per l'ablation study: SLR, AVU, VF, AvgSatisfaction."""
     # Generate separate files for each metric
     plot_ablation_single_metric('slr', 'SLR', 'figure12_ablation_slr.png')
     plot_ablation_single_metric('avu', 'AVU', 'figure12_ablation_avu.png')
     plot_ablation_single_metric('vf', 'VF', 'figure12_ablation_vf.png')
+    plot_ablation_single_metric('avg_satisfaction', 'Average Satisfaction', 'figure12_ablation_avg_satisfaction.png')
 
 
 def generate_ablation_figures():
@@ -960,6 +911,7 @@ def generate_ablation_figures():
     print("  - figure12_ablation_slr.png")
     print("  - figure12_ablation_avu.png")
     print("  - figure12_ablation_vf.png")
+    print("  - figure12_ablation_avg_satisfaction.png")
 
 # ============================================================================
 # FUNZIONE PRINCIPALE
@@ -1028,9 +980,6 @@ def generate_all_figures():
         
         print("  → Generating Figure 10 (AVU vs VM Count)...")
         plot_avu_vs_vms(data_exp2, output_filename='figure10_avu_vs_vms.png')
-        
-        print("  → Generating VF vs VM Count...")
-        plot_vf_vs_vms(data_exp2, output_filename='figure_vf_vs_vms.png')
     else:
         print("  ⚠️  No EXP2_VM data found, skipping Figures 9-10")
     
@@ -1046,7 +995,6 @@ def generate_all_figures():
     print("  - figure8_avu_vs_ccr_large.png")
     print("  - figure9_slr_vs_vms.png")
     print("  - figure10_avu_vs_vms.png")
-    print("  - figure_vf_vs_vms.png")
     print("  - figure_vf_vs_workflow_1000x50_ccr1.png")
     print("  - figure_avg_satisfaction_vs_workflow_1000x50_ccr1.png")
     print("  - figure_metrics_comparison_large.png")

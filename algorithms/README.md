@@ -204,7 +204,8 @@ All outputs are written relative to the repository root:
 - Figures (if Python generation is enabled):
   - `../results/figures/*.png`
 
-- Optional Gantt chart JSON (if enabled):
-  - `../results/gantt_charts/*.json`
+- Optional Gantt chart JSON (if enabled) and visualization:
+	- `../results/gantt_charts/*.json`
+	- Possible to use **Gantt Visualizer** tool to interactively view and analyze the generated Gantt chart JSON files, providing a graphical representation of the scheduling results.
 
 ---

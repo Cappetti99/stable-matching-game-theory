@@ -23,7 +23,7 @@ public class Utility {
 
         Map<Integer, List<Integer>> levelMap = new HashMap<>();
 
-        // First pass: compute levels using a topological algorithm
+        //compute levels using a topological algorithm
         Map<Integer, Integer> taskToLevel = new HashMap<>();
         Map<Integer, task> taskMap = new HashMap<>();
 
@@ -87,7 +87,7 @@ public class Utility {
             }
         }
 
-        // Second pass: build the map level -> [taskIds]
+        //build the map level -> [taskIds]
         for (Map.Entry<Integer, Integer> entry : taskToLevel.entrySet()) {
             int taskId = entry.getKey();
             int level = entry.getValue();

@@ -391,8 +391,7 @@ public class SMCPTD {
         }
     }
 
-    // ==================== GETTERS ====================
-
+    // getter 
     public Set<Integer> getCriticalPath() {
         return criticalPath;
     }

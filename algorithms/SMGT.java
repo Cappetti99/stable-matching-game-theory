@@ -22,8 +22,6 @@ public class SMGT {
     /** Mapping: topological level -> list of task IDs */
     private Map<Integer, List<Integer>> levelTasks;
 
-    // ==================== CONFIGURATION ====================
-
     /**
      * Enables verbose logging for debugging and analysis purposes.
      * Should be disabled in production runs.
@@ -37,7 +35,7 @@ public class SMGT {
         this.levelTasks = new HashMap<>();
     }
 
-    // ==================== SETTERS AND GETTERS ====================
+    // getter and setter methods
 
     public void setTasks(List<task> tasks) {
         this.tasks = tasks;
@@ -95,8 +93,6 @@ public class SMGT {
             );
         }
     }
-
-    // ==================== MAIN ALGORITHM ====================
 
     /**
      * Main SMGT algorithm with Critical Path prioritization.
@@ -197,10 +193,10 @@ public class SMGT {
             System.out.println("   Non-CP tasks: " + nonCpTasks.size());
         }
 
-        // STEP 1: Compute thresholds for each VM (max tasks allowed at this level)
+        // Compute thresholds for each VM (max tasks allowed at this level)
         calculateAndSetThresholds(level, levelTaskIds.size());
 
-        // STEP 2: Assign CP tasks to the fastest VM and update waiting list
+        // Assign CP tasks to the fastest VM and update waiting list
         int fastestVM = getFastestVM();
         for (Integer cpTaskId : cpTasks) {
             schedule.get(fastestVM).add(cpTaskId);
@@ -213,20 +209,14 @@ public class SMGT {
             }
         }
 
-        // STEP 3: If no non-CP tasks remain, level is complete
-        if (nonCpTasks.isEmpty()) {
-            if (VERBOSE) System.out.println("   (no non-CP tasks, level complete)");
-            return;
-        }
-
-        // STEP 4: Generate preference lists for non-CP tasks and VMs
+        // Generate preference lists for non-CP tasks and VMs
         Map<Integer, List<Integer>> taskPreferences = new HashMap<>();
         for (Integer taskId : nonCpTasks) {
             taskPreferences.put(taskId, generateTaskPreferences(taskId));
         }
         Map<Integer, List<Integer>> vmPreferences = generateAllVMPreferences();
 
-        // STEP 5: Apply stable matching algorithm to assign non-CP tasks
+        // Apply stable matching algorithm to assign non-CP tasks
         stableMatchingForLevel(nonCpTasks, taskPreferences, vmPreferences, schedule);
 
         if (VERBOSE) {
@@ -237,7 +227,8 @@ public class SMGT {
             }
         }
     }
-    // ==================== THRESHOLD CALCULATION ====================
+
+    // threshold calculation for levels
 
     /**
      * Computes and sets the task threshold for each VM at a given DAG level.
@@ -250,7 +241,7 @@ public class SMGT {
      * waitingList.size() >= threshold.
      *
      * @param level               DAG level
-     * @param tasksInCurrentLevel Number of tasks in the current level (unused, included for API consistency)
+     * @param tasksInCurrentLevel Number of tasks in the current level
      */
     private void calculateAndSetThresholds(int level, int tasksInCurrentLevel) {
         // Sum tasks from level 0 to current
@@ -277,6 +268,7 @@ public class SMGT {
             double capacity = getVMProcessingCapacity(vm);
             int threshold = (int) Math.ceil((sumTasksUpToLevel / sumCapacities) * capacity);
             vm.setThreshold(threshold);
+            totalThreshold += threshold;
 
             if (VERBOSE) {
                 System.out.println("   VM" + vmIdx + " threshold: " + threshold +
@@ -395,8 +387,12 @@ public class SMGT {
                 }
             }
         }
-
-    // Fallback to fastest VM if all are full
+        
+        // If all VMs are full return error value
+        if (bestVM == -1) {
+            System.err.println("WARNING: All VMs are full when assigning t" + taskId + ". Assigning to fastest VM.");
+            return getFastestVM();
+        }
         return bestVM;
     }
 
@@ -456,8 +452,6 @@ public class SMGT {
         }
         return bestVM;
     }
-
-    // ==================== PREFERENCE GENERATION ====================
 
     /**
      * Generates VM preference list for a task (sorted by finish time ascending)

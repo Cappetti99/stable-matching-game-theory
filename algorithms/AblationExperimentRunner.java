@@ -14,7 +14,7 @@ import java.util.*;
  */
 public class AblationExperimentRunner {
 
-    private static final int NUM_RUNS = 10;  // Reduced for faster execution
+    private static final int NUM_RUNS = 1;  // Reduced for faster execution
     private static final int WARMUP_RUNS = 0;
     
     // Test on large-scale workflows only (as in paper Figure 12)
