@@ -72,9 +72,6 @@ public class LOTD {
         }
     }
 
-    /**
-     * Constructor
-     */
     public LOTD(SMGT smgt) {
         this.smgt = smgt;
         this.vms = smgt.getVMs();
@@ -104,7 +101,7 @@ public class LOTD {
     }
 
     /**
-     * MAIN ENTRY POINT: Execute LOTD algorithm
+     * Execute LOTD algorithm
      * 
      * @param preSchedule Schedule from SMGT (VM_ID -> task_IDs)
      * @return Optimized schedule with entry task duplications
