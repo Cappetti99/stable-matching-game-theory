@@ -212,7 +212,7 @@ The plots below are shown for clarity and quick visual inspection; the full anal
 
 | Average task satisfaction across workflows (large-scale, CCR=1.0). |
 |----------------|
-|![nobase](results/figures/figure_avg_satisfaction_vs_workflow_1000x50_ccr1.png) |
+|![nobase](results/figures/figure_avg_satisfaction_copy.png) |
 
 
 ## Ablation Study
