@@ -25,28 +25,45 @@ Reference:
 
 ```
 stable-matching-game-theory/
-├── algorithms/                 Java implementation and experiment runners
-│   ├── Main.java               Entry point (runs ExperimentRunner and optional plotting)
-│   ├── ExperimentRunner.java   Runs the experiments and saves results
-│   ├── SMCPTD.java             Orchestrates DCP → SMGT → LOTD
-│   ├── DCP.java                Critical path selection via recursive ranking
-│   ├── SMGT.java               Stable matching-based scheduling per DAG level
-│   ├── LOTD.java               Task duplication and schedule timing recomputation
-│   ├── PegasusXMLParser.java   Converts Pegasus XML workflows to CSV datasets
-│   ├── DataLoader.java         Loads DAG structure and generates numeric parameters
-│   ├── Metrics.java            ET/SLR/AVU/VF + communication cost helpers
-│   ├── CCRAnalyzer.java        Writes CCR sensitivity snapshots to JSON
-│   └── GanttChartGenerator.java Writes optional Gantt JSON snapshots
-├── generators/
-│   ├── generate_paper_figures.py
+├── README.md
+├── algorithms/                         Java implementation and experiment runners
+│   ├── AblationExperimentRunner.java    Runs the ablation study
+│   ├── CCRAnalyzer.java                 Collects CCR-sweep snapshots and writes a JSON analysis report
+│   ├── DataLoader.java                  Loads workflow DAG structure and generates numeric parameters (seeded)
+│   ├── DCP.java                         Dynamic Critical Path ranking and critical-path extraction
+│   ├── ExperimentRunner.java            Runs the main experiments and saves results (CSV/JSON)
+│   ├── GanttChartGenerator.java         Exports schedule timing/assignments to JSON for Gantt visualization
+│   ├── GanttChartVisualizer.java        Visualization of Gantt JSON 
+│   ├── LOTD.java                        List of Task Duplication (here: duplicates entry tasks when beneficial)
+│   ├── Main.java                        Entry point 
+│   ├── Metrics.java                     Metrics computation (ET, SLR, AVU, satisfaction, VF, communication cost)
+│   ├── PegasusXMLParser.java            Converts Pegasus DAX XML workflows to CSV datasets
+│   ├── README.md                        Algorithm-specific notes
+│   ├── SeededRandom.java                Centralized deterministic randomness for reproducible runs
+│   ├── SMCPTD.java                      Orchestrates the full pipeline: DCP → SMGT → LOTD + metrics
+│   ├── SMGT.java                        Stable matching-based task-to-VM assignment (level by level)
+│   ├── Utility.java                     Shared helpers (e.g., DAG level/topological organization)
+│   ├── VM.java                          VM model (processing capacity, bandwidth matrix, threshold/waiting list)
+│   └── task.java                        Task model (size, rank, predecessors/successors)
+├── clean.sh
+├── docs/                               Report and paper material
+│   ├── QESM_Report_Cappetti_Peppicelli.pdf
+│   └── s11227-021-03742-3.pdf
+├── generators/                         Python scripts for analysis and plotting
 │   ├── analyze_ccr_sensitivity.py
+│   ├── generate_paper_figures.py
 │   └── visualize_dag.py
-├── workflow/                   Pegasus XML workflows (input)
-├── results/
+├── requirement.txt                     
+├── results/                            Stored results and generated figures
 │   ├── experiments_results.json
-│   └── figures/                Generated figures (PNG)
+│   └── figures/                        Generated figures (PNG)
 ├── run.sh
-└── clean.sh
+├── run_gantt_visualizer.sh
+└── workflow/                           Pegasus XML workflows (input)
+   ├── cybershake/
+   ├── epigenomics/
+   ├── ligo/
+   └── montage/
 ```
 
 ### Requirements
@@ -135,6 +152,8 @@ The CCR sensitivity analysis highlights the expected trade-off between computati
 - AVU decreases as communication dominates computation, indicating reduced effective VM utilization.
 - Larger workflows exhibit smoother trends, while smaller workflows show higher variance.
 
+The plots below are shown for clarity and quick visual inspection; the full analysis and discussion are reported in `docs/QESM_Report_Cappetti_Peppicelli.pdf`.
+
 | Comparison of SLR values across CCRs for workflows of increasing size (small, medium, and large). |
 |----------------|
 |![nobase](results/figures/figure3_slr_vs_ccr_small.png) |
@@ -148,8 +167,6 @@ The CCR sensitivity analysis highlights the expected trade-off between computati
 |![nobase](results/figures/figure7_avu_vs_ccr_medium.png) |
 |![nobase](results/figures/figure8_avu_vs_ccr_large.png) |
 
-
-
 ## Experiment 2 — VM Count Scalability
 
 This experiment analyzes scalability with respect to the number of available VMs. 
@@ -158,10 +175,11 @@ This experiment analyzes scalability with respect to the number of available VMs
 - Tasks: ~1000 (Epigenomics uses 997).
 
 ### Results and figures
-
 When increasing the number of VMs:
 - Makespan and SLR decrease initially, then plateau as parallelism saturates.
 - AVU decreases with higher VM counts, reflecting underutilization in highly overprovisioned settings.
+
+The plots below are shown for clarity and quick visual inspection; the full analysis and discussion are reported in `docs/QESM_Report_Cappetti_Peppicelli.pdf`.
 
 | Comparison of SLR and AVU values across different numbers of VMs (large-scale workflows, CCR = 1.0). |
 |----------------|
@@ -186,6 +204,7 @@ Interpretation:
 - **Higher VF** means satisfaction is more uneven (some tasks are much more penalized than others).
 
 ### Results and figures
+The plots below are shown for clarity and quick visual inspection; the full analysis and discussion are reported in `docs/QESM_Report_Cappetti_Peppicelli.pdf`.
 
 | VF across workflows (large-scale, 50 VMs, CCR=1.0). |
 |----------------|
@@ -208,15 +227,14 @@ The runner evaluates four variants on the large-scale workflows (about 1000 task
 4. **DCP + SMGT + LOTD** (full SM-CPTD pipeline)
 
 ### Results and figures
-
 The ablation compares SLR, AVU, and VF across workflows to highlight how each component impacts performance and fairness.
 
-????? FOOORSE QUAlCOSA SIMIL 
 The ablation results show that:
 - Critical-path prioritization (DCP) improves makespan-related metrics.
 - Task duplication (LOTD) further refines schedules by reducing communication delays.
 - The full SM-CPTD pipeline consistently outperforms partial variants in terms of SLR, AVU, and fairness.
 
+The plots below are shown for clarity and quick visual inspection; the full analysis and discussion are reported in `docs/QESM_Report_Cappetti_Peppicelli.pdf`.
 
 | Ablation study results: SLR, AVU, and VF. |
 |----------------|
@@ -228,7 +246,6 @@ The ablation results show that:
 
 Across all workflows and experimental settings, the results confirm the expected trade-offs:
 - Increasing CCR increases communication overhead, which typically increases SLR/makespan and reduces AVU.
-- The fairness metrics (AvgSatisfaction and VF) remain comparatively stable across CCR sweeps, suggesting the stable-matching assignment tends to preserve fairness even as communication costs rise.
 - In the scalability experiment, increasing the number of VMs reduces SLR/makespan at first, then shows diminishing returns, while AVU decreases as the system becomes more overprovisioned.
 
 Overall, the SM-CPTD pipeline provides a practical scheduling approach that balances makespan-oriented objectives with fairness-aware allocation, and the ablation study highlights that combining critical-path prioritization (DCP) and selective duplication (LOTD) is beneficial compared to the SMGT-only baseline.

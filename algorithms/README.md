@@ -172,10 +172,7 @@ Set a fixed seed:
 cd algorithms
 java Main --seed=123
 ```
-
 By default, the runners vary an internal run index to produce multiple independent runs under the same base seed. This means each run will use different random data (e.g., different bandwidth values, task execution times).
-
-### Fixed Seed Mode
 
 If you want all runs to use **exactly the same data** (useful for comparing ablation study results with normal runs), use the `--fixed-seed` flag:
 
