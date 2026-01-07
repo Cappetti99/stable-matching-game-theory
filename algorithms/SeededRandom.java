@@ -16,6 +16,7 @@ public final class SeededRandom {
 
     private static volatile long seed = 3L;
     private static volatile boolean useSeed = true;
+    private static volatile boolean useFixedSeed = false;  // If true, all runs use same seed
     private static final SecureRandom secureRandom = new SecureRandom();
 
     private SeededRandom() {
@@ -35,6 +36,14 @@ public final class SeededRandom {
 
     public static void setUseSeed(boolean useSeeding) {
         useSeed = useSeeding;
+    }
+
+    public static boolean isUseFixedSeed() {
+        return useFixedSeed;
+    }
+
+    public static void setUseFixedSeed(boolean useFixed) {
+        useFixedSeed = useFixed;
     }
 
     /**
@@ -57,28 +66,38 @@ public final class SeededRandom {
             return false;
         }
 
+        boolean seedProvided = false;
+        
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
             if (arg == null) {
                 continue;
             }
+            
+            // Check for --fixed-seed flag
+            if (arg.equals("--fixed-seed")) {
+                setUseFixedSeed(true);
+                System.out.println("Fixed seed mode enabled: all runs will use the same seed");
+                continue;
+            }
+            
             if (arg.startsWith("--seed=")) {
                 String value = arg.substring("--seed=".length()).trim();
                 if (!value.isEmpty()) {
                     setSeed(Long.parseLong(value));
-                    return true;
+                    seedProvided = true;
                 }
             }
             if (arg.equals("--seed") && i + 1 < args.length) {
                 String value = args[i + 1];
                 if (value != null && !value.isBlank()) {
                     setSeed(Long.parseLong(value.trim()));
-                    return true;
+                    seedProvided = true;
                 }
             }
         }
 
-        return false;
+        return seedProvided;
     }
 
     /**
@@ -105,10 +124,13 @@ public final class SeededRandom {
      *
      * If useSeed is false, returns a Random with a truly random seed from SecureRandom,
      * mixed with runIdx to ensure different results per run.
+     * 
+     * If useFixedSeed is true, ignores runIdx and returns the same seed for all runs
+     * (useful for comparing ablation vs normal runs with identical data).
      *
      * @param scope  Scope identifier (e.g., "data-loader")
-     * @param runIdx Run index (0, 1, 2, ...)
-     * @return Random instance with seed varied by run index
+     * @param runIdx Run index (0, 1, 2, ...) - ignored if useFixedSeed is true
+     * @return Random instance with seed varied by run index (unless useFixedSeed is true)
      */
     public static Random forScopeAndRun(String scope, int runIdx) {
         if (!useSeed) {
@@ -119,6 +141,14 @@ public final class SeededRandom {
         }
         
         long scopeHash = fnv1a64(scope == null ? "" : scope);
+        
+        // If fixed seed mode, ignore runIdx
+        if (useFixedSeed) {
+            long mixed = mix64(seed ^ scopeHash);
+            return new Random(mixed);
+        }
+        
+        // Normal mode: vary seed by run index
         long runSeed = seed ^ scopeHash ^ ((long) runIdx * 0x9e3779b97f4a7c15L);
         long mixed = mix64(runSeed);
         return new Random(mixed);

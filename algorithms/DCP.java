@@ -67,15 +67,6 @@ public class DCP {
 
         System.out.println("   ✓ Ranks computed for " + taskRanks.size() + " tasks");
 
-        // Optional debug output for small workflows
-        if (taskRanks.size() <= 10) {
-            System.out.println("   📊 Task ranks:");
-            taskRanks.entrySet().stream()
-                    .sorted(Map.Entry.<Integer, Double>comparingByValue().reversed())
-                    .forEach(e ->
-                            System.out.printf("      t%d: %.3f%n", e.getKey(), e.getValue()));
-        }
-
         // STEP 3: Build the Critical Path by selecting the highest-rank task at each level
         Set<Integer> criticalPath = buildCriticalPath(taskLevels, taskRanks);
 
@@ -145,7 +136,7 @@ public class DCP {
 
         task currentTask = taskMap.get(taskId);
         if (currentTask == null) {
-            // Defensive fallback: undefined tasks get zero rank
+            System.err.println("Warning: Task with ID " + taskId + " is not defined. Assigning rank 0.0.");
             ranks.put(taskId, 0.0);
             return;
         }
@@ -156,7 +147,7 @@ public class DCP {
         // Retrieve successors of the current task
         List<Integer> successors = currentTask.getSucc();
 
-        // BASE CASE: exit task (no successors)
+        // exit task (no successors)
         if (successors == null || successors.isEmpty()) {
             ranks.put(taskId, Wi);
             return;

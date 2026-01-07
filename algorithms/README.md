@@ -172,8 +172,24 @@ Set a fixed seed:
 cd algorithms
 java Main --seed=123
 ```
-The runners additionally vary an internal run index to produce multiple independent runs under the same base seed. 
-NON SO SE E' CAMBIATO DATO CHE STAVI CAMBIANOD
+
+By default, the runners vary an internal run index to produce multiple independent runs under the same base seed. This means each run will use different random data (e.g., different bandwidth values, task execution times).
+
+### Fixed Seed Mode
+
+If you want all runs to use **exactly the same data** (useful for comparing ablation study results with normal runs), use the `--fixed-seed` flag:
+
+```bash
+cd algorithms
+
+# Run normal experiments with fixed data across all runs
+java ExperimentRunner --seed=123 --fixed-seed
+
+# Run ablation study with the same fixed data
+java AblationExperimentRunner --seed=123 --fixed-seed
+```
+
+With `--fixed-seed`, all runs will use identical random data, making results directly comparable between different algorithm variants.
 
 ---
 

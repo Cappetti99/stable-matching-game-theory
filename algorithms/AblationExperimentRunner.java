@@ -39,22 +39,24 @@ public class AblationExperimentRunner {
         double slr;
         double avu;
         double vf;
+        double avgSatisfaction;
         double makespan;
         
         public AblationResult(String workflow, String algorithm, 
-                             double slr, double avu, double vf, double makespan) {
+                             double slr, double avu, double vf, double avgSatisfaction, double makespan) {
             this.workflow = workflow;
             this.algorithm = algorithm;
             this.slr = slr;
             this.avu = avu;
             this.vf = vf;
+            this.avgSatisfaction = avgSatisfaction;
             this.makespan = makespan;
         }
         
         @Override
         public String toString() {
-            return String.format(Locale.US, "%s,%s,%.4f,%.4f,%.6f,%.4f",
-                    workflow, algorithm, slr, avu, vf, makespan);
+            return String.format(Locale.US, "%s,%s,%.4f,%.4f,%.6f,%.6f,%.4f",
+                    workflow, algorithm, slr, avu, vf, avgSatisfaction, makespan);
         }
     }
     
@@ -99,8 +101,8 @@ public class AblationExperimentRunner {
             
             if (result != null) {
                 results.add(result);
-                System.out.printf("✓ SLR=%.4f, AVU=%.4f, VF=%.6f\n", 
-                        result.slr, result.avu, result.vf);
+                System.out.printf("✓ SLR=%.4f, AVU=%.4f, VF=%.6f, AvgSat=%.6f\n", 
+                        result.slr, result.avu, result.vf, result.avgSatisfaction);
             } else {
                 System.out.println("⚠️  Skipped");
             }
@@ -172,10 +174,11 @@ public class AblationExperimentRunner {
             double slr = Metrics.SLR(makespan, criticalPathTasks, vmMapping);
             double avu = calculateAVU(smgt, assignments, makespan);
             double vf = calculateVF(smgt, assignments, makespan);
+            double avgSatisfaction = calculateAvgSatisfaction(smgt, assignments, makespan);
             
             // Save metrics (only if not warmup)
             if (!isWarmup) {
-                runs.add(new RunMetrics(slr, avu, vf, makespan));
+                runs.add(new RunMetrics(slr, avu, vf, avgSatisfaction, makespan));
             }
         }
         
@@ -183,9 +186,10 @@ public class AblationExperimentRunner {
         double avgSLR = runs.stream().mapToDouble(r -> r.slr).average().orElse(0);
         double avgAVU = runs.stream().mapToDouble(r -> r.avu).average().orElse(0);
         double avgVF = runs.stream().mapToDouble(r -> r.vf).average().orElse(0);
+        double avgSatisfaction = runs.stream().mapToDouble(r -> r.avgSatisfaction).average().orElse(0);
         double avgMakespan = runs.stream().mapToDouble(r -> r.makespan).average().orElse(0);
         
-        return new AblationResult(workflow, variant.name(), avgSLR, avgAVU, avgVF, avgMakespan);
+        return new AblationResult(workflow, variant.name(), avgSLR, avgAVU, avgVF, avgSatisfaction, avgMakespan);
     }
     
     /**
@@ -592,12 +596,50 @@ public class AblationExperimentRunner {
         return Double.isNaN(vf) || Double.isInfinite(vf) ? Double.NaN : vf;
     }
     
+    private static double calculateAvgSatisfaction(SMGT smgt, Map<Integer, List<Integer>> assignments, double makespan) {
+        if (makespan <= 0) return 0;
+        
+        Map<Integer, task> taskMap = new HashMap<>();
+        for (task t : smgt.getTasks()) {
+            taskMap.put(t.getID(), t);
+        }
+        
+        // IMPORTANT: SMGT uses VM index (0, 1, 2...) as keys, not VM.getID()
+        // Build vmMap using index as key to match SMGT's schedule format
+        List<VM> vmList = smgt.getVMs();
+        Map<Integer, VM> vmMap = new HashMap<>();
+        for (int i = 0; i < vmList.size(); i++) {
+            vmMap.put(i, vmList.get(i));  // Use index as key, not VM.getID()
+        }
+        
+        // For AvgSatisfaction, don't count duplicates (each task's satisfaction counted once)
+        Set<Integer> assignedTaskIds = new HashSet<>();
+        Map<Integer, List<task>> taskAssignments = new HashMap<>();
+        
+        for (Map.Entry<Integer, List<Integer>> entry : assignments.entrySet()) {
+            int vmIdx = entry.getKey();  // This is VM index, not VM.getID()
+            List<task> tasks = new ArrayList<>();
+            for (int taskId : entry.getValue()) {
+                task t = taskMap.get(taskId);
+                if (t != null && !assignedTaskIds.contains(taskId)) {
+                    tasks.add(t);
+                    assignedTaskIds.add(taskId);
+                }
+            }
+            taskAssignments.put(vmIdx, tasks);
+        }
+        
+        double avgSat = Metrics.AvgSatisfaction(smgt.getTasks(), vmMap, taskAssignments);
+        return Double.isNaN(avgSat) || Double.isInfinite(avgSat) ? Double.NaN : avgSat;
+    }
+    
     private static class RunMetrics {
-        double slr, avu, vf, makespan;
-        RunMetrics(double slr, double avu, double vf, double makespan) {
+        double slr, avu, vf, avgSatisfaction, makespan;
+        RunMetrics(double slr, double avu, double vf, double avgSatisfaction, double makespan) {
             this.slr = slr;
             this.avu = avu;
             this.vf = vf;
+            this.avgSatisfaction = avgSatisfaction;
             this.makespan = makespan;
         }
     }
@@ -612,7 +654,7 @@ public class AblationExperimentRunner {
         resultsDir.mkdirs();
         
         try (PrintWriter writer = new PrintWriter(new File(resultsDir, "ablation_study.csv"))) {
-            writer.println("workflow,algorithm,slr,avu,vf,makespan");
+            writer.println("workflow,algorithm,slr,avu,vf,avg_satisfaction,makespan");
             for (AblationResult r : results) {
                 writer.println(r.toString());
             }
@@ -630,8 +672,8 @@ public class AblationExperimentRunner {
                 AblationResult r = results.get(i);
                 writer.printf(Locale.US, 
                     "    {\"workflow\": \"%s\", \"algorithm\": \"%s\", " +
-                    "\"slr\": %.4f, \"avu\": %.4f, \"vf\": %.6f, \"makespan\": %.4f}",
-                    r.workflow, r.algorithm, r.slr, r.avu, r.vf, r.makespan);
+                    "\"slr\": %.4f, \"avu\": %.4f, \"vf\": %.6f, \"avg_satisfaction\": %.6f, \"makespan\": %.4f}",
+                    r.workflow, r.algorithm, r.slr, r.avu, r.vf, r.avgSatisfaction, r.makespan);
                 
                 if (i < results.size() - 1) writer.println(",");
                 else writer.println();
@@ -666,11 +708,13 @@ public class AblationExperimentRunner {
             double avgSLR = algResults.stream().mapToDouble(r -> r.slr).average().orElse(0);
             double avgAVU = algResults.stream().mapToDouble(r -> r.avu).average().orElse(0);
             double avgVF = algResults.stream().mapToDouble(r -> r.vf).average().orElse(0);
+            double avgSat = algResults.stream().mapToDouble(r -> r.avgSatisfaction).average().orElse(0);
             
             System.out.printf("\n%s (n=%d workflows):\n", algName, algResults.size());
             System.out.printf("   Avg SLR: %.4f\n", avgSLR);
             System.out.printf("   Avg AVU: %.4f (%.1f%%)\n", avgAVU, avgAVU * 100);
             System.out.printf("   Avg VF:  %.6f\n", avgVF);
+            System.out.printf("   Avg Satisfaction: %.6f\n", avgSat);
         }
         
         System.out.println("\n" + "═".repeat(60));

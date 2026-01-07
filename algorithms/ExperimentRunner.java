@@ -24,7 +24,7 @@ import java.util.*;
  */
 public class ExperimentRunner {
 
-    private static final int NUM_RUNS = 10;
+    private static final int NUM_RUNS = 1;
     private static final int WARMUP_RUNS = 0;
 
     private static final String[] WORKFLOWS = { "cybershake", "epigenomics", "ligo", "montage" };
@@ -71,6 +71,12 @@ public class ExperimentRunner {
 
         System.out.println("SM-CPTD Experiments");
         System.out.println("Runs: " + NUM_RUNS + " + " + WARMUP_RUNS + " warmup");
+        
+        if (SeededRandom.isUseFixedSeed()) {
+            System.out.println("Fixed seed mode: All runs will use identical data (seed=" + SeededRandom.getSeed() + ")");
+        } else {
+            System.out.println("Variable seed mode: Each run uses different random data (base seed=" + SeededRandom.getSeed() + ")");
+        }
 
         boolean runExp1 = true;
         boolean runExp2 = true;
@@ -491,6 +497,9 @@ public class ExperimentRunner {
      * @implNote This method delegates actual calculation to {@link Metrics#AVU} after converting
      *           task IDs to task objects using optimized HashMap lookups. Performance logging
      *           is enabled for workflows with &gt;500 tasks or execution time &gt;10ms.
+     *           
+     *           IMPORTANT: Duplicates are INCLUDED - each duplicate task execution contributes
+     *           to VM utilization. This is correct behavior since duplicates represent actual work.
      * 
     * @see Metrics#AVU(Map, Map, double)
     * @see Metrics#VU(VM, List, double)
@@ -510,6 +519,7 @@ public class ExperimentRunner {
             vmMap.put(v.getID(), v);
         }
 
+        // For AVU, we INCLUDE duplicates (each execution contributes to VM utilization)
         Set<Integer> assignedTaskIds = new HashSet<>();
         Map<Integer, List<task>> taskAssignments = new HashMap<>();
         
@@ -519,7 +529,8 @@ public class ExperimentRunner {
             for (int taskId : entry.getValue()) {
                 task t = taskMap.get(taskId);
                 if (t != null) {
-                    tasks.add(t);                } else if (t == null) {
+                    tasks.add(t);  // Add ALL tasks including duplicates
+                } else if (t == null) {
                     System.err.println(" Warning: Task ID " + taskId + " not found in task map");
                 }
             }
@@ -539,6 +550,9 @@ public class ExperimentRunner {
      * @implNote This method delegates the actual VF calculation to {@code Metrics.VF()},
      *           focusing on efficient data structure conversion from ID-based assignments
      *           to object-based assignments with O(n) complexity.
+     *           
+     *           IMPORTANT: Duplicates are EXCLUDED - each task's satisfaction is counted only once.
+     *           This ensures VF measures fairness across unique tasks, not duplicate executions.
      * 
      * @see Metrics#VF(List, Map, Map, Map, String) for the underlying VF calculation
      * @see #calculateAVU(SMGT, Map, double) for AVU (VM utilization) metric calculation
@@ -556,6 +570,7 @@ public class ExperimentRunner {
             vmMap.put(v.getID(), v);
         }
 
+        // For VF, don't count duplicates (each task's satisfaction counted once)
         Set<Integer> assignedTaskIds = new HashSet<>();
         Map<Integer, List<task>> taskAssignments = new HashMap<>();
         
@@ -564,8 +579,9 @@ public class ExperimentRunner {
             List<task> tasks = new ArrayList<>();
             for (int taskId : entry.getValue()) {
                 task t = taskMap.get(taskId);
-                if (t != null ) {
+                if (t != null && !assignedTaskIds.contains(taskId)) {
                     tasks.add(t);
+                    assignedTaskIds.add(taskId);
                 } else if (t == null) {
                     System.err.println(" Warning: Task ID " + taskId + " not found in task map");
                 }
@@ -584,6 +600,10 @@ public class ExperimentRunner {
      * @param makespan   Total workflow execution time (UNUSED - kept for API consistency)
      * @return           Average Satisfaction (≥ 1.0, or 0.0 if no valid tasks)
      * 
+     * @implNote IMPORTANT: Duplicates are EXCLUDED - each task's satisfaction is counted only once.
+     *           This is consistent with VF calculation and ensures satisfaction metrics
+     *           measure fairness across unique tasks.
+     * 
      * @see Metrics#AvgSatisfaction(List, Map, Map, String) for the underlying calculation
      * @see #calculateVF(SMGT, Map, double) for VF (variance of satisfaction) metric
      */
@@ -600,6 +620,7 @@ public class ExperimentRunner {
             vmMap.put(v.getID(), v);
         }
 
+        // For AvgSatisfaction, don't count duplicates (each task's satisfaction counted once)
         Set<Integer> assignedTaskIds = new HashSet<>();
         Map<Integer, List<task>> taskAssignments = new HashMap<>();
         
@@ -608,9 +629,10 @@ public class ExperimentRunner {
             List<task> tasks = new ArrayList<>();
             for (int taskId : entry.getValue()) {
                 task t = taskMap.get(taskId);
-                if (t != null) {
+                if (t != null && !assignedTaskIds.contains(taskId)) {
                     tasks.add(t);
-                } else {
+                    assignedTaskIds.add(taskId);
+                } else if (t == null) {
                     System.err.println(" Warning: Task ID " + taskId + " not found in task map");
                 }
             }

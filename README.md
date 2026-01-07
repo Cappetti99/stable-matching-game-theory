@@ -87,6 +87,7 @@ The Java runners accept a small set of CLI flags:
 
 3. **Reproducibility**:
    - `--seed=<long>` or `--seed <long>`: set the base seed (used by `SeededRandom`)
+   - `--fixed-seed`: use the same seed for all runs (for comparing ablation vs normal runs with identical data)
 
 Examples:
 
@@ -104,6 +105,10 @@ java ExperimentRunner --exp1 --workflow=montage
 
 # Fixed seed for reproducibility
 java Main --seed=123
+
+# Optional fixed seed with same data across all runs (useful for ablation comparison)
+java ExperimentRunner --seed=123 --fixed-seed
+java AblationExperimentRunner --seed=123 --fixed-seed
 ```
 
 ## Experiments and Results
