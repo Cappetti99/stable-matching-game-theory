@@ -201,7 +201,7 @@ public class LOTD {
      * 3. AST = max(DRT, MRT)
      * 4. AFT = AST + execution time
      * 
-     * IMPORTANT: This method also updates the VM execution order to ensure
+     * This method also updates the VM execution order to ensure
      * correct MRT calculation for subsequent tasks.
      */
     private void calculateTaskTiming(int taskId) {
@@ -290,7 +290,7 @@ public class LOTD {
      * 
      * The actual start time will be max(DRT, MRT) where DRT is the data ready time.
      * 
-     * IMPORTANT: This method finds the earliest slot where the task can execute
+     * This method finds the earliest slot where the task can execute
      * without overlapping with existing tasks. It returns the VM availability time,
      * not the actual task start time (which depends on data readiness).
      * 

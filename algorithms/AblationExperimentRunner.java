@@ -147,7 +147,7 @@ public class AblationExperimentRunner {
                 vmMapping.put(i, vms.get(i));
             }
             
-            // Calculate communication costs ONCE (no 2-pass)
+            // Calculate communication costs ONCE 
             SMGT smgt = new SMGT();
             smgt.setTasks(tasks);
             smgt.setVMs(vms);
@@ -353,9 +353,7 @@ public class AblationExperimentRunner {
         return smcptd.executeSMCPTD(commCostsPass2, vmMapping, CCR);
     }
     
-    // ============================================================================
-    // HELPER METHODS (copied from ExperimentRunner for consistency)
-    // ============================================================================
+    // helper methods for communication cost calculation
     
     private static Map<String, Double> calculateCommunicationCostsForDCP(SMGT smgt, double ccr) {
         Map<String, Double> costs = new HashMap<>();
@@ -644,9 +642,7 @@ public class AblationExperimentRunner {
         }
     }
     
-    // ============================================================================
-    // RESULTS SAVING & REPORTING
-    // ============================================================================
+    // Saving results to CSV and JSON
     
     private static void saveResults() {
         // CSV

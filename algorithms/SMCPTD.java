@@ -31,15 +31,11 @@ import java.util.*;
  */
 public class SMCPTD {
 
-    // ==================== ALGORITHM COMPONENTS ====================
-
     /** SMGT scheduler (core scheduling phase) */
     private SMGT smgt;
 
     /** LOTD optimizer (task duplication phase) */
     private LOTD lotd;
-
-    // ==================== INTERMEDIATE RESULTS ====================
 
     /** Set of task IDs belonging to the Critical Path (output of DCP) */
     private Set<Integer> criticalPath;
@@ -50,7 +46,6 @@ public class SMCPTD {
     /** Final schedule after LOTD optimization */
     private Map<Integer, List<Integer>> finalSchedule;
 
-    // ==================== FINAL METRICS ====================
 
     /** Overall workflow makespan */
     private double makespan;
@@ -71,8 +66,6 @@ public class SMCPTD {
     private int ganttChartRunIndex = 0;
 
     /**
-     * Default constructor.
-     *
      * Initializes internal components and resets all intermediate
      * and final results. The actual input data must be provided
      * via setInputData() before executing the algorithm.
